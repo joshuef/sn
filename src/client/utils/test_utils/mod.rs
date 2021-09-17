@@ -64,7 +64,7 @@ where
 }
 
 fn get_backoff_policy(retries: u8) -> Backoff {
-    let min = Duration::from_secs(2);
+    let min = Duration::from_millis(500);
     let max = Duration::from_secs(30);
     Backoff::new(retries as u32, min, max)
 }

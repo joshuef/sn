@@ -321,7 +321,7 @@ mod tests {
             .await?;
 
         // the larger the file, the longer we have to wait before we start querying
-        let delay = usize::max(1, blob.len() / 2_000_000);
+        let delay = usize::max(1, blob.len() / 500_000);
 
         // Assert that the blob is stored.
         let read_data =
@@ -473,7 +473,7 @@ mod tests {
         let address = client.write_to_network(data.clone(), Scope::Public).await?;
 
         // the larger the file, the longer we have to wait before we start querying
-        let delay = usize::max(1, len / 100_000);
+        let delay = usize::max(1, len / 500_000);
 
         let read_data =
             run_w_backoff_delayed(|| client.read_blob_from(address, pos, len), 10, delay).await?;
