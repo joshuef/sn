@@ -53,7 +53,10 @@ where
     for duration in &backoff {
         match f().await {
             Ok(val) => return Ok(val),
-            Err(_) => tokio::time::sleep(duration).await,
+            Err(_) => {
+                tokio::time::sleep(duration).await;
+                debug!("**** retrying *** ");
+            },
         }
     }
 
