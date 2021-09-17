@@ -78,16 +78,16 @@ impl Liveness {
         &self,
         node_id: &NodeIdentifier,
         operation_id: OperationId,
-    ) -> bool {
+    ) {
         trace!(
             "Attempting to remove pending_operation {:?} op: {:?}",
             node_id,
             operation_id
         );
-        let mut has_removed = false;
 
         if let Some(entry) = self.unfulfilled_requests.get(node_id) {
             let v = entry.value();
+            let mut has_removed = false;
 
             // only remove the first instance from the vec
             v.write().await.retain(|x| {
@@ -98,21 +98,12 @@ impl Liveness {
                     false
                 }
             });
-            if has_removed {
-                trace!(
-                    "Pending operation removed for node: {:?} op: {:?}",
-                    node_id,
-                    operation_id
-                );
-            } else {
-                trace!(
-                    "No Pending operation find for node: {:?} op: {:?}",
-                    node_id,
-                    operation_id
-                );
-            }
+            trace!(
+                "Pending operation removed for node: {:?} op: {:?}",
+                node_id,
+                operation_id
+            );
         }
-        has_removed
     }
 
     pub(crate) fn recompute_closest_nodes(&self) {
