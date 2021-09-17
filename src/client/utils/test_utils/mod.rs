@@ -30,6 +30,7 @@ where
     F: Fn() -> Fut,
     Fut: Future<Output = ClientResult<T>>,
 {
+    debug!(">>>>>>> running w/ delay of {:?}", tokio::time::Duration::from_secs(delay as u64));
     tokio::time::sleep(tokio::time::Duration::from_secs(delay as u64)).await;
     run_w_backoff_base(f, retries, Error::NoResponse).await
 }

@@ -212,25 +212,57 @@ impl Session {
             return Ok(session);
         }
 
-        let mut num_of_elders_for_query = ELDER_SIZE;
+    // Remove expired items from ae_cache before checking.
+        // It might be late to not retry now.
+        session.ae_cache.remove_expired().await;
 
-        let (msg_id, service_msg, auth) = match WireMsg::deserialize(bounced_msg)? {
-            MessageType::Service {
-                msg_id, msg, auth, ..
-            } => {
-                if let ServiceMsg::Query(_) = msg {
-                    num_of_elders_for_query = NUM_OF_ELDERS_SUBSET_FOR_QUERIES;
+        // Deserialize the bounced message for resending
+        let (msg_id, service_msg, mut dst_location, auth): (_, ServiceMsg, _, _) =
+            match WireMsg::deserialize(bounced_msg)? {
+                MessageType::Service {
+                    msg_id,
+                    msg,
+                    auth,
+                    dst_location,
+                } => (msg_id, msg, dst_location, auth),
+                other => {
+                    warn!(
+                        "Unexpected non-serviceMsg returned in AE response: {:?}",
+                        other
+                    );
+                    return Ok(session);
                 }
-                (msg_id, msg, auth)
+            };
+
+        let (targets, dst_address_of_bounced_msg) = match &service_msg {
+            ServiceMsg::Cmd(cmd) => {
+                match &cmd {
+                    DataCmd::StoreChunk(_) => (3, cmd.dst_name()), // stored at Adults, so only 1 correctly functioning Elder need to relay
+                    DataCmd::Register(_) => (7, cmd.dst_name()), // only stored at Elders, all need a copy
+                }
             }
-            other => {
+            ServiceMsg::Query(query) => (NUM_OF_ELDERS_SUBSET_FOR_QUERIES, query.dst_name()),
+            _ => {
                 warn!(
-                    "Unexpected non-serviceMsg returned in AE-Redirect response: {:?}",
-                    other
+                    "Bounced message ({:?}) received in AE response: {:?} is of invalid type",
+                    msg_id, service_msg
                 );
                 return Ok(session);
             }
         };
+
+        if let Some(old_elders) = session.ae_cache.get(&dst_address_of_bounced_msg).await {
+            let received_elders = section_auth
+                .elders
+                .values()
+                .cloned()
+                .collect::<Vec<SocketAddr>>();
+            if old_elders == received_elders {
+                warn!("We have already resent this message on a AE-Retry. Dropping this instance");
+                return Ok(session);
+            }
+        }
+
         debug!(
             "Received AE-Redirect for {:?}, from {}, with SAP: {:?}",
             msg_id, sender, section_auth
@@ -241,33 +273,82 @@ impl Session {
             msg_id, service_msg
         );
 
-        let message = WireMsg::serialize_msg_payload(&service_msg)?;
 
-        // TODO: we cannot trust these Elders belong to the network we are intended
-        // to connect to (based on the genesis key we know). We could send the genesis key
-        // as the destination section key and that should cause an AE-Retry response,
-        // which we could use to verify the SAP we receive an trust.
-        let elders = section_auth
-            .elders
-            .values()
-            .cloned()
-            .take(num_of_elders_for_query)
-            .collect::<Vec<SocketAddr>>();
-        let section_pk = section_auth.public_key_set.public_key();
+        //  // Update our network knowledge making sure proof chain
+        // // validates the new SAP based on currently known remote section SAP.
+        // match session.network.update(
+        //     SectionAuth {
+        //         value: section_auth.clone(),
+        //         sig: section_signed,
+        //     },
+        //     &proof_chain,
+        // ) {
+        //     Ok(updated) => {
+        //         if updated {
+        //             debug!(
+        //                 "Anti-Entropy: updated remote section SAP updated for {:?}",
+        //                 section_auth.prefix
+        //             );
+        //         } else {
+        //             debug!(
+        //                 "Anti-Entropy: discarded SAP for {:?} since it's the same as the one in our records: {:?}",
+        //                 section_auth.prefix, section_auth
+        //             );
+        //         }
+        //     }
+        //     Err(err) => {
+        //         warn!(
+        //             "Anti-Entropy: failed to update remote section SAP, bounced msg dropped: {:?}",
+        //             err
+        //         );
+        //         return Ok(session);
+        //     }
+        // }
+
+
+        let payload = WireMsg::serialize_msg_payload(&service_msg)?;
+
+        // // TODO: we cannot trust these Elders belong to the network we are intended
+        // // to connect to (based on the genesis key we know). We could send the genesis key
+        // // as the destination section key and that should cause an AE-Retry response,
+        // // which we could use to verify the SAP we receive an trust.
+        // let elders = section_auth
+        //     .elders
+        //     .values()
+        //     .cloned()
+        //     .take(targets)
+        //     .collect::<Vec<SocketAddr>>();
+        // let section_pk = section_auth.public_key_set.public_key();
+
 
         // Let's rebuild the message with the updated destination details
-        let wire_msg = WireMsg::new_msg(
-            msg_id,
-            message,
-            MsgKind::ServiceMsg(auth.into_inner()),
-            DstLocation::Section {
-                name: XorName::from(PublicKey::Bls(section_pk)),
-                section_pk,
-            },
-        )?;
+        let elders = section_auth
+            .elders
+            .into_iter()
+            .sorted_by(|(lhs_name, _), (rhs_name, _)| {
+                dst_address_of_bounced_msg.cmp_distance(lhs_name, rhs_name)
+            })
+            .map(|(_, addr)| addr)
+            .take(targets)
+            .collect::<Vec<SocketAddr>>();
 
-        send_message(elders, wire_msg, session.endpoint.clone(), msg_id).await?;
+            dst_location.set_section_pk(section_auth.public_key_set.public_key());
 
+            let wire_msg = WireMsg::new_msg(
+                msg_id,
+                payload,
+                MsgKind::ServiceMsg(auth.into_inner()),
+                dst_location,
+            )?;
+    
+            send_message(elders.clone(), wire_msg, session.endpoint.clone(), msg_id).await?;
+            if let Some(old_elders) = session
+                .ae_cache
+                .set(dst_address_of_bounced_msg, elders.clone(), None)
+                .await
+            {
+                warn!("We have already sent this message to Elders {:?} Updating cache with latest elders {:?}", old_elders, &elders);
+            }
         Ok(session)
     }
 
@@ -369,6 +450,7 @@ impl Session {
             "Bounced message ({:?}) received in AE response: {:?}",
             msg_id, service_msg
         );
+        
         let payload = WireMsg::serialize_msg_payload(&service_msg)?;
 
         // Let's rebuild the message with the updated destination details

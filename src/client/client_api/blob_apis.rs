@@ -143,10 +143,23 @@ impl Client {
         let owner = encryption(scope, self.public_key());
         let (head_address, all_chunks) = get_data_chunks(data, owner.as_ref())?;
 
+        let first_chunk = all_chunks.first();
+
+        // send one chunk first, to do any AE updating, before attempting the rest
+        if let Some(chunk ) = first_chunk {
+            self.send_cmd(DataCmd::StoreChunk(chunk.clone())).await?;
+            debug!(">>>>> Awaiting first chunk to update AE");
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            debug!(">>>>>> Done awaiting first chunk to update AE");
+        }
+
         let tasks = all_chunks.into_iter().map(|chunk| {
             let writer = self.clone();
             task::spawn(async move { writer.send_cmd(DataCmd::StoreChunk(chunk)).await })
         });
+
+
+        
 
         let _ = join_all(tasks)
             .await
@@ -381,13 +394,11 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "too heavy for CI"]
     async fn store_and_read_20mb() -> Result<()> {
         store_and_read(20 * 1024 * 1024, Scope::Private).await
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "too heavy for CI"]
     async fn store_and_read_40mb() -> Result<()> {
         store_and_read(40 * 1024 * 1024, Scope::Private).await
     }
@@ -447,7 +458,7 @@ mod tests {
         let address = client.write_to_network(blob.clone(), scope).await?;
 
         // the larger the file, the longer we have to wait before we start querying
-        let delay = usize::max(1, size / 2_000_000);
+        let delay = usize::max(1, size / 500_000);
 
         // now that it was written to the network we should be able to retrieve it
         let read_data = run_w_backoff_delayed(|| client.read_blob(address), 10, delay).await?;
@@ -462,7 +473,7 @@ mod tests {
         let address = client.write_to_network(data.clone(), Scope::Public).await?;
 
         // the larger the file, the longer we have to wait before we start querying
-        let delay = usize::max(1, len / 2_000_000);
+        let delay = usize::max(1, len / 100_000);
 
         let read_data =
             run_w_backoff_delayed(|| client.read_blob_from(address, pos, len), 10, delay).await?;
