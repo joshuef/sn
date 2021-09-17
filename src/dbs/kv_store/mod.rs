@@ -54,7 +54,7 @@ where
     pub(crate) fn new<P: AsRef<Path>>(root: P, used_space: UsedSpace) -> Result<Self> {
         let dir = root.as_ref().join(DB_DIR).join(Self::subdir());
 
-        used_space.add_dir(&dir);
+        // used_space.add_dir(&dir);
 
         let db = sled::open(&dir).map_err(Error::from)?;
 
