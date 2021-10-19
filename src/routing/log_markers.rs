@@ -6,18 +6,15 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-#[cfg(test)]
 use strum_macros::EnumIter;
 
 // this gets us to_string easily enough
-#[cfg(test)]
 use strum_macros::Display as StrumDisplay;
 
 /// Internal log marker, to be used in tests asserts.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-#[cfg_attr(test, derive(EnumIter, StrumDisplay))]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, EnumIter, StrumDisplay)]
 #[allow(missing_docs)]
-pub(crate) enum LogMarker {
+pub enum LogMarker {
     ServiceMsgToBeHandled,
     SystemMsgToBeHandled,
     StoringChunk,
@@ -34,4 +31,6 @@ pub(crate) enum LogMarker {
     CommandHandleStart,
     CommandHandleEnd,
     CommandHandleError,
+    PromotedToElder,
+    DemotedFromElder,
 }

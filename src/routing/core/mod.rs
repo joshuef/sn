@@ -40,6 +40,7 @@ use crate::prefix_map::NetworkPrefixMap;
 use crate::routing::{
     dkg::{DkgVoter, ProposalAggregator},
     error::Result,
+    log_markers::LogMarker,
     node::Node,
     relocation::RelocateState,
     routing_api::command::Command,
@@ -227,9 +228,10 @@ impl Core {
             };
 
             let self_status_change = if !old.is_elder && new.is_elder {
-                info!("Promoted to elder");
+                trace!("{}", LogMarker::PromotedToElder);
                 NodeElderChange::Promoted
             } else if old.is_elder && !new.is_elder {
+                trace!("{}", LogMarker::DemotedFromElder);
                 info!("Demoted");
                 self.network = NetworkPrefixMap::new(*self.section.genesis_key());
                 self.section_keys_provider = SectionKeysProvider::new(KEY_CACHE_SIZE, None).await;

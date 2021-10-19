@@ -44,8 +44,8 @@ extern crate tracing;
 pub mod client;
 mod dbs;
 
-#[cfg(test)]
-pub mod testnet_assert;
+/// Helpers for analysis of testnet logs
+pub mod testnet_grep;
 
 pub use dbs::UsedSpace;
 

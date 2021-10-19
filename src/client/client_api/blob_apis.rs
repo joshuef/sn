@@ -437,7 +437,7 @@ mod tests {
 
         let _outer_span = tracing::info_span!("blob_network_assert").entered();
 
-        let mut the_logs = crate::testnet_assert::NetworkLogState::new()?;
+        let mut the_logs = crate::testnet_grep::NetworkLogState::new()?;
 
         let network_assert_delay: u64 = std::env::var("NETWORK_ASSERT_DELAY")
             .unwrap_or_else(|_| "3".to_string())

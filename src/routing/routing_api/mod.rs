@@ -111,6 +111,7 @@ impl Routing {
                 removed: BTreeSet::new(),
             };
 
+            trace!("{}", LogMarker::PromotedToElder);
             core.send_event(Event::EldersChanged {
                 elders,
                 self_status_change: NodeElderChange::Promoted,

@@ -56,6 +56,9 @@ pub(crate) use dkg::test_utils::section_signed;
 #[cfg(test)]
 pub(crate) use section::test_utils::gen_section_authority_provider;
 
+/// Standardised log markers for various events
+pub mod log_markers;
+
 // ############################################################################
 // Private
 // ############################################################################
@@ -64,7 +67,6 @@ mod core;
 mod dkg;
 mod ed25519;
 mod error;
-pub(crate) mod log_markers;
 mod messages;
 mod node;
 mod peer;

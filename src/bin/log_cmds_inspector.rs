@@ -1,9 +1,9 @@
-use eyre::Result;
+use eyre::{eyre, Result};
 use regex::Regex;
+use safe_network::routing::log_markers::LogMarker;
+use safe_network::testnet_grep::search_logfile_get_whole_line;
 use std::{
     collections::BTreeMap,
-    fs::File,
-    io::{self, BufRead},
     path::{Path, PathBuf},
 };
 use structopt::{clap::AppSettings::ColoredHelp, StructOpt};
@@ -16,6 +16,7 @@ struct CmdArgs {
     #[structopt(subcommand)]
     pub cmd: SubCommands,
     /// Path to the testnet logs folder, e.g. ~/.safe/node/local-test-network
+    // #[structopt(default_value="$HOME/.safe/node/local-test-network/")]
     pub logs_path: String,
 }
 
@@ -34,7 +35,7 @@ enum SubCommands {
         msg_id: String,
     },
     /// Generate a report of commands dispatched, and which were started but not completed
-    CompletedCmds,
+    IncompleteCmds,
 }
 
 fn main() -> Result<()> {
@@ -69,7 +70,7 @@ fn main() -> Result<()> {
                 println!();
             }
         }
-        SubCommands::CompletedCmds => {
+        SubCommands::IncompleteCmds => {
             if report.is_empty() {
                 println!("** No errors detected in any of the logs scanned! **");
             } else {
@@ -85,14 +86,6 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where
-    P: AsRef<Path>,
-{
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
 }
 
 #[derive(Default)]
@@ -127,23 +120,87 @@ struct ScannedCommands {
     pub msg_id_to_cmds: BTreeMap<String, Vec<String>>,
 }
 
-fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
-    println!("Inspecting testnet logs folder: {}", args.logs_path);
-    let logs_dir = std::fs::read_dir(args.logs_path.clone())?;
+/// Update passed command tree with data for a specific LogMarker from a specific path
+fn update_command_info_for_marker(
+    path: &PathBuf,
+    marker: &LogMarker,
+    commands: &mut ScannedCommands,
+) -> Result<()> {
+    let cmd_id_regex = Regex::new(r".*cmd_id=([^\s-]*)")?;
+    let msg_id_regex = Regex::new(r".*MessageId\((.*)\)")?;
 
-    let mut report = BTreeMap::<String, Vec<String>>::new();
-
-    // Set of regex to scan trace logs we are interested in
-    let regex_cmd_spawned =
-        Regex::new(r".*CommandHandleSpawned.*cmd_id=([^\s-]*)($|.*MessageId\((.*)\)$)")?;
-    let regex_cmd_start = Regex::new(r".*CommandHandleStart.*cmd_id=(.*)$")?;
-    let regex_cmd_end = Regex::new(r".*CommandHandleEnd.*cmd_id=(.*)$")?;
-    let regex_cmd_error = Regex::new(r".*CommandHandleError.*cmd_id=(.*)$")?;
-    let regex_handle_msg = Regex::new(r".*DispatchHandleMsgCmd.*msg_id=MessageId\((.*)\)$")?;
     let regex_send_msg =
         Regex::new(r".*CommandHandleSpawned SendMessage MessageId\((.*)\) cmd_id=(.*)$")?;
 
-    let regex_node_is_elder = Regex::new(r".*elder=true.*")?;
+    let results = search_logfile_get_whole_line(path, marker)?;
+
+    for (_line, text, file) in results {
+        if let Some(cap) = cmd_id_regex.captures_iter(&text).next() {
+            let cmd_id = cap[1].to_string();
+            let root_cmd_id = get_root_cmd_id(&cmd_id);
+
+            if marker == &LogMarker::DispatchHandleMsgCmd {
+                // track msg_id if we can find it
+                if let Some(cap) = msg_id_regex.captures_iter(&text).next() {
+                    let msg_id = cap[1].to_string();
+                    commands
+                        .handle_msg
+                        .insert(msg_id.clone(), (file.clone(), text.clone()));
+
+                    commands
+                        .msg_id_to_cmds
+                        .entry(msg_id)
+                        .or_insert_with(Vec::new)
+                        .push(root_cmd_id);
+                }
+            } else {
+                let tracker = match marker {
+                    LogMarker::CommandHandleSpawned => &mut commands.spawned,
+                    LogMarker::CommandHandleStart => &mut commands.started,
+                    LogMarker::CommandHandleEnd => &mut commands.succeeded,
+                    LogMarker::CommandHandleError => &mut commands.failed,
+                    _ => return Err(eyre!("No tracker set up for LogMarker {:?}", marker)),
+                };
+
+                tracker
+                    .entry(root_cmd_id.clone())
+                    .or_insert_with(|| SubCommandsInfo::new(path.clone()))
+                    .insert(cmd_id.clone(), text.clone());
+
+                // track msg_id if we can find it
+                if let Some(cap) = msg_id_regex.captures_iter(&text).next() {
+                    let msg_id = cap[1].to_string();
+
+                    commands
+                        .msg_id_to_cmds
+                        .entry(msg_id)
+                        .or_insert_with(Vec::new)
+                        .push(root_cmd_id);
+                }
+            }
+        }
+
+        if let Some(cap) = regex_send_msg.captures_iter(&text).next() {
+            let msg_id = cap[1].to_string();
+            let cmd_id = cap[2].to_string();
+            let root_cmd_id = get_root_cmd_id(&cmd_id);
+            commands
+                .msg_id_to_cmds
+                .entry(msg_id)
+                .or_insert_with(Vec::new)
+                .push(root_cmd_id);
+        }
+    }
+
+    Ok(())
+}
+
+fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
+    println!("Inspecting testnet logs folder: {}", args.logs_path);
+
+    let logs_dir = std::fs::read_dir(args.logs_path.clone())?;
+
+    let mut report = BTreeMap::<String, Vec<String>>::new();
 
     // Iterate over each of the testnet nodes log files
     for node_log_path in logs_dir {
@@ -152,98 +209,40 @@ fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
         println!("-------------------------");
         println!("Inspecting node's folder: {}", node_log_filepath.display());
         println!("-------------------------");
-        let logs_paths = std::fs::read_dir(&node_log_filepath)?;
 
         let mut commands = ScannedCommands::default();
 
-        let mut is_elder = false;
+        let is_elder =
+            !search_logfile_get_whole_line(&node_log_filepath, &LogMarker::PromotedToElder)?
+                .is_empty();
 
-        // Inspect each of the log files for current node's log
-        for path in logs_paths {
-            let log_file_path = path.unwrap().path();
-            match log_file_path.file_name() {
-                Some(file_name) if file_name.to_str().unwrap().starts_with("sn_node.log.") => {
-                    println!("Inspecting log file: {}", log_file_path.display());
-                }
-                _ => {
-                    // Ignoring this file which is not a log file
-                    continue;
-                }
-            }
+        // TODO: Could the regex just be against _any_ command and return all those?
+        let _res = update_command_info_for_marker(
+            &node_log_filepath,
+            &LogMarker::CommandHandleSpawned,
+            &mut commands,
+        );
+        let _res = update_command_info_for_marker(
+            &node_log_filepath,
+            &LogMarker::CommandHandleStart,
+            &mut commands,
+        );
+        let _res = update_command_info_for_marker(
+            &node_log_filepath,
+            &LogMarker::CommandHandleEnd,
+            &mut commands,
+        );
+        let _res = update_command_info_for_marker(
+            &node_log_filepath,
+            &LogMarker::CommandHandleError,
+            &mut commands,
+        );
 
-            // Apply all regex to this log entry to keep track what commands where
-            // spawned/started/succeeded/failed by this node
-            match read_lines(&log_file_path) {
-                Ok(lines) => {
-                    for log_entry in lines.flatten() {
-                        if regex_node_is_elder.is_match(&log_entry) {
-                            is_elder = true;
-                        }
-
-                        if let Some(cap) = regex_cmd_spawned.captures_iter(&log_entry).next() {
-                            let cmd_id = cap[1].to_string();
-                            let root_cmd_id = get_root_cmd_id(&cmd_id);
-                            commands
-                                .spawned
-                                .entry(root_cmd_id.clone())
-                                .or_insert_with(|| SubCommandsInfo::new(log_file_path.clone()))
-                                .insert(cmd_id.clone(), log_entry.clone());
-
-                            if let Some(msg_id) = cap.get(3) {
-                                commands
-                                    .msg_id_to_cmds
-                                    .entry(msg_id.as_str().to_string())
-                                    .or_insert_with(Vec::new)
-                                    .push(root_cmd_id);
-                            }
-                        } else if let Some(cap) = regex_cmd_start.captures_iter(&log_entry).next() {
-                            let cmd_id = cap[1].to_string();
-                            let root_cmd_id = get_root_cmd_id(&cmd_id);
-                            commands
-                                .started
-                                .entry(root_cmd_id)
-                                .or_insert_with(|| SubCommandsInfo::new(log_file_path.clone()))
-                                .insert(cmd_id, log_entry.clone());
-                        } else if let Some(cap) = regex_cmd_end.captures_iter(&log_entry).next() {
-                            let cmd_id = cap[1].to_string();
-                            let root_cmd_id = get_root_cmd_id(&cmd_id);
-                            commands
-                                .succeeded
-                                .entry(root_cmd_id)
-                                .or_insert_with(|| SubCommandsInfo::new(log_file_path.clone()))
-                                .insert(cmd_id, log_entry.clone());
-                        } else if let Some(cap) = regex_cmd_error.captures_iter(&log_entry).next() {
-                            let cmd_id = cap[1].to_string();
-                            let root_cmd_id = get_root_cmd_id(&cmd_id);
-                            commands
-                                .failed
-                                .entry(root_cmd_id)
-                                .or_insert_with(|| SubCommandsInfo::new(log_file_path.clone()))
-                                .insert(cmd_id, log_entry.clone());
-                        } else if let Some(cap) = regex_handle_msg.captures_iter(&log_entry).next()
-                        {
-                            let msg_id = cap[1].to_string();
-                            commands
-                                .handle_msg
-                                .insert(msg_id, (log_file_path.clone(), log_entry.clone()));
-                        }
-
-                        // Let's also map any msg id to correlated commands for outgoing messages
-                        if let Some(cap) = regex_send_msg.captures_iter(&log_entry).next() {
-                            let msg_id = cap[1].to_string();
-                            let cmd_id = cap[2].to_string();
-                            let root_cmd_id = get_root_cmd_id(&cmd_id);
-                            commands
-                                .msg_id_to_cmds
-                                .entry(msg_id)
-                                .or_insert_with(Vec::new)
-                                .push(root_cmd_id);
-                        }
-                    }
-                }
-                Err(err) => println!("ERROR: {:?}", err),
-            }
-        }
+        let _res = update_command_info_for_marker(
+            &node_log_filepath,
+            &LogMarker::DispatchHandleMsgCmd,
+            &mut commands,
+        );
 
         println!("Node is Elder?: {}", is_elder);
         println!(
@@ -261,7 +260,7 @@ fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
             SubCommands::Messages { ref msg_id } => {
                 populate_commands_tree_for_msgs(&commands, &mut report, msg_id);
             }
-            SubCommands::CompletedCmds => {
+            SubCommands::IncompleteCmds => {
                 check_completed_cmds(&commands, &mut report, &node_log_filepath);
             }
         }

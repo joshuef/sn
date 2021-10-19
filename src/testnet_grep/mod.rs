@@ -7,25 +7,37 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::routing::log_markers::LogMarker;
+
+#[cfg(test)]
 use grep::matcher::Matcher;
 use grep::regex::RegexMatcher;
 use grep::searcher::sinks::UTF8;
 use grep::searcher::Searcher;
-use std::{collections::BTreeMap, path::PathBuf};
+use std::path::PathBuf;
+
+#[cfg(test)]
+use std::collections::BTreeMap;
 use walkdir::WalkDir;
 
 use std::string::ToString;
 
-use eyre::{bail, eyre, Error, Result};
+use eyre::{bail, Error, Result};
 
+#[cfg(test)]
+use eyre::eyre;
+
+#[cfg(test)]
 use dirs_next::home_dir;
 
 #[cfg(test)]
 use strum::IntoEnumIterator;
 
 // line number and the match
+#[cfg(test)]
 pub(crate) type Matches = Vec<(u64, String)>;
+pub(crate) type MatchesWithPath = Vec<(u64, String, PathBuf)>;
 
+#[cfg(test)]
 fn get_testnet_path() -> Result<PathBuf> {
     let mut home_dirs = home_dir().ok_or_else(|| eyre!("Failed to obtain user's home path"))?;
 
@@ -35,11 +47,13 @@ fn get_testnet_path() -> Result<PathBuf> {
     Ok(home_dirs)
 }
 
+#[cfg(test)]
 // Handler for searching log state
 pub(crate) struct NetworkLogState {
     initial_logs: BTreeMap<LogMarker, usize>,
 }
 
+#[cfg(test)]
 impl NetworkLogState {
     /// Set the baseline for the log state, return a
     pub(crate) fn new() -> Result<Self> {
@@ -101,11 +115,12 @@ impl NetworkLogState {
 }
 
 /// Search the local-test-network dir for matches.
+#[cfg(test)]
 pub(crate) fn search_testnet(pattern: &LogMarker) -> Result<Matches, Error> {
     let the_path = get_testnet_path()?;
     let paths = [the_path];
     let matcher = RegexMatcher::new_line_matcher(&pattern.to_string())?;
-    let mut matches: Vec<(u64, String)> = vec![];
+    let mut matches: Matches = vec![];
 
     for path in paths {
         for result in WalkDir::new(path) {
@@ -127,6 +142,41 @@ pub(crate) fn search_testnet(pattern: &LogMarker) -> Result<Matches, Error> {
                     // We are guaranteed to find a match, so the unwrap is OK.
                     let mymatch = matcher.find(line.as_bytes())?.unwrap();
                     matches.push((lnum, line[mymatch].to_string()));
+                    Ok(true)
+                }),
+            )?;
+        }
+    }
+
+    Ok(matches)
+}
+/// Search the local-test-network dir for matches.
+pub fn search_logfile_get_whole_line(
+    logfile: &PathBuf,
+    pattern: &LogMarker,
+) -> Result<MatchesWithPath, Error> {
+    let paths = [logfile];
+    let matcher = RegexMatcher::new_line_matcher(&pattern.to_string())?;
+    let mut matches: MatchesWithPath = vec![];
+
+    for path in paths {
+        for result in WalkDir::new(path) {
+            let dent = match result {
+                Ok(dent) => dent,
+                Err(err) => {
+                    bail!(err)
+                }
+            };
+
+            if !dent.file_type().is_file() {
+                continue;
+            }
+
+            Searcher::new().search_path(
+                &matcher,
+                dent.path(),
+                UTF8(|lnum, line| {
+                    matches.push((lnum, line.to_string(), dent.path().to_path_buf()));
                     Ok(true)
                 }),
             )?;
