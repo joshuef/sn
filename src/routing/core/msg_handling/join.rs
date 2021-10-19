@@ -15,6 +15,7 @@ use crate::messaging::{
     WireMsg,
 };
 use crate::routing::{
+    log_markers::LogMarker,
     error::Result, peer::PeerUtils, relocation::RelocatePayloadUtils,
     routing_api::command::Command, FIRST_SECTION_MAX_AGE, FIRST_SECTION_MIN_AGE, MIN_ADULT_AGE,
 };
@@ -60,6 +61,8 @@ impl Core {
                 JoinRejectionReason::JoinsDisallowed,
             )));
 
+            trace!("{}", LogMarker::SendJoinsDisallowed);
+
             trace!("Sending {:?} to {}", node_msg, peer);
             return Ok(vec![self.send_direct_message(
                 (*peer.name(), *peer.addr()),
@@ -88,6 +91,7 @@ impl Core {
 
             let node_msg = SystemMsg::JoinResponse(Box::new(JoinResponse::Retry(retry_sap)));
             trace!("Sending {:?} to {}", node_msg, peer);
+            trace!("{}", LogMarker::SendJoinRetry);
             return Ok(vec![self.send_direct_message(
                 (*peer.name(), *peer.addr()),
                 node_msg,
@@ -106,6 +110,7 @@ impl Core {
                 let node_msg = SystemMsg::JoinResponse(Box::new(JoinResponse::Retry(
                     self.section.authority_provider().clone(),
                 )));
+                trace!("{}", LogMarker::SendJoinRetry);
                 trace!("New node in first section should join with age greater than MIN_ADULT_AGE. Sending {:?} to {}", node_msg, peer);
                 return Ok(vec![self.send_direct_message(
                     (*peer.name(), *peer.addr()),
@@ -120,6 +125,9 @@ impl Core {
             let node_msg = SystemMsg::JoinResponse(Box::new(JoinResponse::Retry(
                 self.section.authority_provider().clone(),
             )));
+
+            trace!("{}", LogMarker::SendJoinRetry);
+
             trace!("New node after section split must join with age of MIN_ADULT_AGE. Sending {:?} to {}", node_msg, peer);
             return Ok(vec![self.send_direct_message(
                 (*peer.name(), *peer.addr()),
@@ -152,6 +160,8 @@ impl Core {
                 let node_msg = SystemMsg::JoinResponse(Box::new(JoinResponse::Rejected(
                     JoinRejectionReason::NodeNotReachable(*peer.addr()),
                 )));
+
+                trace!("{}", LogMarker::SendJoinRejected);
 
                 trace!("Sending {:?} to {}", node_msg, peer);
                 self.send_direct_message(
@@ -194,6 +204,7 @@ impl Core {
                     self.section.authority_provider().clone(),
                 )))
             };
+            trace!("{}", LogMarker::SendJoinAsRelocatedResponse);
 
             trace!("Sending {:?} to {}", node_msg, peer);
             return Ok(vec![self.send_direct_message(
@@ -215,6 +226,9 @@ impl Core {
             let node_msg = SystemMsg::JoinAsRelocatedResponse(Box::new(
                 JoinAsRelocatedResponse::Retry(self.section.authority_provider().clone()),
             ));
+
+            trace!("{} b", LogMarker::SendJoinAsRelocatedResponse);
+
             trace!("Sending {:?} to {}", node_msg, peer);
             return Ok(vec![self.send_direct_message(
                 (*peer.name(), *peer.addr()),

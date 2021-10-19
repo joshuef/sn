@@ -14,6 +14,7 @@ use crate::messaging::{
 use crate::routing::{
     dkg::SectionAuthUtils,
     error::{Error, Result},
+    log_markers::LogMarker,
     messages::WireMsgUtils,
     routing_api::command::Command,
     SectionAuthorityProviderUtils,
@@ -128,6 +129,7 @@ impl Core {
                 // from the received new SAP key, to prevent from endlessly resending a msg
                 // if a sybil/corrupt peer keeps sending us the same AE msg.
                 let dst_section_pk = section_auth.public_key_set.public_key();
+                trace!("{}", LogMarker::ResendAfterAeRetry);
                 let cmd =
                     self.send_direct_message((src_name, sender), bounced_msg, dst_section_pk)?;
                 Ok(vec![cmd])
@@ -202,6 +204,7 @@ impl Core {
                 );
                 Ok(vec![])
             } else {
+                trace!("{}", LogMarker::AeResendAfterAeRedirect);
                 let cmd = self.send_direct_message((*name, *addr), bounced_msg, dst_section_pk)?;
                 Ok(vec![cmd])
             }
@@ -214,6 +217,7 @@ impl Core {
             // For the situation non-elder exists in both incoming and local SAP, send to one of
             // the incoming elder with the geneis key to trigger AE.
             if let Some((name, addr)) = section_auth.elders.iter().next() {
+                trace!("{}", LogMarker::BounceAfterNewElderNotKnownLocally);
                 let cmd = self.send_direct_message(
                     (*name, *addr),
                     bounced_msg,
@@ -263,6 +267,7 @@ impl Core {
                         ae_msg,
                         self.section.authority_provider().section_key(),
                     )?;
+                    trace!("{}", LogMarker::AeSendRedirect);
 
                     return Ok(Some(Command::SendMessage {
                         recipients: vec![(src_location.name(), sender)],
@@ -318,6 +323,8 @@ impl Core {
                 let section_signed = section_signed_auth.sig;
                 let bounced_msg = original_bytes;
 
+                trace!("{}", LogMarker::AeSendRetryAsOutdated);
+
                 SystemMsg::AntiEntropyRetry {
                     section_auth,
                     section_signed,
@@ -338,6 +345,8 @@ impl Core {
                 let section_auth = section_signed_auth.value;
                 let section_signed = section_signed_auth.sig;
                 let bounced_msg = original_bytes;
+
+                trace!("{}", LogMarker::AeSendRetryDstPkFail);
 
                 SystemMsg::AntiEntropyRetry {
                     section_auth,
@@ -384,6 +393,8 @@ impl Core {
             ae_msg,
             self.section.authority_provider().section_key(),
         )?;
+
+        trace!("{} in ae_redirect", LogMarker::AeSendRedirect);
 
         Ok(Command::SendMessage {
             recipients: vec![(src_location.name(), sender)],

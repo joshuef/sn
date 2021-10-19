@@ -247,32 +247,43 @@ fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
         // TODO: how can we get a list of all routing commands programatically?
         // TODO: add anything new here
         let routing_commands_to_check = vec![
-            "HandlePeerLost",
-            "ScheduleTimeout",
-            "HandleSystemMessage",
-            "HandleMessage",
-            "HandleBlockingMessage",
-            "HandleNonBlockingMessage",
-            "HandlePeerLost",
-            "HandleAgreement",
-            "HandleDkgOutcome",
-            "HandleDkgFailure",
+            // "HandlePeerLost",
+            // "ScheduleTimeout",
+            // "HandleSystemMessage",
+            // "HandleMessage",
+            // "HandleBlockingMessage",
+            // "HandleNonBlockingMessage",
+            // "HandlePeerLost",
+            // "HandleAgreement",
+            // "HandleDkgOutcome",
+            // "HandleDkgFailure",
             "SendMessage",
-            "ParseAndSendWireMsg",
-            "PrepareNodeMsgToSend",
-            "SendMessageDeliveryGroup",
-            "HandleRelocationComplete",
-            "SetJoinsAllowed",
-            "ProposeOnline",
-            "ProposeOffline",
-            "StartConnectivityTest",
-            "TestConnectivity",
+            // "ParseAndSendWireMsg",
+            // "PrepareNodeMsgToSend",
+            // "SendMessageDeliveryGroup",
+            // "HandleRelocationComplete",
+            // "SetJoinsAllowed",
+            // "ProposeOnline",
+            // "ProposeOffline",
+            // "StartConnectivityTest",
+            // "TestConnectivity",
+            // "DkgSendFailureObservation",
+    // "DkgBroadcastMsg",
+    // "AeSendRedirect",
+    // "AeSendRetryAsOutdated",
+    // "AeSendRetryDstPkFail",
+    // "SendJoinRequest",
+    // "SendOrHandle",
+    // "SendDirect",
+    // "SendDirectToNodes",
         ];
 
         if is_elder {
+            println!("************************");
             println!("Node is Elder");
+            println!("************************");
+
         }
-        println!("-------------------------");
 
         println!(
             "Commands Spawned: {}, Started: {}, Succeeded: {}, Failed: {}",

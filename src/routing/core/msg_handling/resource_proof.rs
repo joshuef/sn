@@ -9,6 +9,7 @@
 use super::Core;
 use crate::messaging::system::{JoinResponse, Peer, ResourceProofResponse, SystemMsg};
 use crate::routing::{
+    log_markers::LogMarker,
     core::{RESOURCE_PROOF_DATA_SIZE, RESOURCE_PROOF_DIFFICULTY},
     ed25519,
     peer::PeerUtils,
@@ -56,6 +57,7 @@ impl Core {
             nonce_signature: ed25519::sign(&serialized, &self.node.keypair),
         }));
 
+        trace!("{}", LogMarker::SendResourceProofChallenge);
         self.send_direct_message(
             (*peer.name(), *peer.addr()),
             response,
