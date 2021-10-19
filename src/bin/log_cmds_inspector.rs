@@ -1,7 +1,7 @@
 use eyre::{eyre, Result};
 use regex::Regex;
 use safe_network::routing::log_markers::LogMarker;
-use safe_network::testnet_grep::search_logfile_get_whole_line;
+use safe_network::testnet_grep::{get_count_in_logfile, search_logfile_get_whole_line};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -244,7 +244,36 @@ fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
             &mut commands,
         );
 
-        println!("Node is Elder?: {}", is_elder);
+        // TODO: how can we get a list of all routing commands programatically?
+        // TODO: add anything new here
+        let routing_commands_to_check = vec![
+            "HandlePeerLost",
+            "ScheduleTimeout",
+            "HandleSystemMessage",
+            "HandleMessage",
+            "HandleBlockingMessage",
+            "HandleNonBlockingMessage",
+            "HandlePeerLost",
+            "HandleAgreement",
+            "HandleDkgOutcome",
+            "HandleDkgFailure",
+            "SendMessage",
+            "ParseAndSendWireMsg",
+            "PrepareNodeMsgToSend",
+            "SendMessageDeliveryGroup",
+            "HandleRelocationComplete",
+            "SetJoinsAllowed",
+            "ProposeOnline",
+            "ProposeOffline",
+            "StartConnectivityTest",
+            "TestConnectivity",
+        ];
+
+        if is_elder {
+            println!("Node is Elder");
+        }
+        println!("-------------------------");
+
         println!(
             "Commands Spawned: {}, Started: {}, Succeeded: {}, Failed: {}",
             commands.spawned.len(),
@@ -252,6 +281,12 @@ fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
             commands.succeeded.len(),
             commands.failed.len()
         );
+        println!("-------------------------");
+
+        for command in routing_commands_to_check {
+            let count = get_count_in_logfile(&node_log_filepath, command)?;
+            println!("{} found {:?} times", command, count);
+        }
 
         match args.cmd {
             SubCommands::Commands { ref cmd_id } => {

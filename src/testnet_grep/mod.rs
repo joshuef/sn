@@ -185,3 +185,38 @@ pub fn search_logfile_get_whole_line(
 
     Ok(matches)
 }
+
+/// Search the local-test-network log file and return count
+pub fn get_count_in_logfile(logfile: &PathBuf, pattern: &str) -> Result<usize, Error> {
+    let paths = [logfile];
+    let matcher = RegexMatcher::new_line_matcher(pattern)?;
+    // let mut matches: MatchesWithPath = vec![];
+    let mut count: usize = 0;
+
+    for path in paths {
+        for result in WalkDir::new(path) {
+            let dent = match result {
+                Ok(dent) => dent,
+                Err(err) => {
+                    bail!(err)
+                }
+            };
+
+            if !dent.file_type().is_file() {
+                continue;
+            }
+
+            Searcher::new().search_path(
+                &matcher,
+                dent.path(),
+                UTF8(|_lnum, _line| {
+                    count += 1;
+                    // matches.push((lnum, line.to_string(), dent.path().to_path_buf()));
+                    Ok(true)
+                }),
+            )?;
+        }
+    }
+
+    Ok(count)
+}
