@@ -19,7 +19,7 @@ struct CmdArgs {
     pub cmd: SubCommands,
     /// Path to the testnet logs folder, e.g. ~/.safe/node/local-test-network
     // #[structopt(default_value="$HOME/.safe/node/local-test-network/")]
-    pub logs_path: String,
+    pub logs_path: PathBuf,
 }
 
 #[derive(StructOpt, Debug)]
@@ -47,29 +47,37 @@ fn main() -> Result<()> {
     println!();
     match args.cmd {
         SubCommands::Commands { cmd_id } => {
-            println!(
-                "*** REPORT: The following commands were found for cmd id {} ***",
-                cmd_id
-            );
-            for (cmd_id, log_entries) in report.iter() {
-                println!("==> Log entries for sub-command {}:", cmd_id);
-                for log_entry in log_entries.iter() {
-                    println!("{}", log_entry);
+            if report.is_empty() {
+                println!("** No commands were found for cmd id {} **", cmd_id);
+            } else {
+                println!(
+                    "*** REPORT: The following commands were found for cmd id {} ***",
+                    cmd_id
+                );
+                for (cmd_id, log_entries) in report.iter() {
+                    println!("==> Log entries for sub-command {}:", cmd_id);
+                    for log_entry in log_entries.iter() {
+                        println!("{}", log_entry);
+                    }
+                    println!();
                 }
-                println!();
             }
         }
         SubCommands::Messages { msg_id } => {
-            println!(
-                "*** REPORT: The following commands were found for msg id {} ***",
-                msg_id
-            );
-            for (cmd_id, log_entries) in report.iter() {
-                println!("==> Log entries for sub-command {}:", cmd_id);
-                for log_entry in log_entries.iter() {
-                    println!("{}", log_entry);
+            if report.is_empty() {
+                println!("** No commands were found for msg id {} **", msg_id);
+            } else {
+                println!(
+                    "*** REPORT: The following commands were found for msg id {} ***",
+                    msg_id
+                );
+                for (cmd_id, log_entries) in report.iter() {
+                    println!("==> Log entries for sub-command {}:", cmd_id);
+                    for log_entry in log_entries.iter() {
+                        println!("{}", log_entry);
+                    }
+                    println!();
                 }
-                println!();
             }
         }
         SubCommands::IncompleteCmds => {
@@ -90,11 +98,18 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+// A command/subcommand id e.g. "963111461", "963111461.0"
+type CmdId = String;
+// Entire log entry as read from log files
+type LogEntry = String;
+//  A message id, e.g. "68fe..b776"
+type MsgId = String;
+
 #[derive(Default, Clone)]
 // Tuple with log filepath, and the list of sommands/sub-commands and corresponding log entry.
 pub struct SubCommandsInfo {
     pub logfile: PathBuf,
-    pub cmds_logs: BTreeMap<String, String>,
+    pub cmds_logs: BTreeMap<CmdId, LogEntry>,
 }
 
 impl SubCommandsInfo {
@@ -105,17 +120,20 @@ impl SubCommandsInfo {
         }
     }
 
-    pub fn insert(&mut self, cmd_id: String, log_entry: String) {
+    pub fn insert(&mut self, cmd_id: CmdId, log_entry: LogEntry) {
         self.cmds_logs.insert(cmd_id, log_entry);
     }
 }
 
+// Container for all info per each command root id
+type CommandsInfoList = BTreeMap<CmdId, SubCommandsInfo>;
+
 #[derive(Default, Clone)]
 pub struct ScannedInfo {
     // TODO: by node
-    pub by_marker: BTreeMap<LogMarker, BTreeMap<String, SubCommandsInfo>>,
+    pub by_marker: BTreeMap<LogMarker, CommandsInfoList>,
     // msg id to cmd root ids (can be same msg id received many times)
-    pub cmd_by_msg_id: BTreeMap<String, Vec<String>>,
+    pub cmd_by_msg_id: BTreeMap<MsgId, Vec<CmdId>>,
     // msg id tied to a command that it spawned
     // pub msg_id_to_cmd_id: BTreeMap<String, String>,
     // pub by_file: BTreeMap<String, BTreeMap<String, SubCommandsInfo>>,
@@ -213,12 +231,14 @@ pub fn update_commands_info_for_markers(path: &PathBuf) -> Result<ScannedInfo, E
 }
 
 fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
-    println!("Inspecting testnet logs folder: {}", args.logs_path);
-    let logs_dir = std::path::PathBuf::from(args.logs_path.clone());
+    println!(
+        "Inspecting testnet logs folder: {}",
+        args.logs_path.display()
+    );
 
     let mut report = BTreeMap::<String, Vec<String>>::new();
 
-    let info = update_commands_info_for_markers(&logs_dir)?;
+    let info = update_commands_info_for_markers(&args.logs_path)?;
 
     println!("-------------------------");
     println!("LogMarker Stats: (markers found across all log files): ");
@@ -287,10 +307,10 @@ fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
 // trying to find those which were started but not completed
 fn check_completed_cmds(
     info: &ScannedInfo,
-    spawned: &BTreeMap<String, SubCommandsInfo>,
-    started: &BTreeMap<String, SubCommandsInfo>,
-    succeeded: &BTreeMap<String, SubCommandsInfo>,
-    failed: &BTreeMap<String, SubCommandsInfo>,
+    spawned: &CommandsInfoList,
+    started: &CommandsInfoList,
+    succeeded: &CommandsInfoList,
+    failed: &CommandsInfoList,
     report: &mut BTreeMap<String, Vec<String>>,
     // node_log_filepath: &Path,
 ) {
@@ -391,7 +411,7 @@ fn populate_commands_tree(
     succeeded: &BTreeMap<String, SubCommandsInfo>,
     failed: &BTreeMap<String, SubCommandsInfo>,
     report: &mut BTreeMap<String, Vec<String>>,
-    cmd_id: &str,
+    cmd_id: &CmdId,
 ) {
     println!("Looking for commands spawned from cmd id {}", cmd_id);
     let root_cmd_id = get_root_cmd_id(cmd_id);
@@ -464,10 +484,10 @@ fn populate_commands_tree(
 // Populate the report with the list of message ids and their correlated commands.
 fn populate_commands_tree_for_msgs(
     info: &ScannedInfo,
-    spawned: &BTreeMap<String, SubCommandsInfo>,
-    started: &BTreeMap<String, SubCommandsInfo>,
-    succeeded: &BTreeMap<String, SubCommandsInfo>,
-    failed: &BTreeMap<String, SubCommandsInfo>,
+    spawned: &CommandsInfoList,
+    started: &CommandsInfoList,
+    succeeded: &CommandsInfoList,
+    failed: &CommandsInfoList,
     report: &mut BTreeMap<String, Vec<String>>,
     msg_id: &str,
 ) {
@@ -481,7 +501,7 @@ fn populate_commands_tree_for_msgs(
 }
 
 // Given a command id, return the root id, e.g. the root cmd id of 'abc.1.0.2' is 'a.b.c'.
-fn get_root_cmd_id(cmd_id: &str) -> String {
+fn get_root_cmd_id(cmd_id: &CmdId) -> String {
     let mut root_cmd_id = cmd_id.to_string();
     root_cmd_id.truncate(cmd_id.find('.').unwrap_or(cmd_id.len()));
     root_cmd_id
