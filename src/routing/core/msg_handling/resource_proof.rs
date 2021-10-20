@@ -9,9 +9,9 @@
 use super::Core;
 use crate::messaging::system::{JoinResponse, Peer, ResourceProofResponse, SystemMsg};
 use crate::routing::{
-    log_markers::LogMarker,
     core::{RESOURCE_PROOF_DATA_SIZE, RESOURCE_PROOF_DIFFICULTY},
     ed25519,
+    log_markers::LogMarker,
     peer::PeerUtils,
     routing_api::command::Command,
     Error, Result,

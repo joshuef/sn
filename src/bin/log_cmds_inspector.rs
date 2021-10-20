@@ -1,12 +1,14 @@
-use eyre::{eyre, Result};
-use regex::Regex;
+use eyre::{bail, Error, Result};
+use grep::matcher::Matcher;
+use grep::regex::RegexMatcher;
+use grep::searcher::sinks::UTF8;
+use grep::searcher::Searcher;
 use safe_network::routing::log_markers::LogMarker;
-use safe_network::testnet_grep::{get_count_in_logfile, search_logfile_get_whole_line};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
+use std::str::FromStr;
+use std::{collections::BTreeMap, path::PathBuf};
 use structopt::{clap::AppSettings::ColoredHelp, StructOpt};
+use strum::IntoEnumIterator;
+use walkdir::WalkDir;
 
 #[derive(StructOpt, Debug)]
 /// Inspect Safe Network local testnet logs
@@ -88,9 +90,9 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 // Tuple with log filepath, and the list of sommands/sub-commands and corresponding log entry.
-struct SubCommandsInfo {
+pub struct SubCommandsInfo {
     pub logfile: PathBuf,
     pub cmds_logs: BTreeMap<String, String>,
 }
@@ -108,207 +110,173 @@ impl SubCommandsInfo {
     }
 }
 
-#[derive(Default)]
-// Maps from cmd_id to a sub-commands info.
-struct ScannedCommands {
-    pub spawned: BTreeMap<String, SubCommandsInfo>,
-    pub started: BTreeMap<String, SubCommandsInfo>,
-    pub succeeded: BTreeMap<String, SubCommandsInfo>,
-    pub failed: BTreeMap<String, SubCommandsInfo>,
-    pub handle_msg: BTreeMap<String, (PathBuf, String)>,
-    // Map from msg_id to cmd_ids
-    pub msg_id_to_cmds: BTreeMap<String, Vec<String>>,
+#[derive(Default, Clone)]
+pub struct ScannedInfo {
+    // TODO: by node
+    pub by_marker: BTreeMap<LogMarker, BTreeMap<String, SubCommandsInfo>>,
+    // msg id to cmd root ids (can be same msg id received many times)
+    pub cmd_by_msg_id: BTreeMap<String, Vec<String>>,
+    // msg id tied to a command that it spawned
+    // pub msg_id_to_cmd_id: BTreeMap<String, String>,
+    // pub by_file: BTreeMap<String, BTreeMap<String, SubCommandsInfo>>,
+    pub counts: BTreeMap<LogMarker, usize>,
 }
 
-/// Update passed command tree with data for a specific LogMarker from a specific path
-fn update_command_info_for_marker(
-    path: &PathBuf,
-    marker: &LogMarker,
-    commands: &mut ScannedCommands,
-) -> Result<()> {
-    let cmd_id_regex = Regex::new(r".*cmd_id=([^\s-]*)")?;
-    let msg_id_regex = Regex::new(r".*MessageId\((.*)\)")?;
+/// Search the local-test-network log file and return count
+pub fn update_commands_info_for_markers(path: &PathBuf) -> Result<ScannedInfo, Error> {
+    let paths = [path];
+    let mut info = ScannedInfo {
+        // by_file: BTreeMap::default(),
+        by_marker: BTreeMap::default(),
+        counts: BTreeMap::default(),
+        cmd_by_msg_id: BTreeMap::default(),
+        // msg_id_to_cmd_id: BTreeMap::default(),
+    };
 
-    let regex_send_msg =
-        Regex::new(r".*CommandHandleSpawned SendMessage MessageId\((.*)\) cmd_id=(.*)$")?;
+    let mut pattern = r"".to_owned();
 
-    let results = search_logfile_get_whole_line(path, marker)?;
-
-    for (_line, text, file) in results {
-        if let Some(cap) = cmd_id_regex.captures_iter(&text).next() {
-            let cmd_id = cap[1].to_string();
-            let root_cmd_id = get_root_cmd_id(&cmd_id);
-
-            if marker == &LogMarker::DispatchHandleMsgCmd {
-                // track msg_id if we can find it
-                if let Some(cap) = msg_id_regex.captures_iter(&text).next() {
-                    let msg_id = cap[1].to_string();
-                    commands
-                        .handle_msg
-                        .insert(msg_id.clone(), (file.clone(), text.clone()));
-
-                    commands
-                        .msg_id_to_cmds
-                        .entry(msg_id)
-                        .or_insert_with(Vec::new)
-                        .push(root_cmd_id);
-                }
-            } else {
-                let tracker = match marker {
-                    LogMarker::CommandHandleSpawned => &mut commands.spawned,
-                    LogMarker::CommandHandleStart => &mut commands.started,
-                    LogMarker::CommandHandleEnd => &mut commands.succeeded,
-                    LogMarker::CommandHandleError => &mut commands.failed,
-                    _ => return Err(eyre!("No tracker set up for LogMarker {:?}", marker)),
-                };
-
-                tracker
-                    .entry(root_cmd_id.clone())
-                    .or_insert_with(|| SubCommandsInfo::new(path.clone()))
-                    .insert(cmd_id.clone(), text.clone());
-
-                // track msg_id if we can find it
-                if let Some(cap) = msg_id_regex.captures_iter(&text).next() {
-                    let msg_id = cap[1].to_string();
-
-                    commands
-                        .msg_id_to_cmds
-                        .entry(msg_id)
-                        .or_insert_with(Vec::new)
-                        .push(root_cmd_id);
-                }
-            }
+    for (i, marker) in LogMarker::iter().enumerate() {
+        if i > 0 {
+            // lets add an OR
+            pattern.push_str(r"|");
         }
+        pattern.push_str(&marker.to_string())
+    }
 
-        if let Some(cap) = regex_send_msg.captures_iter(&text).next() {
-            let msg_id = cap[1].to_string();
-            let cmd_id = cap[2].to_string();
-            let root_cmd_id = get_root_cmd_id(&cmd_id);
-            commands
-                .msg_id_to_cmds
-                .entry(msg_id)
-                .or_insert_with(Vec::new)
-                .push(root_cmd_id);
+    let matcher = RegexMatcher::new_line_matcher(&pattern)?;
+    let cmd_id_regex = RegexMatcher::new_line_matcher(r".*cmd_id=([^\s-]*)")?;
+    let msg_id_regex = RegexMatcher::new_line_matcher(r".*MessageId\((.*)\)")?;
+
+    for path in paths {
+        for result in WalkDir::new(path) {
+            let dent = match result {
+                Ok(dent) => dent,
+                Err(err) => {
+                    bail!(err)
+                }
+            };
+
+            if !dent.file_type().is_file() {
+                continue;
+            }
+
+            Searcher::new().search_path(
+                &matcher,
+                dent.path(),
+                UTF8(|_lnum, line| {
+                    let path = dent.path().to_path_buf();
+                    let the_match = matcher.find(line.as_bytes())?.unwrap();
+                    let matched_marker = &line[the_match].to_string();
+                    let matched_marker =
+                        LogMarker::from_str(&matched_marker).expect("match to be log marker");
+
+                    // update the total count for this match
+                    let count = info.counts.entry(matched_marker.clone()).or_insert(0);
+                    *count += 1;
+
+                    if let Some(cmd_id_match) = cmd_id_regex.find(line.as_bytes())? {
+                        let cmd_id = &line[cmd_id_match].to_string();
+                        let root_cmd_id = get_root_cmd_id(&cmd_id);
+
+                        // update the specifics of this marker
+                        let marker_map = info
+                            .by_marker
+                            .entry(matched_marker.clone())
+                            .or_insert(BTreeMap::default());
+
+                        let subcommand_info = marker_map
+                            .entry(root_cmd_id.clone())
+                            .or_insert_with(|| SubCommandsInfo::new(path.clone()));
+
+                        // track the entry
+                        subcommand_info.insert(cmd_id.clone(), line.to_string());
+
+                        if let Some(msg_id_match) = msg_id_regex.find(line.as_bytes())? {
+                            let msg_id = &line[msg_id_match].to_string();
+
+                            info.cmd_by_msg_id
+                                .entry(msg_id.to_string())
+                                .or_insert_with(Vec::new)
+                                .push(root_cmd_id);
+
+                            // info.
+                        }
+                    }
+
+                    Ok(true)
+                }),
+            )?;
         }
     }
 
-    Ok(())
+    Ok(info)
 }
 
 fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
     println!("Inspecting testnet logs folder: {}", args.logs_path);
-
-    let logs_dir = std::fs::read_dir(args.logs_path.clone())?;
+    let logs_dir = std::path::PathBuf::from(args.logs_path.clone());
 
     let mut report = BTreeMap::<String, Vec<String>>::new();
 
-    // Iterate over each of the testnet nodes log files
-    for node_log_path in logs_dir {
-        let node_log_filepath = node_log_path?.path();
-        println!();
-        println!("-------------------------");
-        println!("Inspecting node's folder: {}", node_log_filepath.display());
-        println!("-------------------------");
+    let info = update_commands_info_for_markers(&logs_dir)?;
 
-        let mut commands = ScannedCommands::default();
+    println!("-------------------------");
+    println!("LogMarker Stats: (markers found across all log files): ");
+    for (marker, count) in info.clone().counts.into_iter() {
+        println!("{} found: {} times", marker, count);
+    }
+    println!("-------------------------");
 
-        let is_elder =
-            !search_logfile_get_whole_line(&node_log_filepath, &LogMarker::PromotedToElder)?
-                .is_empty();
+    //     if is_elder {
+    //         println!("************************");
+    //         println!("Node is Elder");
+    //         println!("************************");
 
-        // TODO: Could the regex just be against _any_ command and return all those?
-        let _res = update_command_info_for_marker(
-            &node_log_filepath,
-            &LogMarker::CommandHandleSpawned,
-            &mut commands,
-        );
-        let _res = update_command_info_for_marker(
-            &node_log_filepath,
-            &LogMarker::CommandHandleStart,
-            &mut commands,
-        );
-        let _res = update_command_info_for_marker(
-            &node_log_filepath,
-            &LogMarker::CommandHandleEnd,
-            &mut commands,
-        );
-        let _res = update_command_info_for_marker(
-            &node_log_filepath,
-            &LogMarker::CommandHandleError,
-            &mut commands,
-        );
+    //     }
+    let default_map = BTreeMap::default();
+    let spawned = info
+        .by_marker
+        .get(&LogMarker::CommandHandleSpawned)
+        .unwrap_or(&default_map);
+    let started = info
+        .by_marker
+        .get(&LogMarker::CommandHandleStart)
+        .unwrap_or(&default_map);
+    let succeeded = info
+        .by_marker
+        .get(&LogMarker::CommandHandleEnd)
+        .unwrap_or(&default_map);
+    let failed = info
+        .by_marker
+        .get(&LogMarker::CommandHandleError)
+        .unwrap_or(&default_map);
 
-        let _res = update_command_info_for_marker(
-            &node_log_filepath,
-            &LogMarker::DispatchHandleMsgCmd,
-            &mut commands,
-        );
+    println!(
+        "Commands Spawned: {}, Started: {}, Succeeded: {}, Produced an error: {}",
+        spawned.len(),
+        started.len(),
+        succeeded.len(),
+        failed.len()
+    );
+    println!("-------------------------");
 
-        // TODO: how can we get a list of all routing commands programatically?
-        // TODO: add anything new here
-        let routing_commands_to_check = vec![
-            // "HandlePeerLost",
-            // "ScheduleTimeout",
-            // "HandleSystemMessage",
-            // "HandleMessage",
-            // "HandleBlockingMessage",
-            // "HandleNonBlockingMessage",
-            // "HandlePeerLost",
-            // "HandleAgreement",
-            // "HandleDkgOutcome",
-            // "HandleDkgFailure",
-            "SendMessage",
-            // "ParseAndSendWireMsg",
-            // "PrepareNodeMsgToSend",
-            // "SendMessageDeliveryGroup",
-            // "HandleRelocationComplete",
-            // "SetJoinsAllowed",
-            // "ProposeOnline",
-            // "ProposeOffline",
-            // "StartConnectivityTest",
-            // "TestConnectivity",
-            // "DkgSendFailureObservation",
-    // "DkgBroadcastMsg",
-    // "AeSendRedirect",
-    // "AeSendRetryAsOutdated",
-    // "AeSendRetryDstPkFail",
-    // "SendJoinRequest",
-    // "SendOrHandle",
-    // "SendDirect",
-    // "SendDirectToNodes",
-        ];
-
-        if is_elder {
-            println!("************************");
-            println!("Node is Elder");
-            println!("************************");
-
+    match args.cmd {
+        SubCommands::Commands { ref cmd_id } => {
+            populate_commands_tree(spawned, started, succeeded, failed, &mut report, cmd_id);
         }
-
-        println!(
-            "Commands Spawned: {}, Started: {}, Succeeded: {}, Failed: {}",
-            commands.spawned.len(),
-            commands.started.len(),
-            commands.succeeded.len(),
-            commands.failed.len()
-        );
-        println!("-------------------------");
-
-        for command in routing_commands_to_check {
-            let count = get_count_in_logfile(&node_log_filepath, command)?;
-            println!("{} found {:?} times", command, count);
+        SubCommands::Messages { ref msg_id } => {
+            populate_commands_tree_for_msgs(
+                &info,
+                spawned,
+                started,
+                succeeded,
+                failed,
+                &mut report,
+                msg_id,
+            );
         }
-
-        match args.cmd {
-            SubCommands::Commands { ref cmd_id } => {
-                populate_commands_tree(&commands, &mut report, cmd_id);
-            }
-            SubCommands::Messages { ref msg_id } => {
-                populate_commands_tree_for_msgs(&commands, &mut report, msg_id);
-            }
-            SubCommands::IncompleteCmds => {
-                check_completed_cmds(&commands, &mut report, &node_log_filepath);
-            }
+        SubCommands::IncompleteCmds => {
+            check_completed_cmds(&info, spawned, started, succeeded, failed, &mut report);
         }
     }
 
@@ -318,21 +286,34 @@ fn inspect_log_files(args: &CmdArgs) -> Result<BTreeMap<String, Vec<String>>> {
 // Try to find inconsistencies among the commands,
 // trying to find those which were started but not completed
 fn check_completed_cmds(
-    commands: &ScannedCommands,
+    info: &ScannedInfo,
+    spawned: &BTreeMap<String, SubCommandsInfo>,
+    started: &BTreeMap<String, SubCommandsInfo>,
+    succeeded: &BTreeMap<String, SubCommandsInfo>,
+    failed: &BTreeMap<String, SubCommandsInfo>,
     report: &mut BTreeMap<String, Vec<String>>,
-    node_log_filepath: &Path,
+    // node_log_filepath: &Path,
 ) {
-    let mut cmds_with_error = 0;
-    let mut cmds_not_completed = 0;
+    let mut cmds_with_error = vec![];
+    let mut cmds_not_completed = vec![];
     let mut cmds_with_end = 0;
-    for (cmd_id, log_entry) in commands
-        .spawned
-        .iter()
-        .flat_map(|(_, v)| v.cmds_logs.iter())
-    {
+
+    println!("Checking completed commands...");
+    println!("-------------------------");
+
+    for (cmd_id, log_entry, logfile) in spawned.iter().flat_map(|(_, subcommands)| {
+        let mut commands = vec![];
+        for (cmd_id, log_entry) in subcommands.cmds_logs.iter() {
+            commands.push((cmd_id, log_entry, subcommands.logfile.clone()))
+        }
+
+        commands
+    }) {
+        let logfile = logfile.display().to_string();
+
         let root_cmd_id = get_root_cmd_id(cmd_id);
-        if commands
-            .started
+
+        if started
             .get(&root_cmd_id)
             .map(|subcmds| subcmds.cmds_logs.get(cmd_id))
             .is_none()
@@ -341,35 +322,31 @@ fn check_completed_cmds(
                 "Command with id {} spawned but not started: {}",
                 cmd_id, log_entry
             );
-            cmds_not_completed += 1;
-            let logfile = node_log_filepath.display().to_string();
+
+            cmds_not_completed.push((cmd_id, logfile.clone(), log_entry));
             report
                 .entry(logfile)
                 .or_insert_with(Vec::new)
                 .push(log_entry.clone());
         } else {
             // Command spwned and started, let's see if it completed...
-            if commands
-                .succeeded
+            if succeeded
                 .get(&root_cmd_id)
                 .map(|subcmds| subcmds.cmds_logs.get(cmd_id))
                 .is_none()
             {
-                // it didn't finish succesfully, did it fail?....
-                if commands
-                    .failed
+                if failed
                     .get(&root_cmd_id)
                     .map(|subcmds| subcmds.cmds_logs.get(cmd_id))
                     .is_none()
                 {
-                    cmds_with_error += 1;
+                    cmds_with_error.push((cmd_id, logfile, log_entry));
                 } else {
                     println!(
                         "Command with id {} spawned and started, but not completed: {}",
                         cmd_id, log_entry
                     );
-                    cmds_not_completed += 1;
-                    let logfile = node_log_filepath.display().to_string();
+                    cmds_not_completed.push((cmd_id, logfile.clone(), log_entry));
                     report
                         .entry(logfile)
                         .or_insert_with(Vec::new)
@@ -384,30 +361,42 @@ fn check_completed_cmds(
 
     println!(
         "Commands handled which Failed: {}, Succeeded: {}, not Completed: {}",
-        cmds_with_error, cmds_with_end, cmds_not_completed
+        cmds_with_error.len(),
+        cmds_with_end,
+        cmds_not_completed.len()
     );
-    println!(
-        "Incoming messages handled: {}",
-        commands.msg_id_to_cmds.len()
-    );
+    println!("Incoming messages handled: {}", info.cmd_by_msg_id.len());
 
-    if cmds_not_completed > 0 {
-        println!(
-            "\n!!! ERROR !!!: Some command/s were not completed in log: {}",
-            node_log_filepath.display()
-        );
+    if cmds_not_completed.len() > 0 {
+        println!("\n!!! ERROR !!!: Some command/s were not completed in log:");
+        for (id, file, line) in cmds_not_completed {
+            println!("{}{}{}", id, file, line);
+        }
     }
+    println!("-------------------------");
+
+    if cmds_with_error.len() > 0 {
+        println!("\n!!! ERROR !!!: Some commands errored but were not handled?:");
+        for (id, file, line) in cmds_with_error {
+            println!("{}{}{}", id, file, line);
+        }
+    }
+    println!("-------------------------");
 }
 
 // Populate the report with the list of commands/sub-commands correlated to the provided cmd id.
 fn populate_commands_tree(
-    commands: &ScannedCommands,
+    spawned: &BTreeMap<String, SubCommandsInfo>,
+    started: &BTreeMap<String, SubCommandsInfo>,
+    succeeded: &BTreeMap<String, SubCommandsInfo>,
+    failed: &BTreeMap<String, SubCommandsInfo>,
     report: &mut BTreeMap<String, Vec<String>>,
     cmd_id: &str,
 ) {
     println!("Looking for commands spawned from cmd id {}", cmd_id);
     let root_cmd_id = get_root_cmd_id(cmd_id);
-    if let Some(matching_cmds) = commands.spawned.get(&root_cmd_id) {
+
+    if let Some(matching_cmds) = spawned.get(&root_cmd_id) {
         matching_cmds
             .cmds_logs
             .iter()
@@ -423,7 +412,7 @@ fn populate_commands_tree(
             });
     }
 
-    if let Some(matching_cmds) = commands.started.get(&root_cmd_id) {
+    if let Some(matching_cmds) = started.get(&root_cmd_id) {
         matching_cmds
             .cmds_logs
             .iter()
@@ -439,7 +428,7 @@ fn populate_commands_tree(
             });
     }
 
-    if let Some(matching_cmds) = commands.succeeded.get(&root_cmd_id) {
+    if let Some(matching_cmds) = succeeded.get(&root_cmd_id) {
         matching_cmds
             .cmds_logs
             .iter()
@@ -455,7 +444,7 @@ fn populate_commands_tree(
             });
     }
 
-    if let Some(matching_cmds) = commands.failed.get(&root_cmd_id) {
+    if let Some(matching_cmds) = failed.get(&root_cmd_id) {
         matching_cmds
             .cmds_logs
             .iter()
@@ -474,23 +463,19 @@ fn populate_commands_tree(
 
 // Populate the report with the list of message ids and their correlated commands.
 fn populate_commands_tree_for_msgs(
-    commands: &ScannedCommands,
+    info: &ScannedInfo,
+    spawned: &BTreeMap<String, SubCommandsInfo>,
+    started: &BTreeMap<String, SubCommandsInfo>,
+    succeeded: &BTreeMap<String, SubCommandsInfo>,
+    failed: &BTreeMap<String, SubCommandsInfo>,
     report: &mut BTreeMap<String, Vec<String>>,
     msg_id: &str,
 ) {
     println!("Looking for commands spawned from msg id {}", msg_id);
-    let incoming_msg_log_entry = commands.handle_msg.get(msg_id);
 
-    if let Some(ids) = commands.msg_id_to_cmds.get(msg_id) {
+    if let Some(ids) = info.cmd_by_msg_id.get(msg_id) {
         ids.iter().for_each(|root_cmd_id| {
-            if let Some((logfile, log_entry)) = incoming_msg_log_entry {
-                report
-                    .entry(root_cmd_id.clone())
-                    .or_insert_with(Vec::new)
-                    .push(format!("{}: {}", logfile.display(), log_entry));
-            }
-
-            populate_commands_tree(commands, report, root_cmd_id);
+            populate_commands_tree(spawned, started, succeeded, failed, report, root_cmd_id);
         });
     }
 }
