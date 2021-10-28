@@ -691,12 +691,12 @@ mod tests {
             let sap_sk = secret_key_set.secret_key();
             let signed_section_auth = section_signed(sap_sk, section_auth)?;
 
-            let (chain, genesis_sk) = create_chain(
+            let (chain, genesis_sk_set) = create_chain(
                 sap_sk,
                 signed_section_auth.value.public_key_set.public_key(),
             )
             .context("failed to create section chain")?;
-            let genesis_pk = genesis_sk.public_key();
+            let genesis_pk = genesis_sk_set.public_keys().public_key();
             assert_eq!(genesis_pk, *chain.root_key());
 
             let section = Section::new(genesis_pk, chain, signed_section_auth)
@@ -709,9 +709,10 @@ mod tests {
                 mpsc::channel(1).0,
                 used_space,
                 root_storage_dir,
+                genesis_sk_set.clone(),
             )
             .await?;
-            // let core = tmp_core.
+
             core.relocate(node, section).await?;
 
             // generate other SAP for prefix1
@@ -722,7 +723,7 @@ mod tests {
             // generate a proof chain for this other SAP
             let mut proof_chain = SecuredLinkedList::new(genesis_pk);
             let signature = bincode::serialize(&other_sap_sk.public_key())
-                .map(|bytes| genesis_sk.sign(&bytes))?;
+                .map(|bytes| genesis_sk_set.secret_key().sign(&bytes))?;
             proof_chain.insert(&genesis_pk, other_sap_sk.public_key(), signature)?;
 
             Ok(Self {
@@ -776,21 +777,23 @@ mod tests {
     fn create_chain(
         sap_sk: &SecretKey,
         last_key: BlsPublicKey,
-    ) -> Result<(SecuredLinkedList, SecretKey)> {
+    ) -> Result<(SecuredLinkedList, bls::SecretKeySet)> {
         // create chain with random genesis key
-        let genesis_sk = SecretKey::random();
-        let genesis_pk = genesis_sk.public_key();
+        let genesis_sk_set = bls::SecretKeySet::random(0, &mut rand::thread_rng());
+        let genesis_pk = genesis_sk_set.public_keys().public_key();
         let mut chain = SecuredLinkedList::new(genesis_pk);
 
         // insert second key which is the PK derived from SAP's SK
         let sap_pk = sap_sk.public_key();
-        let sig = genesis_sk.sign(&bincode::serialize(&sap_pk)?);
+        let sig = genesis_sk_set
+            .secret_key()
+            .sign(&bincode::serialize(&sap_pk)?);
         chain.insert(&genesis_pk, sap_pk, sig)?;
 
         // insert third key which is provided `last_key`
         let last_sig = sap_sk.sign(&bincode::serialize(&last_key)?);
         chain.insert(&sap_pk, last_key, last_sig)?;
 
-        Ok((chain, genesis_sk))
+        Ok((chain, genesis_sk_set))
     }
 }

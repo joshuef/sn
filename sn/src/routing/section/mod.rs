@@ -127,10 +127,12 @@ impl Section {
     }
 
     /// Creates `Section` for the first node in the network
-    pub(super) async fn first_node(peer: Peer) -> Result<(Section, SectionKeyShare)> {
-        let secret_key_set = bls::SecretKeySet::random(0, &mut rand::thread_rng());
-        let public_key_set = secret_key_set.public_keys();
-        let secret_key_share = secret_key_set.secret_key_share(0);
+    pub(super) async fn first_node(
+        peer: Peer,
+        genesis_sk_set: bls::SecretKeySet,
+    ) -> Result<(Section, SectionKeyShare)> {
+        let public_key_set = genesis_sk_set.public_keys();
+        let secret_key_share = genesis_sk_set.secret_key_share(0);
 
         let section_auth =
             create_first_section_authority_provider(&public_key_set, &secret_key_share, peer)?;

@@ -33,11 +33,12 @@ impl Core {
         event_tx: mpsc::Sender<Event>,
         used_space: UsedSpace,
         root_storage_dir: PathBuf,
+        genesis_sk_set: bls::SecretKeySet,
     ) -> Result<Self> {
         // make sure the Node has the correct local addr as Comm
         node.addr = comm.our_connection_info();
 
-        let (section, section_key_share) = Section::first_node(node.peer()).await?;
+        let (section, section_key_share) = Section::first_node(node.peer(), genesis_sk_set).await?;
         Self::new(
             comm,
             node,

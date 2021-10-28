@@ -99,8 +99,17 @@ impl Routing {
             )
             .await?;
             let node = Node::new(keypair, comm.our_connection_info());
-            let core = Core::first_node(comm, node, event_tx, used_space, root_storage_dir.clone())
-                .await?;
+
+            let genesis_sk_set = bls::SecretKeySet::random(0, &mut rand::thread_rng());
+            let core = Core::first_node(
+                comm,
+                node,
+                event_tx,
+                used_space,
+                root_storage_dir.clone(),
+                genesis_sk_set,
+            )
+            .await?;
 
             let section = core.section();
 

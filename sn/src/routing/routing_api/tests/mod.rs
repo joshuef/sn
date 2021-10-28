@@ -1226,7 +1226,16 @@ async fn message_to_self(dst: MessageDst) -> Result<()> {
     let comm = Comm::new((Ipv4Addr::LOCALHOST, 0).into(), Default::default(), comm_tx).await?;
     let (used_space, root_storage_dir) = create_test_used_space_and_root_storage()?;
 
-    let core = Core::first_node(comm, node, event_tx, used_space, root_storage_dir).await?;
+    let genesis_sk_set = bls::SecretKeySet::random(0, &mut rand::thread_rng());
+    let core = Core::first_node(
+        comm,
+        node,
+        event_tx,
+        used_space,
+        root_storage_dir,
+        genesis_sk_set,
+    )
+    .await?;
     let node = core.node.read().await.clone();
     let section_pk = *core.section_chain().await.last_key();
     let dispatcher = Dispatcher::new(core);
