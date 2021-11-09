@@ -728,10 +728,14 @@ impl Core {
         .await
         {
             Ok(section_auth) => {
+                info!("Successfully aggregated message");
                 *msg_authority = NodeMsgAuthority::Section(section_auth);
                 Ok(false)
             }
-            Err(AggregatorError::NotEnoughShares) => Ok(true),
+            Err(AggregatorError::NotEnoughShares) => {
+                info!("Not enough shares to aggregate received message");
+                Ok(true)
+            }
             Err(err) => {
                 error!("Error accumulating message at dst: {:?}", err);
                 Err(Error::InvalidSignatureShare)

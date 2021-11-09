@@ -165,12 +165,10 @@ impl Core {
         // verify the produced auth and accept it into the network.
         if let Some(response) = join_request.aggregated {
             if response.verify(&self.section_chain().await) {
-                let mut commands = self
+                info!("Handling Online agreement of {:?}", peer);
+                return self
                     .handle_online_agreement(response.value.clone(), response.sig.clone())
-                    .await?;
-                commands.append(&mut self.send_node_approval(response).await);
-
-                return Ok(commands);
+                    .await;
             }
         }
 

@@ -8,13 +8,13 @@
 
 use super::{delivery_group, Comm, Core};
 use crate::dbs::UsedSpace;
-use crate::messaging::system::{JoinResponse, MembershipState, SigShare, SystemMsg};
-use crate::messaging::{system::NodeState, SectionAuthorityProvider, WireMsg};
+use crate::messaging::system::{JoinResponse, SigShare, SystemMsg};
+use crate::messaging::WireMsg;
 use crate::routing::{
     core::Proposal,
     error::Result,
     log_markers::LogMarker,
-    network_knowledge::{NetworkKnowledge, SectionKeyShare},
+    network_knowledge::{NetworkKnowledge, NodeState, SectionAuthorityProvider, SectionKeyShare},
     node::Node,
     routing_api::command::Command,
     Event, Peer,
@@ -239,12 +239,7 @@ impl Core {
         let public_key_set = self.public_key_set().await?;
         let section_key = public_key_set.public_key();
 
-        let node_state = NodeState {
-            name: peer.name(),
-            addr: peer.addr(),
-            state: MembershipState::Joined,
-            previous_name,
-        };
+        let node_state = NodeState::joined(&peer, previous_name);
         let serialized_details = bincode::serialize(&node_state)?;
         let (index, signature_share) = self
             .sign_with_section_key_share(&serialized_details, &section_key)
@@ -259,7 +254,7 @@ impl Core {
             sig_share,
         }));
         Ok(vec![
-            self.send_direct_message(peer, node_msg, section_key)
+            self.send_direct_message(peer.clone(), node_msg, section_key)
                 .await?,
         ])
     }

@@ -129,6 +129,8 @@ impl Core {
         commands.extend(result);
         commands.extend(self.send_node_approval(new_info).await);
 
+        info!("Commands in queue for Accepting node {:?}", commands);
+
         self.print_network_stats().await;
 
         Ok(commands)

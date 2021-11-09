@@ -26,7 +26,7 @@
 pub(crate) use self::{
     core::MIN_LEVEL_WHEN_FULL,
     network_knowledge::{
-        peer::UnnamedPeer, section_keys::SectionKeyShare, SectionAuthorityProvider,
+        peer::UnnamedPeer, section_keys::SectionKeyShare, NodeState, SectionAuthorityProvider,
     },
 };
 pub use self::{
