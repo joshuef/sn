@@ -99,26 +99,6 @@ impl Node {
             }
             //
             // ------- Misc ------------
-            NodeDuty::SetStorageLevel { node_id, level } => {
-                let elder = self.as_elder().await?;
-                let handle = tokio::spawn(async move {
-                    let changed = elder
-                        .meta_data
-                        .read()
-                        .await
-                        .set_storage_level(node_id, level)
-                        .await;
-
-                    // if the value changed and the node is now considered full..
-                    if changed && level.value() == MIN_LEVEL_WHEN_FULL {
-                        // ..then we accept a new node in place of the full node
-                        Ok(NodeTask::from(vec![NodeDuty::SetNodeJoinsAllowed(true)]))
-                    } else {
-                        Ok(NodeTask::None)
-                    }
-                });
-                Ok(NodeTask::Thread(handle))
-            }
             NodeDuty::Send(msg) => {
                 let network_api = self.network_api.clone();
                 let handle = tokio::spawn(async move {

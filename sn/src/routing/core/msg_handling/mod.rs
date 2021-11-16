@@ -25,6 +25,7 @@ use crate::messaging::{
     ServiceAuth, SrcLocation, WireMsg,
 };
 use crate::routing::{
+    MIN_LEVEL_WHEN_FULL,
     log_markers::LogMarker,
     messages::{NodeMsgAuthorityUtils, WireMsgUtils},
     network_knowledge::SectionPeers,
@@ -495,6 +496,13 @@ impl Core {
             // plugging in msg handlers.
             SystemMsg::NodeCmd(node_cmd) => {
                 match node_cmd {
+                    NodeCmd::RecordStorageLevel { node_id, level, .. } => {
+                        let changed = self.set_storage_level(&node_id, level).await;
+                        if changed && level.value() == MIN_LEVEL_WHEN_FULL {
+                            // ..then we accept a new node in place of the full node
+                            *self.joins_allowed.write().await = true;
+                        }
+                    }
                     NodeCmd::ReceiveExistingData { metadata } => {
                         info!("Processing received DataExchange packet: {:?}", msg_id);
 

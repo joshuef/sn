@@ -63,13 +63,6 @@ pub enum NodeDuty {
     },
     /// When demoted, node levels down
     LevelDown,
-    /// Increment count of full nodes in the network
-    SetStorageLevel {
-        /// Node ID of node that is reporting capacity.
-        node_id: PublicKey,
-        /// The storage level the node claims to be at.
-        level: StorageLevel,
-    },
     /// Sets joining allowed to true or false.
     SetNodeJoinsAllowed(bool),
     /// Send a message to the specified dst.

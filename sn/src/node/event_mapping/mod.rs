@@ -6,13 +6,10 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-mod node_msg;
-
 use crate::messaging::SrcLocation;
 use crate::node::{network::Network, node_ops::NodeDuty};
 use crate::routing::{Event as RoutingEvent, MessageReceived, NodeElderChange, MIN_AGE};
 use crate::types::PublicKey;
-use node_msg::map_node_msg;
 use std::{thread::sleep, time::Duration};
 use tracing::{debug, error, info, trace};
 
@@ -34,12 +31,6 @@ pub(super) enum MsgContext {
 pub(super) async fn map_routing_event(event: RoutingEvent, network_api: &Network) -> Mapping {
     info!("Handling RoutingEvent: {:?}", event);
     match event {
-        RoutingEvent::MessageReceived {
-            msg_id,
-            src,
-            dst,
-            msg,
-        } => map_node_msg(msg_id, src, dst, *msg),
         RoutingEvent::SectionSplit {
             elders,
             self_status_change,
