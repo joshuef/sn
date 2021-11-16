@@ -34,8 +34,7 @@ pub(crate) use register_storage::RegisterStorage;
 
 use self::split_barrier::SplitBarrier;
 use crate::dbs::UsedSpace;
-use crate::messaging::data::DataExchange;
-use crate::messaging::system::{NodeCmd, SystemMsg};
+use crate::messaging::system::SystemMsg;
 use crate::messaging::{signature_aggregator::SignatureAggregator, system::Proposal};
 use crate::routing::{
     dkg::DkgVoter,
@@ -300,6 +299,15 @@ impl Core {
                     self_status_change,
                 }
             } else {
+                commands.extend(
+                    self.send_data_updates_to(
+                        self.network_knowledge.prefix().await,
+                        self.network_knowledge.authority_provider().await.peers(),
+                        old.section_key,
+                    )
+                    .await?,
+                );
+
                 Event::EldersChanged {
                     elders,
                     self_status_change,
