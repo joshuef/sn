@@ -7,9 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::role::{ElderRole, Role};
-use crate::messaging::data::DataExchange;
-use crate::node::{metadata::Metadata, node_ops::NodeDuty, Node, Result};
-use tracing::info;
+use crate::node::{metadata::Metadata, Node, Result};
 
 impl Node {
     /// Level up a newbie to an oldie on promotion
@@ -20,19 +18,5 @@ impl Node {
         *self.role.write().await = Role::Elder(ElderRole::new(meta_data, false));
 
         Ok(())
-    }
-
-    /// Continue the level up and handle more responsibilities.
-    pub(crate) async fn synch_state(elder: &ElderRole, metadata: DataExchange) -> Result<NodeDuty> {
-        if *elder.received_initial_sync.read().await {
-            info!("We are already received the initial sync from our section. Ignoring update");
-            return Ok(NodeDuty::NoOp);
-        }
-        // --------- merge in provided metadata ---------
-        // elder.meta_data.write().await.update(metadata).await?;
-
-        *elder.received_initial_sync.write().await = true;
-
-        Ok(NodeDuty::NoOp)
     }
 }

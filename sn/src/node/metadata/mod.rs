@@ -6,17 +6,10 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-mod elder_stores;
-
-use crate::messaging::data::{DataExchange, StorageLevel};
+use crate::messaging::data::StorageLevel;
 use crate::node::{network::Network, Result};
 use crate::types::PublicKey;
-use elder_stores::ElderStores;
-use std::{
-    collections::BTreeSet,
-    fmt::{self, Display, Formatter},
-};
-use xor_name::XorName;
+use std::fmt::{self, Display, Formatter};
 
 /// This module is called `Metadata`
 /// as a preparation for the responsibilities
@@ -25,30 +18,18 @@ use xor_name::XorName;
 /// the structures + their metadata - handled at `Elders` - with
 /// all underlying data being chunks stored at `Adults`.
 pub(crate) struct Metadata {
-    elder_stores: ElderStores,
+    network: Network,
 }
 
 impl Metadata {
     pub(crate) async fn new(network: Network) -> Result<Self> {
-        let elder_stores = ElderStores::new(network);
-        Ok(Self { elder_stores })
-    }
-
-    pub(crate) async fn retain_members_only(&self, members: BTreeSet<XorName>) -> Result<()> {
-        self.elder_stores
-            .network
-            .retain_members_only(members)
-            .await?;
-        Ok(())
+        Ok(Self { network })
     }
 
     /// Sets the storage level of a given node.
     /// Returns whether the level changed or not.
     pub(crate) async fn set_storage_level(&self, node_id: PublicKey, level: StorageLevel) -> bool {
-        self.elder_stores
-            .network
-            .set_storage_level(&node_id, level)
-            .await
+        self.network.set_storage_level(&node_id, level).await
     }
 }
 

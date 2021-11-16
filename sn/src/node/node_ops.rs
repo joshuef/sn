@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::messaging::{
-    data::{DataExchange, ServiceError, ServiceMsg, StorageLevel},
+    data::{ServiceError, ServiceMsg, StorageLevel},
     system::SystemMsg,
     DstLocation, MessageId,
 };
@@ -63,18 +63,6 @@ pub enum NodeDuty {
     },
     /// When demoted, node levels down
     LevelDown,
-    /// Initiates the node with state from peers.
-    SynchState {
-        /// The metadata stored on Elders.
-        metadata: DataExchange,
-    },
-    /// As members are lost for various reasons
-    /// there are certain things nodes need
-    /// to do, to update for that.
-    ProcessLostMember {
-        name: XorName,
-        age: u8,
-    },
     /// Increment count of full nodes in the network
     SetStorageLevel {
         /// Node ID of node that is reporting capacity.

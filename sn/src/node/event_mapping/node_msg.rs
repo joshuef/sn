@@ -66,10 +66,6 @@ pub(super) fn map_node_msg(
 
 fn match_node_msg(msg: MessageReceived) -> NodeDuty {
     match msg {
-        // Churn synch
-        MessageReceived::NodeCmd(NodeCmd::ReceiveExistingData { metadata }) => {
-            NodeDuty::SynchState { metadata }
-        }
         //
         // ------ system cmd ------
         MessageReceived::NodeCmd(NodeCmd::RecordStorageLevel { node_id, level, .. }) => {

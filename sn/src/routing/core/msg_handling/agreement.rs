@@ -134,7 +134,6 @@ impl Core {
         sig: KeyedSig,
     ) -> Result<Vec<Command>> {
         let mut commands = vec![];
-        let age = node_state.age();
         let signature = sig.signature.clone();
 
         if !self
@@ -168,11 +167,16 @@ impl Core {
 
         commands.extend(result);
 
-        self.send_event(Event::MemberLeft {
-            name: node_state.name(),
-            age,
-        })
-        .await;
+        self.retain_members_only(
+            self.network_knowledge
+                .adults()
+                .await
+                .iter()
+                .map(|peer| peer.name())
+                .collect(),
+        )
+        .await?;
+        *self.joins_allowed.write().await = true;
 
         Ok(commands)
     }

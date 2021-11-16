@@ -89,25 +89,8 @@ impl Node {
 
                 Ok(NodeTask::None)
             }
-            NodeDuty::ProcessLostMember { name, .. } => {
-                info!("Member Lost: {:?}", name);
-                let elder = self.as_elder().await?;
-                let network_api = self.network_api.clone();
-                let handle = tokio::spawn(async move {
-                    let our_adults = network_api.our_adults().await;
-                    elder
-                        .meta_data
-                        .write()
-                        .await
-                        .retain_members_only(our_adults)
-                        .await?;
-                    Ok(NodeTask::from(vec![NodeDuty::SetNodeJoinsAllowed(true)]))
-                });
-                Ok(NodeTask::Thread(handle))
-            }
             //
             // ---------- Levelling --------------
-            NodeDuty::SynchState { metadata } => Ok(NodeTask::None),
             NodeDuty::LevelDown => {
                 *self.role.write().await = Role::Adult(AdultRole {
                     network_api: self.network_api.clone(),

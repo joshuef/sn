@@ -13,18 +13,17 @@ use crate::messaging::{
     DstLocation, EndUser, MsgKind, WireMsg,
 };
 use crate::routing::{
-    core::{ChunkStore, RegisterStorage},
+    core::ChunkStore,
     core::{Core, SendStatus},
     error::Result,
     log_markers::LogMarker,
     messages::WireMsgUtils,
     network_knowledge::NetworkKnowledge,
     node::Node,
-    Error, Peer, XorName,
+    Error, Peer,
 };
 use crate::types::PublicKey;
 use itertools::Itertools;
-use std::collections::BTreeSet;
 use std::{sync::Arc, time::Duration};
 use tokio::time::MissedTickBehavior;
 use tokio::{sync::watch, time};
@@ -57,10 +56,6 @@ impl Dispatcher {
         }
     }
 
-    pub(super) async fn get_register_storage(&self) -> RegisterStorage {
-        self.core.register_storage.clone()
-    }
-
     pub(super) async fn get_chunk_storage(&self) -> ChunkStore {
         self.core.chunk_storage.clone()
     }
@@ -69,11 +64,6 @@ impl Dispatcher {
     pub(super) async fn set_storage_level(&self, node_id: &PublicKey, level: StorageLevel) -> bool {
         self.core.set_storage_level(node_id, level).await
     }
-
-    pub(super) async fn retain_members_only(&self, members: BTreeSet<XorName>) -> Result<()> {
-        self.core.retain_members_only(members).await
-    }
-
     /// Handles the given command and transitively any new commands that are
     /// produced during its handling. Trace logs will include the provided command id,
     /// and any sub-commands produced will have it as a common root cmd id.

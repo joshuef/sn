@@ -7,15 +7,10 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::dbs::UsedSpace;
-use crate::messaging::{
-    data::{ChunkDataExchange, StorageLevel},
-    system::SystemMsg,
-    DstLocation, WireMsg,
-};
+use crate::messaging::{data::StorageLevel, system::SystemMsg, DstLocation, WireMsg};
 use crate::node::{state_db::store_network_keypair, Config as NodeConfig, Error, Result};
 use crate::routing::{
-    ChunkStore, Config as RoutingConfig, Error as RoutingError, EventStream, RegisterStorage,
-    Routing as RoutingNode,
+    ChunkStore, Config as RoutingConfig, Error as RoutingError, EventStream, Routing as RoutingNode,
 };
 use crate::types::PublicKey;
 use bls::{PublicKey as BlsPublicKey, PublicKeySet};
@@ -61,10 +56,6 @@ impl Network {
         ))
     }
 
-    pub(crate) async fn get_register_storage(&self) -> RegisterStorage {
-        self.routing.get_register_storage().await
-    }
-
     pub(crate) async fn get_chunk_storage(&self) -> ChunkStore {
         self.routing.get_chunk_storage().await
     }
@@ -74,19 +65,8 @@ impl Network {
         self.routing.set_storage_level(node_id, level).await
     }
 
-    pub(crate) async fn retain_members_only(&self, members: BTreeSet<XorName>) -> Result<()> {
-        self.routing
-            .retain_members_only(members)
-            .await
-            .map_err(Error::from)
-    }
-
     pub(crate) async fn age(&self) -> u8 {
         self.routing.age().await
-    }
-
-    pub(crate) async fn update_chunks(&self, chunks: ChunkDataExchange) {
-        self.routing.update_chunks(chunks).await
     }
 
     /// Returns public key of our section public key set.

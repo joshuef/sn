@@ -25,7 +25,6 @@
 // ############################################################################
 pub(crate) use self::{
     core::ChunkStore,
-    core::RegisterStorage,
     core::{CHUNK_COPY_COUNT, MIN_LEVEL_WHEN_FULL},
     network_knowledge::{section_keys::SectionKeyShare, SectionAuthorityProvider},
 };

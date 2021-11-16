@@ -23,9 +23,10 @@ use self::{
     event::{Elders, Event, NodeElderChange},
     event_stream::EventStream,
 };
+use crate::dbs::UsedSpace;
 use crate::messaging::{data::StorageLevel, system::SystemMsg, DstLocation, WireMsg};
 use crate::routing::{
-    core::{join_network, ChunkStore, Comm, ConnectionEvent, Core, RegisterStorage},
+    core::{join_network, ChunkStore, Comm, ConnectionEvent, Core},
     ed25519,
     error::{Error, Result},
     log_markers::LogMarker,
@@ -34,7 +35,6 @@ use crate::routing::{
     node::Node,
     Peer, MIN_ADULT_AGE,
 };
-use crate::{dbs::UsedSpace, messaging::data::ChunkDataExchange};
 use ed25519_dalek::{PublicKey, Signature, Signer, KEYPAIR_LENGTH};
 
 use crate::types::PublicKey as TypesPublicKey;
@@ -215,10 +215,6 @@ impl Routing {
         Ok((routing, event_stream))
     }
 
-    pub(crate) async fn get_register_storage(&self) -> RegisterStorage {
-        self.dispatcher.get_register_storage().await
-    }
-
     pub(crate) async fn get_chunk_storage(&self) -> ChunkStore {
         self.dispatcher.get_chunk_storage().await
     }
@@ -230,13 +226,6 @@ impl Routing {
         level: StorageLevel,
     ) -> bool {
         self.dispatcher.set_storage_level(node_id, level).await
-    }
-    pub(crate) async fn retain_members_only(&self, members: BTreeSet<XorName>) -> Result<()> {
-        self.dispatcher.retain_members_only(members).await
-    }
-
-    pub(crate) async fn update_chunks(&self, chunks: ChunkDataExchange) {
-        self.dispatcher.core.update_chunks(chunks).await
     }
 
     /// Sets the JoinsAllowed flag.

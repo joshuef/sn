@@ -10,7 +10,7 @@ mod node_msg;
 
 use crate::messaging::SrcLocation;
 use crate::node::{network::Network, node_ops::NodeDuty};
-use crate::routing::{Event as RoutingEvent, MessageReceived, NodeElderChange, XorName, MIN_AGE};
+use crate::routing::{Event as RoutingEvent, MessageReceived, NodeElderChange, MIN_AGE};
 use crate::types::PublicKey;
 use node_msg::map_node_msg;
 use std::{thread::sleep, time::Duration};
@@ -152,16 +152,6 @@ pub(super) async fn map_routing_event(event: RoutingEvent, network_api: &Network
                     op: NodeDuty::LevelDown,
                     ctx: None,
                 },
-            }
-        }
-        RoutingEvent::MemberLeft { name, age } => {
-            log_network_stats(network_api).await;
-            Mapping {
-                op: NodeDuty::ProcessLostMember {
-                    name: XorName(name.0),
-                    age,
-                },
-                ctx: None,
             }
         }
         RoutingEvent::MemberJoined { previous_name, .. } => {
