@@ -107,15 +107,7 @@ impl Node {
             }
             //
             // ---------- Levelling --------------
-            NodeDuty::SynchState { metadata } => {
-                let elder = self.as_elder().await?;
-                let handle = tokio::spawn(async move {
-                    Ok(NodeTask::from(vec![
-                        Self::synch_state(&elder, metadata).await?,
-                    ]))
-                });
-                Ok(NodeTask::Thread(handle))
-            }
+            NodeDuty::SynchState { metadata } => Ok(NodeTask::None),
             NodeDuty::LevelDown => {
                 *self.role.write().await = Role::Adult(AdultRole {
                     network_api: self.network_api.clone(),

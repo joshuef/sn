@@ -25,10 +25,10 @@ impl ElderStores {
     // TODO: This should be moved into routing
     pub(super) async fn update(&mut self, data: DataExchange) -> Result<(), Error> {
         // todo: all this can be done in parallel
-        let register_storage = self.network.get_register_storage().await;
+        // let register_storage = self.network.get_register_storage().await;
 
-        register_storage.update(data.reg_data)?;
-        let _chunks = self.network.update_chunks(data.chunk_data).await;
+        // register_storage.update(data.reg_data)?;
+        // let _chunks = self.network.update_chunks(data.chunk_data).await;
         Ok(())
     }
 }

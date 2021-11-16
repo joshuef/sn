@@ -50,10 +50,6 @@ impl Metadata {
             .set_storage_level(&node_id, level)
             .await
     }
-
-    pub(crate) async fn update(&mut self, data: DataExchange) -> Result<()> {
-        self.elder_stores.update(data).await
-    }
 }
 
 impl Display for Metadata {

@@ -495,6 +495,12 @@ impl Core {
             // plugging in msg handlers.
             SystemMsg::NodeCmd(node_cmd) => {
                 match node_cmd {
+                    NodeCmd::ReceiveExistingData { metadata } => {
+                        info!("Processing received DataExchange packet: {:?}", msg_id);
+
+                        self.register_storage.update(metadata.reg_data)?;
+                        self.update_chunks(metadata.chunk_data).await;
+                    }
                     NodeCmd::StoreChunk { chunk, .. } => {
                         info!("Processing chunk write with MessageId: {:?}", msg_id);
                         // There is no point in verifying a sig from a sender A or B here.
