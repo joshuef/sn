@@ -269,6 +269,11 @@ impl Dispatcher {
             Command::HandleAgreement { proposal, sig } => {
                 self.core.handle_general_agreements(proposal, sig).await
             }
+            Command::HandleNewNodeOnline(agreement) => {
+                self.core
+                    .handle_online_agreement(agreement.value, agreement.sig)
+                    .await
+            }
             Command::HandleElderAgreement { proposal, sig } => match proposal {
                 Proposal::OurElders(section_auth) => {
                     self.core

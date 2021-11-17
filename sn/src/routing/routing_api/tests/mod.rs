@@ -98,6 +98,7 @@ async fn receive_join_request_without_resource_proof_response() -> Result<()> {
         SystemMsg::JoinRequest(Box::new(JoinRequest {
             section_key,
             resource_proof_response: None,
+            aggregated: None,
         })),
         section_key,
     )?;
@@ -177,6 +178,18 @@ async fn receive_join_request_with_resource_proof_response() -> Result<()> {
     let mut prover = rp.create_prover(data.clone());
     let solution = prover.solve();
 
+    let node_state = NodeState::joined(&new_node.peer(), None);
+    let node_state_serialized = bincode::serialize(&node_state)?;
+
+    let signature = sk_set.secret_key().sign(node_state_serialized);
+    let auth = SectionAuth {
+        value: node_state,
+        sig: KeyedSig {
+            public_key: section_key,
+            signature,
+        },
+    };
+
     let wire_msg = WireMsg::single_src(
         &new_node,
         DstLocation::Section {
@@ -191,6 +204,7 @@ async fn receive_join_request_with_resource_proof_response() -> Result<()> {
                 nonce,
                 nonce_signature,
             }),
+            aggregated: Some(auth.clone()),
         })),
         section_key,
     )?;
@@ -207,17 +221,10 @@ async fn receive_join_request_with_resource_proof_response() -> Result<()> {
 
     let mut test_connectivity = false;
     for command in commands {
-        if let Command::SendAcceptedOnlineShare {
-            peer,
-            previous_name,
-            dst_key,
-        } = command
-        {
-            assert_eq!(peer.name(), new_node.name());
-            assert_eq!(peer.addr(), new_node.addr);
-            assert_eq!(peer.age(), MIN_ADULT_AGE);
-            assert_eq!(previous_name, None);
-            assert_eq!(dst_key, None);
+        if let Command::HandleNewNodeOnline(response) = command {
+            assert_eq!(response.value.name(), new_node.name());
+            assert_eq!(response.value.addr(), new_node.addr);
+            assert_eq!(response.value.age(), MIN_ADULT_AGE);
 
             test_connectivity = true;
         }
@@ -319,126 +326,16 @@ async fn receive_join_request_from_relocated_node() -> Result<()> {
         if let Command::SendAcceptedOnlineShare {
             peer,
             previous_name,
-            dst_key,
         } = command
         {
             assert_eq!(peer, relocated_node.peer());
             assert_eq!(previous_name, Some(relocated_node_old_name));
-            assert_eq!(dst_key, Some(section_key));
 
             propose_cmd_returned = true;
         }
     }
 
     assert!(propose_cmd_returned);
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn aggregate_proposals() -> Result<()> {
-    let (section_auth, nodes, sk_set) = create_section_auth();
-    let pk_set = sk_set.public_keys();
-    let (section, section_key_share) = create_section(&sk_set, &section_auth).await?;
-    let (used_space, root_storage_dir) = create_test_used_space_and_root_storage()?;
-    let core = Core::new(
-        create_comm().await?,
-        nodes[0].clone(),
-        section.clone(),
-        Some(section_key_share),
-        mpsc::channel(TEST_EVENT_CHANNEL_SIZE).0,
-        used_space,
-        root_storage_dir,
-        false,
-    )
-    .await?;
-    let dispatcher = Dispatcher::new(core);
-
-    let new_peer = create_peer(MIN_AGE);
-    let node_state = NodeState::joined(new_peer.clone(), None);
-    let proposal = Proposal::Online {
-        node_state,
-        dst_key: None,
-    };
-
-    let section_pk = section.section_key().await;
-    for (index, node) in nodes.iter().enumerate().take(threshold()) {
-        let sig_share =
-            proposal.sign_with_key_share(pk_set.clone(), index, &sk_set.secret_key_share(index))?;
-
-        let wire_msg = WireMsg::single_src(
-            node,
-            DstLocation::Section {
-                name: XorName::from(PublicKey::Bls(section_pk)),
-                section_pk,
-            },
-            SystemMsg::Propose {
-                proposal: proposal.clone().into_msg(),
-                sig_share,
-            },
-            section_auth.section_key(),
-        )?;
-
-        let commands = get_internal_commands(
-            Command::HandleMessage {
-                sender: UnnamedPeer::addressed(node.addr),
-                wire_msg,
-                original_bytes: None,
-            },
-            &dispatcher,
-        )
-        .await?;
-
-        if !commands.is_empty() {
-            // only possible/expected msg if not empty, is a backpressure msg
-            assert_eq!(2, commands.len());
-            assert_matches!(commands[1], Command::SendMessageDeliveryGroup { .. })
-        }
-    }
-
-    let sig_share = proposal.sign_with_key_share(
-        pk_set.clone(),
-        threshold(),
-        &sk_set.secret_key_share(threshold()),
-    )?;
-    let section_pk = section.section_key().await;
-    let wire_msg = WireMsg::single_src(
-        &nodes[threshold()],
-        DstLocation::Section {
-            name: XorName::from(PublicKey::Bls(section_pk)),
-            section_pk,
-        },
-        SystemMsg::Propose {
-            proposal: proposal.clone().into_msg(),
-            sig_share,
-        },
-        section_auth.section_key(),
-    )?;
-
-    let mut commands = get_internal_commands(
-        Command::HandleMessage {
-            sender: UnnamedPeer::addressed(nodes[threshold()].addr),
-            wire_msg,
-            original_bytes: None,
-        },
-        &dispatcher,
-    )
-    .await?
-    .into_iter();
-
-    println!("Commands we have: {:?}", commands);
-    let mut next_cmd = commands.next();
-
-    while !matches!(next_cmd, Some(Command::HandleAgreement { .. })) {
-        next_cmd = commands.next();
-    }
-
-    assert_matches!(
-        next_cmd,
-        Some(Command::HandleAgreement { proposal: agreement, .. }) => {
-            assert_eq!(agreement, proposal);
-        }
-    );
 
     Ok(())
 }
@@ -510,6 +407,7 @@ async fn handle_agreement_on_online_of_elder_candidate() -> Result<()> {
             let _changed = expected_new_elders.insert(peer);
         }
     }
+    println!("Expected elders len {:?}", expected_new_elders.len());
 
     let node = nodes.remove(0);
     let node_name = node.name();
@@ -531,15 +429,21 @@ async fn handle_agreement_on_online_of_elder_candidate() -> Result<()> {
     // Handle agreement on Online of a peer that is older than the youngest
     // current elder - that means this peer is going to be promoted.
     let new_peer = create_peer(MIN_AGE + 2);
-    let node_state = NodeState::joined(new_peer.clone(), Some(XorName::random()));
-    let proposal = Proposal::Online {
-        node_state,
-        dst_key: Some(sk_set.secret_key().public_key()),
+    let node_state = NodeState::joined(&new_peer, Some(XorName::random()));
+
+    let node_state_serialized = bincode::serialize(&node_state)?;
+
+    let signature = sk_set.secret_key().sign(node_state_serialized);
+    let auth = SectionAuth {
+        value: node_state,
+        sig: KeyedSig {
+            public_key: sk_set.public_keys().public_key(),
+            signature,
+        },
     };
-    let sig = keyed_signed(sk_set.secret_key(), &proposal.as_signable_bytes()?);
 
     let commands = dispatcher
-        .process_command(Command::HandleAgreement { proposal, sig }, "cmd-id")
+        .process_command(Command::HandleNewNodeOnline(auth), "cmd-id")
         .await?;
 
     // Verify we sent a `DkgStart` message with the expected participants.
@@ -580,7 +484,7 @@ async fn handle_agreement_on_online_of_elder_candidate() -> Result<()> {
     Ok(())
 }
 
-// Handles a concensused Online proposal.
+// Handles a consensus-ed Online proposal.
 async fn handle_online_command(
     peer: &Peer,
     sk_set: &SecretKeySet,
@@ -588,14 +492,19 @@ async fn handle_online_command(
     section_auth: &SectionAuthorityProvider,
 ) -> Result<HandleOnlineStatus> {
     let node_state = NodeState::joined(peer.clone(), None);
-    let proposal = Proposal::Online {
-        node_state,
-        dst_key: None,
+    let node_state_serialized = bincode::serialize(&node_state)?;
+
+    let signature = sk_set.secret_key().sign(node_state_serialized);
+    let auth = SectionAuth {
+        value: node_state,
+        sig: KeyedSig {
+            public_key: sk_set.public_keys().public_key(),
+            signature,
+        },
     };
-    let sig = keyed_signed(sk_set.secret_key(), &proposal.as_signable_bytes()?);
 
     let commands = dispatcher
-        .process_command(Command::HandleAgreement { proposal, sig }, "cmd-id")
+        .process_command(Command::HandleNewNodeOnline(auth), "cmd-id")
         .await?;
 
     let mut status = HandleOnlineStatus {
@@ -1143,9 +1052,9 @@ async fn relocation(relocated_peer_role: RelocatedPeerRole) -> Result<()> {
         RelocatedPeerRole::NonElder => non_elder_peer,
     };
 
-    let (proposal, sig) = create_relocation_trigger(sk_set.secret_key(), relocated_peer.age())?;
+    let auth = create_relocation_trigger(sk_set.secret_key(), relocated_peer.age())?;
     let commands = dispatcher
-        .process_command(Command::HandleAgreement { proposal, sig }, "cmd-id")
+        .process_command(Command::HandleNewNodeOnline(auth), "cmd-id")
         .await?;
 
     let mut relocate_sent = false;
@@ -1613,14 +1522,12 @@ async fn create_section(
 // NOTE: recommended to call this with low `age` (4 or 5), otherwise it might take very long time
 // to complete because it needs to generate a signature with the number of trailing zeroes equal to
 // (or greater that) `age`.
-fn create_relocation_trigger(sk: &bls::SecretKey, age: u8) -> Result<(Proposal, KeyedSig)> {
+fn create_relocation_trigger(sk: &bls::SecretKey, age: u8) -> Result<SectionAuth<NodeState>> {
     loop {
-        let proposal = Proposal::Online {
-            node_state: NodeState::joined(create_peer(MIN_ADULT_AGE), Some(rand::random())),
-            dst_key: None,
-        };
+        let node_state = NodeState::joined(create_peer(MIN_ADULT_AGE), Some(rand::random()));
+        let node_state_serialized = bincode::serialize(&node_state)?;
 
-        let signature = sk.sign(&proposal.as_signable_bytes()?);
+        let signature = sk.sign(node_state_serialized);
 
         if relocation::check(age, &signature) && !relocation::check(age + 1, &signature) {
             let sig = KeyedSig {
@@ -1628,7 +1535,12 @@ fn create_relocation_trigger(sk: &bls::SecretKey, age: u8) -> Result<(Proposal, 
                 signature,
             };
 
-            return Ok((proposal, sig));
+            let auth = SectionAuth {
+                value: node_state,
+                sig,
+            };
+
+            return Ok(auth);
         }
     }
 }

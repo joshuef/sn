@@ -198,7 +198,7 @@ impl Core {
                 .section_signed_authority_provider()
                 .await
                 .into_authed_msg(),
-            node_state: node_state.into_authed_msg(),
+            node_state,
             section_chain: self.network_knowledge.section_chain().await,
         }));
 

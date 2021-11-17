@@ -239,7 +239,7 @@ impl Core {
         let public_key_set = self.public_key_set().await?;
         let section_key = public_key_set.public_key();
 
-        let node_state = NodeState::joined(&peer, previous_name);
+        let node_state = NodeState::joined(peer, previous_name);
         let serialized_details = bincode::serialize(&node_state)?;
         let (index, signature_share) = self
             .sign_with_section_key_share(&serialized_details, &section_key)

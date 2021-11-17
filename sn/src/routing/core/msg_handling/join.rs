@@ -22,6 +22,7 @@ use crate::routing::{
     Peer, SectionAuthUtils, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE,
 };
 use bls::PublicKey as BlsPublicKey;
+use std::vec;
 
 // Message handling
 impl Core {
@@ -166,9 +167,10 @@ impl Core {
         if let Some(response) = join_request.aggregated {
             if response.verify(&self.section_chain().await) {
                 info!("Handling Online agreement of {:?}", peer);
-                return self
-                    .handle_online_agreement(response.value.clone(), response.sig.clone())
-                    .await;
+                return Ok(vec![Command::HandleNewNodeOnline(response)]);
+                // self
+                // .handle_online_agreement(response.value.clone(), response.sig.clone())
+                // .await;
             }
         }
 
