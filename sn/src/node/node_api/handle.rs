@@ -16,8 +16,6 @@ use crate::node::{
     node_ops::{NodeDuties, NodeDuty},
     Result,
 };
-use crate::routing::MIN_LEVEL_WHEN_FULL;
-
 use crate::routing::ELDER_SIZE;
 use tokio::task::JoinHandle;
 use tracing::{debug, info};

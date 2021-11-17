@@ -8,7 +8,6 @@
 
 use super::{Command, Event};
 use crate::messaging::{
-    data::StorageLevel,
     system::{Proposal, SystemMsg},
     DstLocation, EndUser, MsgKind, WireMsg,
 };
@@ -22,7 +21,6 @@ use crate::routing::{
     node::Node,
     Error, Peer,
 };
-use crate::types::PublicKey;
 use itertools::Itertools;
 use std::{sync::Arc, time::Duration};
 use tokio::time::MissedTickBehavior;
@@ -60,10 +58,7 @@ impl Dispatcher {
         self.core.chunk_storage.clone()
     }
 
-    /// Returns whether the level changed or not.
-    pub(super) async fn set_storage_level(&self, node_id: &PublicKey, level: StorageLevel) -> bool {
-        self.core.set_storage_level(node_id, level).await
-    }
+
     /// Handles the given command and transitively any new commands that are
     /// produced during its handling. Trace logs will include the provided command id,
     /// and any sub-commands produced will have it as a common root cmd id.

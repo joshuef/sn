@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::dbs::UsedSpace;
-use crate::messaging::{data::StorageLevel, system::SystemMsg, DstLocation, WireMsg};
+use crate::messaging::{system::SystemMsg, DstLocation, WireMsg};
 use crate::node::{state_db::store_network_keypair, Config as NodeConfig, Error, Result};
 use crate::routing::{
     ChunkStore, Config as RoutingConfig, Error as RoutingError, EventStream, Routing as RoutingNode,
@@ -58,11 +58,6 @@ impl Network {
 
     pub(crate) async fn get_chunk_storage(&self) -> ChunkStore {
         self.routing.get_chunk_storage().await
-    }
-
-    /// Returns whether the level changed or not.
-    pub(crate) async fn set_storage_level(&self, node_id: &PublicKey, level: StorageLevel) -> bool {
-        self.routing.set_storage_level(node_id, level).await
     }
 
     pub(crate) async fn age(&self) -> u8 {

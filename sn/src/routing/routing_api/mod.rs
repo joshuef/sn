@@ -24,7 +24,7 @@ use self::{
     event_stream::EventStream,
 };
 use crate::dbs::UsedSpace;
-use crate::messaging::{data::StorageLevel, system::SystemMsg, DstLocation, WireMsg};
+use crate::messaging::{system::SystemMsg, DstLocation, WireMsg};
 use crate::routing::{
     core::{join_network, ChunkStore, Comm, ConnectionEvent, Core},
     ed25519,
@@ -217,15 +217,6 @@ impl Routing {
 
     pub(crate) async fn get_chunk_storage(&self) -> ChunkStore {
         self.dispatcher.get_chunk_storage().await
-    }
-
-    /// Returns whether the level changed or not.
-    pub(crate) async fn set_storage_level(
-        &self,
-        node_id: &TypesPublicKey,
-        level: StorageLevel,
-    ) -> bool {
-        self.dispatcher.set_storage_level(node_id, level).await
     }
 
     /// Sets the JoinsAllowed flag.

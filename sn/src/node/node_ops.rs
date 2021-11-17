@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::messaging::{
-    data::{ServiceError, ServiceMsg, StorageLevel},
+    data::{ServiceError, ServiceMsg},
     system::SystemMsg,
     DstLocation, MessageId,
 };

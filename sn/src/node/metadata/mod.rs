@@ -6,9 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::data::StorageLevel;
 use crate::node::{network::Network, Result};
-use crate::types::PublicKey;
 use std::fmt::{self, Display, Formatter};
 
 /// This module is called `Metadata`
@@ -24,12 +22,6 @@ pub(crate) struct Metadata {
 impl Metadata {
     pub(crate) async fn new(network: Network) -> Result<Self> {
         Ok(Self { network })
-    }
-
-    /// Sets the storage level of a given node.
-    /// Returns whether the level changed or not.
-    pub(crate) async fn set_storage_level(&self, node_id: PublicKey, level: StorageLevel) -> bool {
-        self.network.set_storage_level(&node_id, level).await
     }
 }
 

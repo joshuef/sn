@@ -101,18 +101,3 @@ pub enum Error {
     #[error("Sled error:: {0}")]
     Sled(#[from] sled::Error),
 }
-
-pub(crate) fn convert_to_error_message(error: Error) -> ErrorMessage {
-    match error {
-        Error::InvalidOperation(msg) => ErrorMessage::InvalidOperation(msg),
-        Error::InvalidMessage(_, msg) => ErrorMessage::InvalidOperation(msg),
-        Error::InvalidOwner(key) => ErrorMessage::InvalidOwner(key),
-        Error::NoSuchData(address) => ErrorMessage::DataNotFound(address),
-        Error::TempDirCreationFailed(_) => ErrorMessage::FailedToWriteFile,
-        Error::DataExists => ErrorMessage::DataExists,
-        Error::NetworkData(error) => convert_dt_error_to_error_message(error),
-        other => {
-            ErrorMessage::InvalidOperation(format!("Failed to perform operation: {:?}", other))
-        }
-    }
-}
