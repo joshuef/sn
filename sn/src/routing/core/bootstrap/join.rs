@@ -230,7 +230,7 @@ impl<'a> Join<'a> {
                                 resource_proof_response: None,
                                 aggregated: Some(auth),
                             };
-                            self.send_join_requests(join_req, &[sender], section_key, false)
+                            self.send_join_requests(join_req, &[sender], section_key, true)
                                 .await?;
                             continue;
                         }
