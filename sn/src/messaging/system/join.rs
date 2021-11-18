@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::{agreement::SectionAuth, section::NodeState};
+use crate::messaging::system::SigShare;
 use crate::messaging::{system::KeyedSig, SectionAuthorityProvider};
 use bls::PublicKey as BlsPublicKey;
 use ed25519_dalek::Signature;
@@ -19,8 +20,10 @@ use std::{collections::VecDeque, net::SocketAddr};
 pub struct JoinRequest {
     /// The public key of the section to join.
     pub section_key: BlsPublicKey,
-    /// Proof of the resouce proofing.
+    /// Proof of the resource proofing.
     pub resource_proof_response: Option<ResourceProofResponse>,
+    /// Aggregated approval from the Elders
+    pub aggregated: Option<SectionAuth<NodeState>>,
 }
 
 /// Joining peer's proof of resolvement of given resource proofing challenge.
@@ -69,6 +72,13 @@ pub enum JoinResponse {
     /// containing addresses of nodes that are closer (than the recipient) to the
     /// requested name. The `JoinRequest` should be re-sent to these addresses.
     Redirect(SectionAuthorityProvider),
+    /// Send a share of approval that the joining node will aggregate
+    ApprovalShare {
+        /// State of the Node at the time of sending the ApprovalShare
+        node_state: NodeState,
+        /// SignatureShare of an elder over the NodeState
+        sig_share: SigShare,
+    },
     /// Message sent to joining peer containing the necessary
     /// info to become a member of the section.
     Approval {

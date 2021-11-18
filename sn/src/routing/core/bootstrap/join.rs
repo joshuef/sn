@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::{read_prefix_map_from_disk, UsedRecipientSaps};
+use crate::messaging::signature_aggregator::{Error as AggregatorError, SignatureAggregator};
 use crate::messaging::{
     system::{
         JoinRejectionReason, JoinRequest, JoinResponse, ResourceProofResponse, SectionAuth,
@@ -69,6 +70,8 @@ struct Join<'a> {
     node: Node,
     prefix: Prefix,
     prefix_map: NetworkPrefixMap,
+    signature_aggregator: SignatureAggregator,
+    node_state_serialized: Option<Vec<u8>>,
     backoff: ExponentialBackoff,
 }
 
@@ -85,6 +88,8 @@ impl<'a> Join<'a> {
             node,
             prefix: Prefix::default(),
             prefix_map,
+            signature_aggregator: SignatureAggregator::new(),
+            node_state_serialized: None,
             backoff: ExponentialBackoff {
                 initial_interval: Duration::from_millis(50),
                 max_interval: Duration::from_millis(750),
@@ -135,6 +140,7 @@ impl<'a> Join<'a> {
         let join_request = JoinRequest {
             section_key,
             resource_proof_response: None,
+            aggregated: None,
         };
 
         self.send_join_requests(join_request, &recipients, section_key, false)
@@ -145,7 +151,6 @@ impl<'a> Join<'a> {
 
         loop {
             let (response, sender) = self.receive_join_response().await?;
-
             match response {
                 JoinResponse::Rejected(JoinRejectionReason::NodeNotReachable(addr)) => {
                     error!(
@@ -179,7 +184,7 @@ impl<'a> Join<'a> {
                     }
 
                     trace!(
-                        "This node has been approved to join the network at {:?}!",
+                        ">>>>> 100 >>>>> This node has been approved to join the network at {:?}!",
                         section_auth.prefix,
                     );
 
@@ -192,6 +197,46 @@ impl<'a> Join<'a> {
                     )?;
 
                     return Ok((self.node, network_knowledge));
+                }
+                JoinResponse::ApprovalShare {
+                    node_state,
+                    sig_share,
+                } => {
+                    let serialized_details =
+                        if let Some(node_state_serialized) = &self.node_state_serialized {
+                            node_state_serialized.clone()
+                        } else {
+                            let node_state_serialized = bincode::serialize(&node_state)?;
+                            self.node_state_serialized = Some(node_state_serialized.clone());
+                            node_state_serialized
+                        };
+
+                    info!("Aggregating received ApprovalShare from {:?}", sender);
+                    match self
+                        .signature_aggregator
+                        .add(&serialized_details, sig_share.clone())
+                        .await
+                    {
+                        Ok(sig) => {
+                            info!("Successfully aggregated ApprovalShares for joining the network");
+
+                            let section_key = sig_share.public_key_set.public_key();
+                            let auth = SectionAuth {
+                                value: node_state,
+                                sig,
+                            };
+                            let join_req = JoinRequest {
+                                section_key,
+                                resource_proof_response: None,
+                                aggregated: Some(auth),
+                            };
+                            self.send_join_requests(join_req, &[sender], section_key, false)
+                                .await?;
+                            continue;
+                        }
+                        Err(AggregatorError::NotEnoughShares) => continue,
+                        _ => return Err(Error::FailedSignature),
+                    }
                 }
                 JoinResponse::Retry {
                     section_auth,
@@ -214,7 +259,7 @@ impl<'a> Join<'a> {
                     let prefix = section_auth.prefix();
                     if !prefix.matches(&self.node.name()) {
                         warn!(
-                            "Ignoring newer JoinResponse::Retry response not for us {:?}, SAP {:?} from {:?}",
+                            ">>>>> 1.1 >>>>> Ignoring newer JoinResponse::Retry response not for us {:?}, SAP {:?} from {:?}",
                             self.node.name(),
                             section_auth,
                             sender,
@@ -232,7 +277,7 @@ impl<'a> Join<'a> {
                         Ok(updated) => updated,
                         Err(err) => {
                             debug!(
-                                "Ignoring JoinResponse::Retry with an invalid SAP: {:?}",
+                                ">>>>> 1.3 >>>>> Ignoring JoinResponse::Retry with an invalid SAP: {:?}",
                                 err
                             );
                             continue;
@@ -263,7 +308,7 @@ impl<'a> Join<'a> {
                     }
 
                     info!(
-                        "Newer Join response for us {:?}, SAP {:?} from {:?}",
+                        ">>>>> 1.5 >>>>> Newer Join response for us {:?}, SAP {:?} from {:?}",
                         self.node.name(),
                         section_auth,
                         sender
@@ -273,6 +318,7 @@ impl<'a> Join<'a> {
                     let join_request = JoinRequest {
                         section_key,
                         resource_proof_response: None,
+                        aggregated: None,
                     };
 
                     section_auth
@@ -286,7 +332,7 @@ impl<'a> Join<'a> {
                     trace!("Received a redirect/retry JoinResponse from {}. Sending request to the latest contacts", sender);
                     if section_auth.elders.is_empty() {
                         error!(
-                            "Invalid JoinResponse::Redirect, empty list of Elders: {:?}",
+                            ">>>>> 2.1 >>>>> Invalid JoinResponse::Redirect, empty list of Elders: {:?}",
                             section_auth
                         );
                         continue;
@@ -295,7 +341,7 @@ impl<'a> Join<'a> {
                     let section_auth = section_auth.into_state();
                     if !section_auth.prefix().matches(&self.node.name()) {
                         warn!(
-                            "Ignoring newer JoinResponse::Redirect response not for us {:?}, SAP {:?} from {:?}",
+                            ">>>>> 2.2 >>>>> Ignoring newer JoinResponse::Redirect response not for us {:?}, SAP {:?} from {:?}",
                             self.node.name(),
                             section_auth,
                             sender,
@@ -312,14 +358,14 @@ impl<'a> Join<'a> {
 
                     if new_recipients.is_empty() {
                         debug!(
-                            "Ignoring JoinResponse::Redirect with old SAP that has been sent to: {:?}",
+                            ">>>>> 2.3 >>>>> Ignoring JoinResponse::Redirect with old SAP that has been sent to: {:?}",
                             section_auth
                         );
                         continue;
                     }
 
                     info!(
-                        "Newer JoinResponse::Redirect for us {:?}, SAP {:?} from {:?}",
+                        ">>>>> 2.4 >>>>> Newer JoinResponse::Redirect for us {:?}, SAP {:?} from {:?}",
                         self.node.name(),
                         section_auth,
                         sender
@@ -331,6 +377,7 @@ impl<'a> Join<'a> {
                     let join_request = JoinRequest {
                         section_key,
                         resource_proof_response: None,
+                        aggregated: None,
                     };
 
                     section_auth
@@ -359,6 +406,7 @@ impl<'a> Join<'a> {
                             nonce,
                             nonce_signature,
                         }),
+                        aggregated: None,
                     };
                     let recipients = &[sender];
                     self.send_join_requests(join_request, recipients, section_key, false)

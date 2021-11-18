@@ -318,13 +318,12 @@ impl Dispatcher {
             Command::SetJoinsAllowed(joins_allowed) => {
                 self.core.set_joins_allowed(joins_allowed).await
             }
-            Command::ProposeOnline {
+            Command::SendAcceptedOnlineShare {
                 peer,
                 previous_name,
-                dst_key,
             } => {
                 self.core
-                    .make_online_proposal(peer, previous_name, dst_key)
+                    .send_accepted_online_share(&peer, previous_name)
                     .await
             }
             Command::ProposeOffline(name) => self.core.propose_offline(name).await,

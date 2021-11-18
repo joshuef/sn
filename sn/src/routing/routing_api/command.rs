@@ -95,12 +95,10 @@ pub(crate) enum Command {
     /// Attempt to set JoinsAllowed flag.
     SetJoinsAllowed(bool),
     /// Test peer's connectivity
-    ProposeOnline {
+    SendAcceptedOnlineShare {
         peer: Peer,
         // Previous name if relocated.
         previous_name: Option<XorName>,
-        // The key of the destination section that the joining node knows, if any.
-        dst_key: Option<bls::PublicKey>,
     },
     /// Proposes a peer as offline
     ProposeOffline(XorName),
@@ -164,7 +162,7 @@ impl fmt::Display for Command {
                 write!(f, "HandleRelocationComplete")
             }
             Command::SetJoinsAllowed(_) => write!(f, "SetJoinsAllowed"),
-            Command::ProposeOnline { .. } => write!(f, "ProposeOnline"),
+            Command::SendAcceptedOnlineShare { .. } => write!(f, "SendAcceptedOnlineShare"),
             Command::ProposeOffline(_) => write!(f, "ProposeOffline"),
             Command::StartConnectivityTest(_) => write!(f, "StartConnectivityTest"),
             Command::TestConnectivity(_) => write!(f, "TestConnectivity"),

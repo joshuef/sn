@@ -8,7 +8,6 @@
 
 use super::{section::NodeState, signed::KeyedSig};
 use crate::messaging::SectionAuthorityProvider;
-use bls::PublicKey as BlsPublicKey;
 use ed25519_dalek::{PublicKey, Signature};
 use hex_fmt::HexFmt;
 use serde::{Deserialize, Serialize};
@@ -87,13 +86,6 @@ impl<T: Serialize> Deref for SectionAuth<T> {
 /// This can be a result of seeing a node come online, go offline, changes to section info etc.
 /// Anything where we need section authority before action can be taken
 pub enum Proposal {
-    /// Proposal to add a node to oursection
-    Online {
-        /// Current node state
-        node_state: NodeState,
-        /// The key of the destination section that the joining node knows, if any.
-        dst_key: Option<BlsPublicKey>,
-    },
     /// Proposal to remove a node from our section
     Offline(NodeState),
     /// Proposal to update info about a section.

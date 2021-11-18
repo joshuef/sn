@@ -19,7 +19,7 @@ use crate::routing::{
     log_markers::LogMarker,
     relocation::RelocatePayloadUtils,
     routing_api::command::Command,
-    Peer, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE,
+    Peer, SectionAuthUtils, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE,
 };
 use bls::PublicKey as BlsPublicKey;
 
@@ -161,6 +161,19 @@ impl Core {
             ]);
         }
 
+        // If the joining node has aggregated shares from enough elders,
+        // verify the produced auth and accept it into the network.
+        if let Some(response) = join_request.aggregated {
+            if response.verify(&self.section_chain().await) {
+                let mut commands = self
+                    .handle_online_agreement(response.value.clone(), response.sig.clone())
+                    .await?;
+                commands.append(&mut self.send_node_approval(response).await);
+
+                return Ok(commands);
+            }
+        }
+
         // Require resource signed if joining as a new node.
         if let Some(response) = join_request.resource_proof_response {
             if !self
@@ -193,10 +206,9 @@ impl Core {
             return Ok(vec![cmd]);
         }
 
-        Ok(vec![Command::ProposeOnline {
+        Ok(vec![Command::SendAcceptedOnlineShare {
             peer,
             previous_name: None,
-            dst_key: None,
         }])
     }
 
@@ -327,7 +339,6 @@ impl Core {
         }
 
         let previous_name = Some(details.pub_id);
-        let dst_key = Some(details.dst_key);
 
         if self
             .network_knowledge
@@ -341,10 +352,9 @@ impl Core {
             return Ok(vec![]);
         }
 
-        Ok(vec![Command::ProposeOnline {
+        Ok(vec![Command::SendAcceptedOnlineShare {
             peer,
             previous_name,
-            dst_key,
         }])
     }
 }

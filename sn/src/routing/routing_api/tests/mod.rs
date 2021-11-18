@@ -207,7 +207,7 @@ async fn receive_join_request_with_resource_proof_response() -> Result<()> {
 
     let mut test_connectivity = false;
     for command in commands {
-        if let Command::ProposeOnline {
+        if let Command::SendAcceptedOnlineShare {
             peer,
             previous_name,
             dst_key,
@@ -316,7 +316,7 @@ async fn receive_join_request_from_relocated_node() -> Result<()> {
 
     for command in inner_commands {
         // third pass should now be handled and return propose
-        if let Command::ProposeOnline {
+        if let Command::SendAcceptedOnlineShare {
             peer,
             previous_name,
             dst_key,
