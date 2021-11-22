@@ -137,7 +137,7 @@ impl DkgVoter {
 
                 let _prev = self.sessions.insert(session_id, session);
 
-                // Remove uneeded old sessions.
+                // Remove unneeded old sessions.
                 self.sessions.retain(|existing_session_id, _| {
                     existing_session_id.generation >= session_id.generation
                 });

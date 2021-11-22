@@ -311,6 +311,8 @@ impl Core {
             }
         }
 
+        *self.is_dkg_underway.write().await = false;
+
         info!(
             "Prefixes we know about: {:?}",
             self.network_knowledge.prefix_map()

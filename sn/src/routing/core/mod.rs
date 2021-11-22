@@ -93,6 +93,8 @@ pub(crate) struct Core {
     split_barrier: Arc<RwLock<SplitBarrier>>,
     // Voter for Dkg
     dkg_voter: DkgVoter,
+    // Boolean to represent ongoing DKG
+    is_dkg_underway: Arc<RwLock<bool>>,
     relocate_state: Arc<RwLock<Option<RelocateState>>>,
     pub(super) event_tx: mpsc::Sender<Event>,
     joins_allowed: Arc<RwLock<bool>>,
@@ -141,6 +143,7 @@ impl Core {
             split_barrier: Arc::new(RwLock::new(SplitBarrier::new())),
             message_aggregator: SignatureAggregator::default(),
             dkg_voter: DkgVoter::default(),
+            is_dkg_underway: Arc::new(RwLock::new(false)),
             relocate_state: Arc::new(RwLock::new(None)),
             event_tx,
             joins_allowed: Arc::new(RwLock::new(true)),

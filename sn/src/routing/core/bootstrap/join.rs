@@ -31,6 +31,7 @@ use backoff::{backoff::Backoff, ExponentialBackoff};
 use bls::PublicKey as BlsPublicKey;
 use futures::future;
 use resource_proof::ResourceProof;
+use tokio::time::{sleep, Duration as TokioDuration};
 use tokio::{sync::mpsc, time::Duration};
 use tracing::Instrument;
 use xor_name::Prefix;
@@ -143,7 +144,7 @@ impl<'a> Join<'a> {
             aggregated: None,
         };
 
-        self.send_join_requests(join_request, &recipients, section_key, false)
+        self.send_join_requests(join_request.clone(), &recipients, section_key, false)
             .await?;
 
         // Avoid sending more than one duplicated request (with same SectionKey) to the same peer.
@@ -162,6 +163,13 @@ impl<'a> Join<'a> {
                 JoinResponse::Rejected(JoinRejectionReason::JoinsDisallowed) => {
                     error!("Network is set to not taking any new joining node, try join later.");
                     return Err(Error::TryJoinLater);
+                }
+                JoinResponse::Rejected(JoinRejectionReason::DKGUnderway) => {
+                    error!("The Section we are trying to join is going through DKG, retrying in a minute");
+                    sleep(TokioDuration::from_secs(20)).await;
+                    self.send_join_requests(join_request.clone(), &recipients, section_key, false)
+                        .await?;
+                    continue;
                 }
                 JoinResponse::Approval {
                     section_auth,
@@ -429,11 +437,11 @@ impl<'a> Join<'a> {
             let next_wait = self.backoff.next_backoff();
 
             if let Some(wait) = next_wait {
-                tokio::time::sleep(wait).await;
+                sleep(wait).await;
             } else {
                 error!("Waiting before attempting to join again");
 
-                tokio::time::sleep(self.backoff.max_interval).await;
+                sleep(self.backoff.max_interval).await;
                 self.backoff.reset();
             }
         }

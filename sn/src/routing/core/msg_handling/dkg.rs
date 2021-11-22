@@ -46,14 +46,17 @@ impl Core {
             }),
         );
         trace!("Received DkgStart for {:?}", elder_candidates);
-        self.dkg_voter
+        let commands = self
+            .dkg_voter
             .start(
                 &self.node.read().await.clone(),
                 session_id,
                 elder_candidates,
                 self.network_knowledge().section_key().await,
             )
-            .await
+            .await?;
+        *self.is_dkg_underway.write().await = true;
+        Ok(commands)
     }
 
     pub(crate) async fn handle_dkg_message(
@@ -195,6 +198,8 @@ impl Core {
             "Received DKG failure agreement, we will restart with candidates: {:?} except failed participants: {:?}",
             elder_candidates, failure_set.failed_participants
         );
+
+        *self.is_dkg_underway.write().await = false;
 
         commands.extend(
             self.promote_and_demote_elders_except(&failure_set.failed_participants)
