@@ -19,10 +19,12 @@ use crate::routing::{
     log_markers::LogMarker,
     relocation::RelocatePayloadUtils,
     routing_api::command::Command,
-    Peer, SectionAuthUtils, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE,
+    Peer, SectionAuthUtils, ELDER_SIZE, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE, MIN_AGE,
 };
 use bls::PublicKey as BlsPublicKey;
 use std::vec;
+
+const FIRST_SECTION_MIN_ELDER_AGE: u8 = 90;
 
 // Message handling
 impl Core {
@@ -113,11 +115,20 @@ impl Core {
         // relocated at the same time. After the first section got split, nodes shall only
         // start with age of MIN_ADULT_AGE
         let (is_age_invalid, expected_age): (bool, u8) = if our_prefix.is_empty() {
+            let elders = self.network_knowledge.elders().await;
             let section_members = self.network_knowledge.active_members().await.len();
-            // Calculate a value within the range [FIRST_SECTION_MIN_AGE, FIRST_SECTION_MAX_AGE].
-            let expected_age = FIRST_SECTION_MAX_AGE - section_members as u8 * 2;
-            let is_age_invalid = peer.age() == MIN_ADULT_AGE || peer.age() > expected_age;
-            (is_age_invalid, expected_age)
+            // Forces the joining node to be younger than the youngest elder in genesis section
+            // avoiding unnecessary churn.
+            if elders.len() == ELDER_SIZE {
+                let is_age_valid = FIRST_SECTION_MIN_ELDER_AGE > peer.age() && peer.age() > MIN_AGE;
+                let expected_age = FIRST_SECTION_MIN_ELDER_AGE - section_members as u8 * 2;
+                (is_age_valid, expected_age)
+            } else {
+                // Calculate a value within the range [FIRST_SECTION_MIN_AGE, FIRST_SECTION_MAX_AGE].
+                let expected_age = FIRST_SECTION_MAX_AGE - section_members as u8 * 2;
+                let is_age_invalid = peer.age() == MIN_ADULT_AGE || peer.age() > expected_age;
+                (is_age_invalid, expected_age)
+            }
         } else {
             let is_age_invalid = peer.age() != MIN_ADULT_AGE;
             (is_age_invalid, MIN_ADULT_AGE)

@@ -194,6 +194,7 @@ impl Routing {
             )
             .await?;
             info!("{} Joined the network!", core.node.read().await.name());
+            info!("Our AGE: {}", core.node.read().await.age());
 
             core
         };

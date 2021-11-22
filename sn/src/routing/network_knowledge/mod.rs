@@ -501,6 +501,11 @@ impl NetworkKnowledge {
         &self.section_peers
     }
 
+    /// Returns the elders of our section
+    pub(super) async fn elders(&self) -> Vec<Peer> {
+        self.authority_provider().await.peers()
+    }
+
     /// Returns members that are either joined or are left but still elders.
     pub(super) async fn active_members(&self) -> Vec<Peer> {
         let mut active_members = vec![];
