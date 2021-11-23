@@ -8,7 +8,6 @@
 
 use crate::messaging::system::{MembershipState, NodeState as NodeStateMsg, SectionAuth};
 use crate::routing::{error::Error, Peer};
-use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use xor_name::XorName;
 
@@ -27,7 +26,7 @@ pub const FIRST_SECTION_MIN_AGE: u8 = MIN_ADULT_AGE + 1;
 pub const FIRST_SECTION_MAX_AGE: u8 = 100;
 
 /// Information about a member of our section.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct NodeState {
     peer: Peer,
     state: MembershipState,

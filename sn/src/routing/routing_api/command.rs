@@ -8,14 +8,14 @@
 
 use crate::messaging::system::SectionAuth;
 use crate::messaging::{
-    system::{DkgFailureSigSet, KeyedSig, SystemMsg},
+    system::{DkgFailureSigSet, KeyedSig, NodeState, SystemMsg},
     DstLocation, MessageId, NodeMsgAuthority, WireMsg,
 };
 use crate::routing::{
     core::Proposal,
     network_knowledge::{NetworkKnowledge, SectionAuthorityProvider, SectionKeyShare},
     node::Node,
-    NodeState, Peer, UnnamedPeer, XorName,
+    Peer, UnnamedPeer, XorName,
 };
 use bls::PublicKey as BlsPublicKey;
 use bytes::Bytes;
@@ -139,7 +139,7 @@ impl fmt::Display for Command {
             Command::HandlePeerLost(peer) => write!(f, "HandlePeerLost({:?})", peer.name()),
             Command::HandleAgreement { .. } => write!(f, "HandleAgreement"),
             Command::HandleElderAgreement { .. } => write!(f, "HandleElderAgreement"),
-            Command::HandleNewNodeOnline { .. } => write!(f, "HandleNewNodeOnline"),
+            Command::HandleNewNodeOnline(_) => write!(f, "HandleNewNodeOnline"),
             Command::HandleDkgOutcome { .. } => write!(f, "HandleDkgOutcome"),
             Command::HandleDkgFailure(_) => write!(f, "HandleDkgFailure"),
             #[cfg(not(feature = "unstable-wiremsg-debuginfo"))]

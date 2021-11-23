@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::super::Core;
+use crate::elder_count;
 use crate::messaging::{
     system::{
         JoinAsRelocatedRequest, JoinAsRelocatedResponse, JoinRejectionReason, JoinRequest,
@@ -19,7 +20,7 @@ use crate::routing::{
     log_markers::LogMarker,
     relocation::RelocatePayloadUtils,
     routing_api::command::Command,
-    Peer, SectionAuthUtils, ELDER_SIZE, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE, MIN_AGE,
+    Peer, SectionAuthUtils, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE, MIN_AGE,
 };
 use bls::PublicKey as BlsPublicKey;
 use std::vec;
@@ -133,7 +134,7 @@ impl Core {
             let section_members = self.network_knowledge.active_members().await.len();
             // Forces the joining node to be younger than the youngest elder in genesis section
             // avoiding unnecessary churn.
-            if elders.len() == ELDER_SIZE {
+            if elders.len() == elder_count() {
                 let is_age_valid = FIRST_SECTION_MIN_ELDER_AGE > peer.age() && peer.age() > MIN_AGE;
                 let expected_age = FIRST_SECTION_MIN_ELDER_AGE - section_members as u8 * 2;
                 (is_age_valid, expected_age)

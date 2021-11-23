@@ -178,7 +178,7 @@ impl<'a> Join<'a> {
                     node_state,
                 } => {
                     trace!("{}", LogMarker::ReceivedJoinApproved);
-                    if node_state.name() != self.node.name() {
+                    if node_state.name != self.node.name() {
                         trace!("Ignore NodeApproval not for us: {:?}", node_state);
                         continue;
                     }
@@ -243,7 +243,7 @@ impl<'a> Join<'a> {
                             continue;
                         }
                         Err(AggregatorError::NotEnoughShares) => continue,
-                        _ => return Err(Error::FailedSignature),
+                        _ => return Err(Error::InvalidSignatureShare),
                     }
                 }
                 JoinResponse::Retry {
@@ -663,7 +663,7 @@ mod tests {
                 SystemMsg::JoinResponse(Box::new(JoinResponse::Approval {
                     genesis_key: section_key,
                     section_auth: section_auth.clone().into_authed_msg(),
-                    node_state,
+                    node_state: node_state.into_authed_msg(),
                     section_chain: proof_chain,
                 })),
                 &bootstrap_node,

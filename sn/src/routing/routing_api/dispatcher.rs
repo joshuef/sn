@@ -269,9 +269,9 @@ impl Dispatcher {
             Command::HandleAgreement { proposal, sig } => {
                 self.core.handle_general_agreements(proposal, sig).await
             }
-            Command::HandleNewNodeOnline(agreement) => {
+            Command::HandleNewNodeOnline(auth) => {
                 self.core
-                    .handle_online_agreement(agreement.value, agreement.sig)
+                    .handle_online_agreement(auth.value.into_state(), auth.sig)
                     .await
             }
             Command::HandleElderAgreement { proposal, sig } => match proposal {
@@ -328,7 +328,7 @@ impl Dispatcher {
                 previous_name,
             } => {
                 self.core
-                    .send_accepted_online_share(&peer, previous_name)
+                    .send_accepted_online_share(peer, previous_name)
                     .await
             }
             Command::ProposeOffline(name) => self.core.propose_offline(name).await,

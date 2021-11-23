@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use xor_name::XorName;
+use xor_name::{XorName, XOR_NAME_LEN};
 
 /// Information about a member of our section.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Debug)]
@@ -21,6 +21,13 @@ pub struct NodeState {
     pub state: MembershipState,
     /// To avoid sybil attack via relocation, a relocated node's original name will be recorded.
     pub previous_name: Option<XorName>,
+}
+
+impl NodeState {
+    /// Returns the age.
+    pub fn age(&self) -> u8 {
+        self.name[XOR_NAME_LEN - 1]
+    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Debug)]

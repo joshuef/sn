@@ -13,7 +13,8 @@ use crate::dbs::UsedSpace;
 use crate::messaging::{
     system::{
         JoinAsRelocatedRequest, JoinRequest, JoinResponse, KeyedSig, MembershipState,
-        RelocateDetails, RelocatePayload, ResourceProofResponse, SectionAuth, SystemMsg,
+        NodeState as NodeStateMsg, RelocateDetails, RelocatePayload, ResourceProofResponse,
+        SectionAuth, SystemMsg,
     },
     AuthorityProof, DstLocation, MessageId, MessageType, MsgKind, NodeAuth,
     SectionAuth as MsgKindSectionAuth, WireMsg,
@@ -178,12 +179,12 @@ async fn receive_join_request_with_resource_proof_response() -> Result<()> {
     let mut prover = rp.create_prover(data.clone());
     let solution = prover.solve();
 
-    let node_state = NodeState::joined(&new_node.peer(), None);
+    let node_state = NodeState::joined(new_node.peer(), None);
     let node_state_serialized = bincode::serialize(&node_state)?;
 
     let signature = sk_set.secret_key().sign(node_state_serialized);
     let auth = SectionAuth {
-        value: node_state,
+        value: node_state.to_msg(),
         sig: KeyedSig {
             public_key: section_key,
             signature,
@@ -222,8 +223,8 @@ async fn receive_join_request_with_resource_proof_response() -> Result<()> {
     let mut test_connectivity = false;
     for command in commands {
         if let Command::HandleNewNodeOnline(response) = command {
-            assert_eq!(response.value.name(), new_node.name());
-            assert_eq!(response.value.addr(), new_node.addr);
+            assert_eq!(response.value.name, new_node.name());
+            assert_eq!(response.value.addr, new_node.addr);
             assert_eq!(response.value.age(), MIN_ADULT_AGE);
 
             test_connectivity = true;
@@ -429,13 +430,13 @@ async fn handle_agreement_on_online_of_elder_candidate() -> Result<()> {
     // Handle agreement on Online of a peer that is older than the youngest
     // current elder - that means this peer is going to be promoted.
     let new_peer = create_peer(MIN_AGE + 2);
-    let node_state = NodeState::joined(&new_peer, Some(XorName::random()));
+    let node_state = NodeState::joined(new_peer.clone(), Some(XorName::random()));
 
     let node_state_serialized = bincode::serialize(&node_state)?;
 
     let signature = sk_set.secret_key().sign(node_state_serialized);
     let auth = SectionAuth {
-        value: node_state,
+        value: node_state.to_msg(),
         sig: KeyedSig {
             public_key: sk_set.public_keys().public_key(),
             signature,
@@ -496,7 +497,7 @@ async fn handle_online_command(
 
     let signature = sk_set.secret_key().sign(node_state_serialized);
     let auth = SectionAuth {
-        value: node_state,
+        value: node_state.to_msg(),
         sig: KeyedSig {
             public_key: sk_set.public_keys().public_key(),
             signature,
@@ -1522,7 +1523,7 @@ async fn create_section(
 // NOTE: recommended to call this with low `age` (4 or 5), otherwise it might take very long time
 // to complete because it needs to generate a signature with the number of trailing zeroes equal to
 // (or greater that) `age`.
-fn create_relocation_trigger(sk: &bls::SecretKey, age: u8) -> Result<SectionAuth<NodeState>> {
+fn create_relocation_trigger(sk: &bls::SecretKey, age: u8) -> Result<SectionAuth<NodeStateMsg>> {
     loop {
         let node_state = NodeState::joined(create_peer(MIN_ADULT_AGE), Some(rand::random()));
         let node_state_serialized = bincode::serialize(&node_state)?;
@@ -1536,7 +1537,7 @@ fn create_relocation_trigger(sk: &bls::SecretKey, age: u8) -> Result<SectionAuth
             };
 
             let auth = SectionAuth {
-                value: node_state,
+                value: node_state.to_msg(),
                 sig,
             };
 

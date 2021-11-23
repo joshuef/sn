@@ -31,10 +31,7 @@ impl Core {
     ) -> Result<Vec<Command>> {
         debug!("handle agreement on {:?}", proposal);
         match proposal {
-            Proposal::Offline(node_state) => {
-                self.handle_offline_agreement(node_state.into_state(), sig)
-                    .await
-            }
+            Proposal::Offline(node_state) => self.handle_offline_agreement(node_state, sig).await,
             Proposal::SectionInfo(section_auth) => {
                 self.handle_section_info_agreement(section_auth, sig).await
             }

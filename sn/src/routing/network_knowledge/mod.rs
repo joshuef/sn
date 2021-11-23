@@ -123,7 +123,7 @@ impl NetworkKnowledge {
         };
 
         // At this point we know the prefix map corresponds to the correct genesis key,
-        // let's make sure the prefix map contains also our own pefix and SAP,
+        // let's make sure the prefix map contains also our own prefix and SAP,
         if let Err(err) = prefix_map.update(signed_sap.clone(), &chain) {
             debug!("Failed to update NetworkPrefixMap with SAP {:?} and chain {:?} upon creating new NetworkKnowledge intance: {:?}", signed_sap, chain, err);
         }
@@ -503,7 +503,7 @@ impl NetworkKnowledge {
 
     /// Returns the elders of our section
     pub(super) async fn elders(&self) -> Vec<Peer> {
-        self.authority_provider().await.peers()
+        self.authority_provider().await.elders_vec()
     }
 
     /// Returns members that are either joined or are left but still elders.

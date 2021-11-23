@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{
-    messaging::system::SectionAuth,
+    messaging::system::{Proposal as ProposalMsg, SectionAuth},
     routing::{
         dkg::SigShare,
         error::Result,
@@ -53,13 +53,24 @@ impl Proposal {
 // Add conversion methods to/from `messaging::...::Proposal`
 // We prefer this over `From<...>` to make it easier to read the conversion.
 
-impl<'a> Serialize for SignableView<'a> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self.0 {
-            Proposal::Offline(node_state) => node_state.serialize(serializer),
-            Proposal::SectionInfo(info) => info.serialize(serializer),
-            Proposal::OurElders(info) => info.sig.public_key.serialize(serializer),
-            Proposal::JoinsAllowed(joins_allowed) => joins_allowed.serialize(serializer),
+impl Proposal {
+    pub(crate) fn into_msg(self) -> ProposalMsg {
+        match self {
+            Self::Offline(node_state) => ProposalMsg::Offline(node_state.to_msg()),
+            Self::SectionInfo(sap) => ProposalMsg::SectionInfo(sap.to_msg()),
+            Self::OurElders(sap) => ProposalMsg::OurElders(sap.into_authed_msg()),
+            Self::JoinsAllowed(allowed) => ProposalMsg::JoinsAllowed(allowed),
+        }
+    }
+}
+
+impl ProposalMsg {
+    pub(crate) fn into_state(self) -> Proposal {
+        match self {
+            Self::Offline(node_state) => Proposal::Offline(node_state.into_state()),
+            Self::SectionInfo(sap) => Proposal::SectionInfo(sap.into_state()),
+            Self::OurElders(sap) => Proposal::OurElders(sap.into_authed_state()),
+            Self::JoinsAllowed(allowed) => Proposal::JoinsAllowed(allowed),
         }
     }
 }
