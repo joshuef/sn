@@ -31,7 +31,7 @@ use backoff::{backoff::Backoff, ExponentialBackoff};
 use bls::PublicKey as BlsPublicKey;
 use futures::future;
 use resource_proof::ResourceProof;
-use tokio::time::{sleep, Duration as TokioDuration};
+use tokio::time::sleep;
 use tokio::{sync::mpsc, time::Duration};
 use tracing::Instrument;
 use xor_name::Prefix;
@@ -165,9 +165,8 @@ impl<'a> Join<'a> {
                     return Err(Error::TryJoinLater);
                 }
                 JoinResponse::Rejected(JoinRejectionReason::DKGUnderway) => {
-                    error!("The Section we are trying to join is going through DKG, retrying in a minute");
-                    sleep(TokioDuration::from_secs(20)).await;
-                    self.send_join_requests(join_request.clone(), &recipients, section_key, false)
+                    error!("The Section we are trying to join is going through DKG, backing off and retrying again");
+                    self.send_join_requests(join_request.clone(), &recipients, section_key, true)
                         .await?;
                     continue;
                 }
@@ -192,7 +191,7 @@ impl<'a> Join<'a> {
                     }
 
                     trace!(
-                        ">>>>> 100 >>>>> This node has been approved to join the network at {:?}!",
+                        "This node has been approved to join the network at {:?}!",
                         section_auth.prefix,
                     );
 
@@ -238,6 +237,8 @@ impl<'a> Join<'a> {
                                 resource_proof_response: None,
                                 aggregated: Some(auth),
                             };
+
+                            // Resend the JoinRequest now that we have collected enough ApprovalShares from the Elders
                             self.send_join_requests(join_req, &[sender], section_key, true)
                                 .await?;
                             continue;
@@ -267,7 +268,7 @@ impl<'a> Join<'a> {
                     let prefix = section_auth.prefix();
                     if !prefix.matches(&self.node.name()) {
                         warn!(
-                            ">>>>> 1.1 >>>>> Ignoring newer JoinResponse::Retry response not for us {:?}, SAP {:?} from {:?}",
+                            "Ignoring newer JoinResponse::Retry response not for us {:?}, SAP {:?} from {:?}",
                             self.node.name(),
                             section_auth,
                             sender,
@@ -285,7 +286,7 @@ impl<'a> Join<'a> {
                         Ok(updated) => updated,
                         Err(err) => {
                             debug!(
-                                ">>>>> 1.3 >>>>> Ignoring JoinResponse::Retry with an invalid SAP: {:?}",
+                                "Ignoring JoinResponse::Retry with an invalid SAP: {:?}",
                                 err
                             );
                             continue;
@@ -316,7 +317,7 @@ impl<'a> Join<'a> {
                     }
 
                     info!(
-                        ">>>>> 1.5 >>>>> Newer Join response for us {:?}, SAP {:?} from {:?}",
+                        "Newer Join response for us {:?}, SAP {:?} from {:?}",
                         self.node.name(),
                         section_auth,
                         sender
@@ -340,7 +341,7 @@ impl<'a> Join<'a> {
                     trace!("Received a redirect/retry JoinResponse from {}. Sending request to the latest contacts", sender);
                     if section_auth.elders.is_empty() {
                         error!(
-                            ">>>>> 2.1 >>>>> Invalid JoinResponse::Redirect, empty list of Elders: {:?}",
+                            "Invalid JoinResponse::Redirect, empty list of Elders: {:?}",
                             section_auth
                         );
                         continue;
@@ -349,7 +350,7 @@ impl<'a> Join<'a> {
                     let section_auth = section_auth.into_state();
                     if !section_auth.prefix().matches(&self.node.name()) {
                         warn!(
-                            ">>>>> 2.2 >>>>> Ignoring newer JoinResponse::Redirect response not for us {:?}, SAP {:?} from {:?}",
+                            "Ignoring newer JoinResponse::Redirect response not for us {:?}, SAP {:?} from {:?}",
                             self.node.name(),
                             section_auth,
                             sender,
@@ -366,14 +367,14 @@ impl<'a> Join<'a> {
 
                     if new_recipients.is_empty() {
                         debug!(
-                            ">>>>> 2.3 >>>>> Ignoring JoinResponse::Redirect with old SAP that has been sent to: {:?}",
+                            "Ignoring JoinResponse::Redirect with old SAP that has been sent to: {:?}",
                             section_auth
                         );
                         continue;
                     }
 
                     info!(
-                        ">>>>> 2.4 >>>>> Newer JoinResponse::Redirect for us {:?}, SAP {:?} from {:?}",
+                        "Newer JoinResponse::Redirect for us {:?}, SAP {:?} from {:?}",
                         self.node.name(),
                         section_auth,
                         sender
