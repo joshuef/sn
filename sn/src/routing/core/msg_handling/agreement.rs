@@ -118,13 +118,14 @@ impl Core {
                 .await?,
         );
 
+        commands.extend(self.send_node_approval(new_info).await);
+
         let result = self.promote_and_demote_elders().await?;
         if result.is_empty() {
             commands.extend(self.send_ae_update_to_adults().await);
         }
 
         commands.extend(result);
-        commands.extend(self.send_node_approval(new_info).await);
 
         info!("Commands in queue for Accepting node {:?}", commands);
 

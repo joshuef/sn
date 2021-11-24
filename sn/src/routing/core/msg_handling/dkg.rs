@@ -55,7 +55,7 @@ impl Core {
                 self.network_knowledge().section_key().await,
             )
             .await?;
-        *self.is_dkg_underway.write().await = true;
+        // *self.is_dkg_underway.write().await = true;
         Ok(commands)
     }
 
