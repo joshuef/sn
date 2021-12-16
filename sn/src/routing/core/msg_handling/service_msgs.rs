@@ -363,6 +363,34 @@ impl Core {
         candidates
     }
 
+    // Used to fetch the list of holders for a given chunk.
+    pub(crate) async fn get_adults_who_should_store_chunk(&self, target: &XorName) -> BTreeSet<XorName> {
+        let full_adults = self.full_adults().await;
+
+        debug!(">>> FULL ADULTS FOUND: {:?}", full_adults);
+        // TODO: reuse our_adults_sorted_by_distance_to API when core is merged into upper layer
+        let adults = self.network_knowledge().adults().await;
+
+        let adults_names = adults.iter().map(|p2p_node| p2p_node.name());
+
+        let candidates = adults_names
+            .into_iter()
+            .sorted_by(|lhs, rhs| target.cmp_distance(lhs, rhs))
+            .filter(|peer| !full_adults.contains(peer))
+            .take(CHUNK_COPY_COUNT)
+            .collect::<BTreeSet<_>>();
+
+
+        trace!(
+            "Chunk holders of {:?} are empty adults: {:?} and full adults ignored: {:?}",
+            target,
+            candidates,
+            full_adults
+        );
+
+        candidates
+    }
+
     /// Handle incoming data msgs.
     pub(crate) async fn handle_service_message(
         &self,

@@ -90,7 +90,7 @@ impl Core {
             origin: EndUser(origin.name()),
         });
 
-        let targets = self.get_adults_holding_chunk(&target).await;
+        let targets = self.get_adults_who_should_store_chunk(&target).await;
 
         let aggregation = false;
 
