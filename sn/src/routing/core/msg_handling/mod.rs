@@ -654,6 +654,8 @@ impl Core {
             // The following type of messages are all handled by upper sn_node layer.
             // TODO: In the future the sn-node layer won't be receiving Events
             SystemMsg::NodeCmd(NodeCmd::RecordStorageLevel { node_id, level, .. }) => {
+
+                debug!("RecordStorageLevel received");
                 let changed = self.set_storage_level(&node_id, level).await;
                 if changed && level.value() == MIN_LEVEL_WHEN_FULL {
                     // ..then we accept a new node in place of the full node
