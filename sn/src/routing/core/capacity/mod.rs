@@ -19,7 +19,7 @@ use tokio::sync::RwLock;
 
 // The number of separate copies of a chunk which should be maintained.
 pub(crate) const CHUNK_COPY_COUNT: usize = 4;
-pub(crate) const MIN_LEVEL_WHEN_FULL: u8 = 9; // considered full when >= 90 %.
+pub(crate) const MIN_LEVEL_WHEN_FULL: u8 = 8; // considered full when >= 80 %.
 
 /// A util for sharing the
 /// info on data capacity among the
@@ -46,6 +46,9 @@ impl Capacity {
     pub(super) async fn is_full(&self, adult: &XorName) -> Option<bool> {
         let adult_levels = self.adult_levels.read().await;
         let level = adult_levels.get(adult)?.read().await.value();
+        debug!("CHECKING IF FULL. currently: {:?}, max: {:?} ", level, MIN_LEVEL_WHEN_FULL);
+
+        debug!("IS FULL? {:?}, ", level >= MIN_LEVEL_WHEN_FULL);
         Some(level >= MIN_LEVEL_WHEN_FULL)
     }
 

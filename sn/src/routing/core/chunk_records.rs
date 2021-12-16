@@ -90,7 +90,7 @@ impl Core {
             origin: EndUser(origin.name()),
         });
 
-        let targets = self.get_chunk_holder_adults(&target).await;
+        let targets = self.get_adults_holding_chunk(&target).await;
 
         let aggregation = false;
 
@@ -131,7 +131,7 @@ impl Core {
             operation_id
         );
 
-        let targets = self.get_chunk_holder_adults(address.name()).await;
+        let targets = self.get_adults_holding_chunk(address.name()).await;
 
         if targets.is_empty() {
             return self

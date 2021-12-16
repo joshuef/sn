@@ -26,7 +26,7 @@ use tracing::{debug, warn, Level};
 const CONFIG_FILE: &str = "node.config";
 const CONNECTION_INFO_FILE: &str = "node_connection_info.config";
 const DEFAULT_ROOT_DIR_NAME: &str = "root_dir";
-const DEFAULT_MAX_CAPACITY: u64 = 1024 * 1024;
+const DEFAULT_MAX_CAPACITY: u64 = 1024 * 1024 * 100;
 
 /// Node configuration
 #[derive(Default, Clone, Debug, Serialize, Deserialize, StructOpt)]

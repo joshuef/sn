@@ -78,11 +78,10 @@ impl UsedSpace {
     }
 
     pub(crate) async fn can_consume(&self, space: u64) -> bool {
-
+        let total_used_right_now = self.total().await;
         debug!(">>>> Checking if we can consume {:?} of space", space);
-        debug!(">>>> current total: {:?}",  self.total().await);
-        self.total()
-            .await
+        debug!(">>>> current total: {:?}",  total_used_right_now);
+        total_used_right_now
             .checked_add(space)
             .map_or(false, |new_total| self.max_capacity >= new_total)
     }
@@ -102,6 +101,9 @@ impl UsedSpace {
 /// sizes of its children.
 #[async_recursion]
 async fn get_size(path: PathBuf) -> tokio::io::Result<u64> {
+
+    debug!(">>> getting size of {:?}", path);
+
     let metadata = fs::metadata(&path).await?;
     let mut size = metadata.len();
     if metadata.is_dir() {
@@ -110,6 +112,8 @@ async fn get_size(path: PathBuf) -> tokio::io::Result<u64> {
             size += get_size(entry.path()).await?;
         }
     }
+
+    debug!("size found of {:?} is {:?}", path, size);
     Ok(size)
 }
 

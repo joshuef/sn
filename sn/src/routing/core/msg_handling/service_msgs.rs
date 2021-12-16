@@ -317,8 +317,10 @@ impl Core {
     }
 
     // Used to fetch the list of holders for a given chunk.
-    pub(crate) async fn get_chunk_holder_adults(&self, target: &XorName) -> BTreeSet<XorName> {
+    pub(crate) async fn get_adults_holding_chunk(&self, target: &XorName) -> BTreeSet<XorName> {
         let full_adults = self.full_adults().await;
+
+        debug!(">>> FULL ADULTS FOUND: {:?}", full_adults);
         // TODO: reuse our_adults_sorted_by_distance_to API when core is merged into upper layer
         let adults = self.network_knowledge().adults().await;
 
@@ -330,6 +332,8 @@ impl Core {
             .filter(|peer| !full_adults.contains(peer))
             .take(CHUNK_COPY_COUNT)
             .collect::<BTreeSet<_>>();
+
+
         trace!(
             "Chunk holders of {:?} are empty adults: {:?} and full adults: {:?}",
             target,
