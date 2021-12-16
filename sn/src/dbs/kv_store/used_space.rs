@@ -26,6 +26,8 @@ pub struct UsedSpace {
 impl UsedSpace {
     /// Create new UsedSpace tracker
     pub fn new(max_capacity: u64) -> Self {
+
+        debug!(">>>> NEW USED SPACE, max capacity: {:?}", max_capacity);
         Self {
             max_capacity,
             dirs: Arc::new(DashSet::new()),
@@ -76,6 +78,9 @@ impl UsedSpace {
     }
 
     pub(crate) async fn can_consume(&self, space: u64) -> bool {
+
+        debug!(">>>> Checking if we can consume {:?} of space", space);
+        debug!(">>>> current total: {:?}",  self.total().await);
         self.total()
             .await
             .checked_add(space)

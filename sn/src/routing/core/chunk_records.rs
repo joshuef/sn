@@ -54,10 +54,11 @@ impl Core {
     /// Set storage level of a given node.
     /// Returns whether the level changed or not.
     pub(crate) async fn set_storage_level(&self, node_id: &PublicKey, level: StorageLevel) -> bool {
-        info!("Setting new storage level..");
+        let node_name = XorName::from(*node_id);
+        info!("Setting new storage level for {:?} to {:?}", node_name, level);
         let changed = self
             .capacity
-            .set_adult_level(XorName::from(*node_id), level)
+            .set_adult_level(node_name, level)
             .await;
         let avg_usage = self.capacity.avg_usage().await;
         info!(
