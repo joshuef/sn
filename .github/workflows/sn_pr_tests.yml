@@ -1,6 +1,10 @@
 name: PR Tests
 
-on: pull_request
+on:
+  push:
+    branches: [main, staging, trying]
+  pull_request:
+    branches: [main]
 
 env:
   # Turn on backtrace as needed. Generally (passing) CI should not need this.
@@ -23,6 +27,7 @@ jobs:
     # refereneced in bors.toml
     name: ci
     if: ${{ success() }}
+    # github jobs that need to have passed for bors to give the all clear
     needs:
       - e2e
       - unit
