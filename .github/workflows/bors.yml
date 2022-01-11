@@ -290,15 +290,15 @@ jobs:
         shell: zsh {0}
         if: matrix.os != 'windows-latest'
         # always joinable not actually needed here, but should speed up compilation as we've just built with it
-        run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client --skip client_api::reg --skip client_api::blob --test-threads=2 && sleep $POST_TEST_SLEEP
-        timeout-minutes: 5
+        run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client --skip client_api::reg --skip client_api::file --test-threads=2 && sleep $POST_TEST_SLEEP
+        timeout-minutes: 7
 
       # a catchall to ensure any new client api tests are run (ideally any major new section should have its own test run)
       - name: Initial client tests... (win)
         if: matrix.os == 'windows-latest'
         shell: bash
         # always joinable not actually needed here, but should speed up compilation as we've just built with it
-        run: cd sn && cargo test --release --features=always-joinable,test-utils -- client --skip client_api::reg --skip client_api::blob --test-threads=2 && sleep $POST_TEST_SLEEP
+        run: cd sn && cargo test --release --features=always-joinable,test-utils -- client --skip client_api::reg --skip client_api::file --test-threads=2 && sleep $POST_TEST_SLEEP
         timeout-minutes: 5
 
       # register api
@@ -321,18 +321,18 @@ jobs:
         run: cd sn && cargo test --release --features=always-joinable,test-utils -- register_batching --test-threads=1 --skip ae && sleep $POST_TEST_SLEEP
         timeout-minutes: 10
 
-      # blob api
-      - name: client blob tests against local network (unix)
+      # file api
+      - name: client file tests against local network (unix)
         shell: zsh {0}
         if: matrix.os != 'windows-latest'
-        run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client_api::blob --test-threads=1 --skip ae --skip from_many_clients  && sleep $POST_TEST_SLEEP
+        run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client_api::file --test-threads=1 --skip ae --skip from_many_clients  && sleep $POST_TEST_SLEEP
         timeout-minutes: 25
 
-      # blob api
-      - name: client blob tests against local network (win)
+      # file api
+      - name: client file tests against local network (win)
         shell: bash
         if: matrix.os == 'windows-latest'
-        run: cd sn && cargo test --release --features=always-joinable,test-utils -- client_api::blob --test-threads=1 --skip ae --skip from_many_clients  && sleep $POST_TEST_SLEEP
+        run: cd sn && cargo test --release --features=always-joinable,test-utils -- client_api::file --test-threads=1 --skip ae --skip from_many_clients  && sleep $POST_TEST_SLEEP
         timeout-minutes: 15
 
       # ae tests api
