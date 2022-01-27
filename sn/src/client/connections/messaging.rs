@@ -588,6 +588,8 @@ pub(super) async fn send_message(
             return;
         };
 
+        drop(wire_msg);
+
         // Send message to all Elders concurrently
         let mut tasks = Vec::default();
 
