@@ -82,8 +82,8 @@ impl ClientConfig {
             Some(path) => read_config_file(path).await.unwrap_or_default(),
         };
 
-        qp2p.idle_timeout = Some(DEFAULT_IDLE_TIMEOUT);
-        qp2p.keep_alive_interval = Some(DEFAULT_KEEP_ALIVE);
+        // qp2p.idle_timeout = Some(DEFAULT_IDLE_TIMEOUT);
+        // qp2p.keep_alive_interval = Some(DEFAULT_KEEP_ALIVE);
 
         let query_timeout = query_timeout.unwrap_or(DEFAULT_QUERY_TIMEOUT);
         let standard_wait = standard_wait.unwrap_or(DEFAULT_AE_WAIT);

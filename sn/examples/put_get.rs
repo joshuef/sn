@@ -71,25 +71,34 @@ pub async fn run_chunk_soak() -> Result<()> {
     let files_to_put = files_count();
 
     let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
-    // let config = ClientConfig::new(None, None, genesis_key, None, Some(QUERY_TIMEOUT), None).await;
-    // let client = Client::new(config.clone(), bootstrap_nodes.clone(), None).await?;
+    let max_batch_count = 5;
+    let batches = files_to_put /  max_batch_count;
 
-    let mut put_tasks = vec![];
-    // so we dont start w/ 0 file size
-    for i in 1..files_to_put + 1 {
-        // let client = client.clone();
-        let all_data_put = all_data_put.clone();
-        let put_handle: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
-            let (address, hash) = upload_data_using_fresh_client(i).await?;
-            // println!("Uploaded data to address: {:?}", address);
-            all_data_put.write().await.push((address, hash));
-            Ok(())
-        });
+    let mut prev_max = 0;
+    for i in 0..batches {
+        let min = prev_max + 1;
+        let max = min + max_batch_count;
 
-        put_tasks.push(put_handle);
+        println!("Batching: {min} to {max}");
+
+        let mut put_tasks = vec![];
+        prev_max = max;
+        // so we dont start w/ 0 file size
+        for j in min..max {
+
+            let all_data_put = all_data_put.clone();
+            let put_handle: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
+                let (address, hash) = upload_data_using_fresh_client(j).await?;
+                all_data_put.write().await.push((address, hash));
+                Ok(())
+            });
+
+            put_tasks.push(put_handle);
+        }
+
+        futures::future::join_all(put_tasks).await;
     }
 
-    futures::future::join_all(put_tasks).await;
 
     assert_eq!(
         all_data_put.read().await.len(),
