@@ -10,13 +10,13 @@
 //! for the Safe network.
 
 use tokio::time::{sleep, Duration};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use tiny_keccak::{Hasher, Sha3};
 
 // use eyre::{Context;
 use safe_network::{
-    client::{Result, Error, utils::test_utils::read_network_conn_info, Client, ClientConfig},
+    client::{utils::test_utils::read_network_conn_info, Client, ClientConfig, Error, Result},
     types::{utils::random_bytes, BytesAddress, Scope},
 };
 
@@ -72,29 +72,30 @@ pub async fn run_chunk_soak() -> Result<()> {
 
     let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
     // let config = ClientConfig::new(None, None, genesis_key, None, Some(QUERY_TIMEOUT), None).await;
-    let client = Client::new(config.clone(), bootstrap_nodes.clone(), None).await?;
-
+    // let client = Client::new(config.clone(), bootstrap_nodes.clone(), None).await?;
 
     let mut put_tasks = vec![];
     // so we dont start w/ 0 file size
     for i in 1..files_to_put + 1 {
-        let client = client.clone();
+        // let client = client.clone();
         let all_data_put = all_data_put.clone();
         let put_handle: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
             let (address, hash) = upload_data_using_fresh_client(i).await?;
-                // println!("Uploaded data to address: {:?}", address);
-                all_data_put.write().await.push((address, hash));
+            // println!("Uploaded data to address: {:?}", address);
+            all_data_put.write().await.push((address, hash));
             Ok(())
         });
 
         put_tasks.push(put_handle);
-
-
     }
 
     futures::future::join_all(put_tasks).await;
 
-    assert_eq!(all_data_put.read().await.len(), files_to_put, "put data len is same as we tried to put");
+    assert_eq!(
+        all_data_put.read().await.len(),
+        files_to_put,
+        "put data len is same as we tried to put"
+    );
 
     // let config = ClientConfig::new(None, None, genesis_key, None, Some(QUERY_TIMEOUT), None).await;
     let client = Client::new(config, bootstrap_nodes, None).await?;
@@ -110,7 +111,10 @@ pub async fn run_chunk_soak() -> Result<()> {
             attempts += 1;
             // do some retries to ensure we're not just timing out by chance
             sleep(Duration::from_secs(1)).await;
-            println!("attempt #{attempts}...reading bytes at address {:?} ...", address);
+            println!(
+                "attempt #{attempts}...reading bytes at address {:?} ...",
+                address
+            );
 
             bytes = client.read_bytes(*address).await;
         }
@@ -134,13 +138,12 @@ pub async fn run_chunk_soak() -> Result<()> {
 }
 
 async fn upload_data_using_fresh_client(iteration: usize) -> Result<(BytesAddress, [u8; 32])> {
-
     // Now we upload the data.
     let (genesis_key, bootstrap_nodes) =
-    read_network_conn_info().map_err(|e| Error::NoNetworkKnowledge)?;
+        read_network_conn_info().map_err(|_e| Error::NoNetworkKnowledge)?;
     let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
     let client = Client::new(config, bootstrap_nodes, None).await?;
-    let one_mb = 1024;
+    let one_mb = 1024 * 1024;
     // start small and build up
     let bytes = random_bytes(one_mb * iteration);
 
