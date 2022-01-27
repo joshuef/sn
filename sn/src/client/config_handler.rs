@@ -25,7 +25,7 @@ const DEFAULT_LOCAL_ADDR: (Ipv4Addr, u16) = (Ipv4Addr::UNSPECIFIED, 0);
 /// Default amount of time to wait for responses to queries before giving up and returning an error.
 pub const DEFAULT_QUERY_TIMEOUT: Duration = Duration::from_secs(120);
 /// Default idle timeout on the elder connection
-const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
+const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 /// Default keep alive for elder comms
 const DEFAULT_KEEP_ALIVE: Duration = Duration::from_secs(30);
 /// Default amount of time to wait (to keep the client alive) after sending a command. This allows AE messages to be parsed/resent.

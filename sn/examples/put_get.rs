@@ -76,7 +76,8 @@ pub async fn run_chunk_soak() -> Result<()> {
 
     let mut prev_max = 0;
     for i in 0..batches {
-        let min = prev_max + 1;
+
+        let min = if i == 0 { 1 } else { prev_max };
         let max = min + max_batch_count;
 
         println!("Batching: {min} to {max}");
@@ -97,6 +98,12 @@ pub async fn run_chunk_soak() -> Result<()> {
         }
 
         futures::future::join_all(put_tasks).await;
+
+        assert_eq!(
+            all_data_put.read().await.len(),
+            max - 1,
+            "put data len is same as we tried to put"
+        );
     }
 
 
@@ -152,7 +159,8 @@ async fn upload_data_using_fresh_client(iteration: usize) -> Result<(BytesAddres
         read_network_conn_info().map_err(|_e| Error::NoNetworkKnowledge)?;
     let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
     let client = Client::new(config, bootstrap_nodes, None).await?;
-    let one_mb = 1024 * 1024;
+    let one_mb = 1024 * 10;
+    // let one_mb = 1024 * 1024 * 10;
     // start small and build up
     let bytes = random_bytes(one_mb * iteration);
 
