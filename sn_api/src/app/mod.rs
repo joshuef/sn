@@ -35,7 +35,7 @@ use super::{common, constants, Error, Result};
 use crate::NodeConfig;
 
 use rand::rngs::OsRng;
-use safe_network::client::{Client, ClientConfig, DEFAULT_QUERY_TIMEOUT};
+use safe_network::client::{Client, ClientConfig, DEFAULT_OPERATION_TIMEOUT};
 use safe_network::types::Keypair;
 use tracing::debug;
 
@@ -92,7 +92,8 @@ impl Safe {
             None,
             bootstrap_config.0,
             config_path.as_deref(),
-            timeout.or(Some(DEFAULT_QUERY_TIMEOUT)),
+            timeout.or(Some(DEFAULT_OPERATION_TIMEOUT)),
+            timeout.or(Some(DEFAULT_OPERATION_TIMEOUT)),
             None,
         )
         .await;

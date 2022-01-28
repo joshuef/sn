@@ -1088,7 +1088,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
  * **Uncategorized**
     - safe_network-0.49.1 ([`69ae8c2`](https://github.com/maidsafe/safe_network/commit/69ae8c20e91dd9959ebfa5456efdf9c218a9d66f))
-    - set DEFAULT_QUERY_TIMEOUT to 120s ([`2e7bc0b`](https://github.com/maidsafe/safe_network/commit/2e7bc0b782da6231f54edc440fa555fa754d294c))
+    - set DEFAULT_OPERATION_TIMEOUT to 120s ([`2e7bc0b`](https://github.com/maidsafe/safe_network/commit/2e7bc0b782da6231f54edc440fa555fa754d294c))
     - on initial contact put all known elders into the contact pool. ([`86ba423`](https://github.com/maidsafe/safe_network/commit/86ba4234a29137518c73b18becbf018993e104a8))
     - make contact via register get ([`99add55`](https://github.com/maidsafe/safe_network/commit/99add55c5ca5a3e3da2130797083dd449da2f7cd))
     - use backoff during make contact instead of standard_wait. ([`2bdc035`](https://github.com/maidsafe/safe_network/commit/2bdc03578f3d9144a097a947ab44d0c1286f6180))

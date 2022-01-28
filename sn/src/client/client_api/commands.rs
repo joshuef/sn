@@ -14,10 +14,10 @@ use crate::messaging::{
     ServiceAuth, WireMsg,
 };
 use crate::types::{PublicKey, Signature};
-use bytes::Bytes;
-use xor_name::XorName;
 use backoff::{backoff::Backoff, ExponentialBackoff};
+use bytes::Bytes;
 use tokio::time::Duration;
+use xor_name::XorName;
 
 impl Client {
     /// Send a Cmd to the network and await a response.
@@ -56,16 +56,18 @@ impl Client {
         let span = info_span!("Attempting a cmd");
         let _ = span.enter();
 
-
         let mut attempt = 1.0;
         loop {
-            debug!(
-                "Attempting {:?} (attempt #{})",
-                debug_cmd, attempt
-            );
+            debug!("Attempting {:?} (attempt #{})", debug_cmd, attempt);
 
             let res = self
-                .send_signed_command(dst_name, client_pk, serialised_cmd.clone(), signature.clone(), targets)
+                .send_signed_command(
+                    dst_name,
+                    client_pk,
+                    serialised_cmd.clone(),
+                    signature.clone(),
+                    targets,
+                )
                 .await;
 
             if let Ok(cmd_result) = res {
@@ -76,11 +78,10 @@ impl Client {
 
             if let Some(delay) = backoff.next_backoff() {
                 tokio::time::sleep(delay).await;
-            }
-            else {
+            } else {
                 // we're done trying
 
-                break res
+                break res;
             }
         }
     }

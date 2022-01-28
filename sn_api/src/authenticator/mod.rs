@@ -183,7 +183,7 @@ impl SafeAuthenticator {
         //     Some(keypair),
         //     self.config_path.as_deref(),
         //     self.bootstrap_contacts.clone(),
-        //     DEFAULT_QUERY_TIMEOUT,
+        //     DEFAULT_OPERATION_TIMEOUT,
         // )
         // .await?;
         // trace!("Client instantiated properly!");
@@ -276,7 +276,7 @@ impl SafeAuthenticator {
         //     Some(keypair),
         //     self.config_path.as_deref(),
         //     self.bootstrap_contacts.clone(),
-        //     DEFAULT_QUERY_TIMEOUT,
+        //     DEFAULT_OPERATION_TIMEOUT,
         // )
         // .await?;
         // trace!("Client instantiated properly!");

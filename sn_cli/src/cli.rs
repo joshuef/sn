@@ -33,7 +33,7 @@ use std::time::Duration;
 use structopt::{clap::AppSettings::ColoredHelp, StructOpt};
 use tracing::debug;
 
-const DEFAULT_QUERY_TIMEOUT_SECS: u64 = 120; // 2mins
+const DEFAULT_OPERATION_TIMEOUT_SECS: u64 = 120; // 2mins
 
 const SN_CLI_QUERY_TIMEOUT: &str = "SN_CLI_QUERY_TIMEOUT";
 
@@ -70,7 +70,7 @@ pub async fn run() -> Result<()> {
                 timeout
             )
         })?,
-        Err(_) => DEFAULT_QUERY_TIMEOUT_SECS,
+        Err(_) => DEFAULT_OPERATION_TIMEOUT_SECS,
     };
 
     run_with(None, Some(Duration::from_secs(cli_timeout))).await

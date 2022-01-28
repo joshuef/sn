@@ -70,7 +70,7 @@ pub async fn run_chunk_soak() -> Result<()> {
 
     let files_to_put = files_count();
 
-    let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
+    let config = ClientConfig::new(None, None, genesis_key, None, None, None, None).await;
     let max_batch_count = 25;
     let batches = files_to_put / max_batch_count;
 
@@ -160,7 +160,7 @@ async fn upload_data_using_fresh_client(
     // Now we upload the data.
     // let (genesis_key, bootstrap_nodes) =
     //     read_network_conn_info().map_err(|_e| Error::NoNetworkKnowledge)?;
-    // let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
+    // let config = ClientConfig::new(None, None, genesis_key, None, None, None, None).await;
     // let client = Client::new(config, bootstrap_nodes, None).await?;
     // let one_mb = 1024;
     let one_mb = 1024 * 1024;

@@ -22,7 +22,7 @@ use tokio::runtime::Runtime;
 async fn upload_bytes(size: usize) -> Result<(), Error> {
     let (genesis_key, bootstrap_nodes) = read_network_conn_info().unwrap();
     let bytes = random_bytes(size);
-    let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
+    let config = ClientConfig::new(None, None, genesis_key, None, None, None, None).await;
     let client = Client::new(config, bootstrap_nodes, None).await?;
     let address = client.upload(bytes.clone(), Scope::Public).await?;
 
