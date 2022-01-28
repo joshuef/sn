@@ -72,13 +72,12 @@ pub async fn run_chunk_soak() -> Result<()> {
 
     let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
     let max_batch_count = 25;
-    let batches = files_to_put /  max_batch_count;
+    let batches = files_to_put / max_batch_count;
 
     let client = Client::new(config.clone(), bootstrap_nodes.clone(), None).await?;
 
     let mut prev_max = 0;
     for i in 0..batches {
-
         let min = if i == 0 { 1 } else { prev_max };
         let max = min + max_batch_count;
 
@@ -107,7 +106,6 @@ pub async fn run_chunk_soak() -> Result<()> {
             "put data len is same as we tried to put"
         );
     }
-
 
     assert_eq!(
         all_data_put.read().await.len(),
@@ -155,7 +153,10 @@ pub async fn run_chunk_soak() -> Result<()> {
     Ok(())
 }
 
-async fn upload_data_using_fresh_client(client:Client, iteration: usize) -> Result<(BytesAddress, [u8; 32])> {
+async fn upload_data_using_fresh_client(
+    client: Client,
+    iteration: usize,
+) -> Result<(BytesAddress, [u8; 32])> {
     // Now we upload the data.
     // let (genesis_key, bootstrap_nodes) =
     //     read_network_conn_info().map_err(|_e| Error::NoNetworkKnowledge)?;
