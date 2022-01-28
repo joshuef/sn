@@ -44,13 +44,13 @@ impl Client {
         };
         let signature = self.keypair.sign(&serialised_cmd);
 
-        let op_limit = self.query_timeout;
+        let op_limit = self.cmd_timeout;
 
         let mut backoff = ExponentialBackoff {
-            initial_interval: Duration::from_secs(5),
+            initial_interval: Duration::from_secs(15),
             max_interval: Duration::from_secs(60),
             max_elapsed_time: Some(op_limit),
-            randomization_factor: 1.8,
+            // randomization_factor: 0.5,
             ..Default::default()
         };
 
@@ -72,12 +72,14 @@ impl Client {
                 .await;
 
             if let Ok(cmd_result) = res {
+                debug!("{debug_cmd} sent okay");
                 break Ok(cmd_result);
             }
 
             attempt += 1.0;
 
             if let Some(delay) = backoff.next_backoff() {
+                debug!("Sleeping for {delay:?} before trying cmd {debug_cmd:?} again");
                 tokio::time::sleep(delay).await;
             } else {
                 // we're done trying

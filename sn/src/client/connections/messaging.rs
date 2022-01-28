@@ -192,17 +192,14 @@ impl Session {
                         return Err(Error::from((error, msg_id)));
                     }
                 }
-                Err(err) => {
-                    warn!(
-                        "CmdAck channel with err {:?}, CmdAcks received {:?} / {:?} / {:?}.",
-                        err, received_ack, expected_acks, targets_count
-                    );
+                Err(_err) => {
+                    // this is not an error..the channel is just empty atm
                 }
             }
             attempts += 1;
             if attempts >= expected_ack_wait_attempts {
                 warn!(
-                    "Terminated with insufficient CmdAcks of {:?}, {:?} / {:?}",
+                    "Terminated with insufficient CmdAcks for {:?}, {:?} / {:?} acks received",
                     msg_id, received_ack, expected_acks
                 );
                 break;
@@ -694,27 +691,23 @@ pub(super) async fn send_message(
                             .elder_last_closed_connections
                             .insert(peer_name, connection_id);
                     }
-                    Err(error) => {
-                        // if res.is_err() {
-                        trace!("Issue during {:?} send: {:?}", msg_id, error);
-                        last_error = Some(error);
-                        // } else {
+                    Err(Error::QuicP2pSend(SendError::ConnectionLost(error))) => {
+                        warn!(
+                            "Connection was lost: {:?}", error
+                        );
 
-                        // }
+                        let _old = session
+                            .elder_last_closed_connections
+                            .insert(peer_name, connection_id);
+                    }
+                    Err(error) => {
+                        warn!("Issue during {:?} send: {:?}", msg_id, error);
+                        last_error = Some(error);
+
                     }
                     Ok(_) => *successes.write().await += 1,
                 }
-                // if let Err(Error::QuicP2pSend(SendError::ConnectionLost(
-                //     ConnectionError::Closed(Close::Application { reason, .. }),
-                // ))) = send_result.clone()
-                // {
 
-                // } else if send_result.is_err() {
-                //     last_error = Some(send_result);
-                //     trace!("Error during {:?} send: {:?}", msg_id, send_result);
-                // } else {
-                //     *successes.write().await += 1;
-                // }
             }
             Err(join_error) => {
                 warn!("Tokio join error as we send: {:?}", join_error)

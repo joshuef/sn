@@ -23,7 +23,7 @@ use tracing::{debug, warn};
 const DEFAULT_LOCAL_ADDR: (Ipv4Addr, u16) = (Ipv4Addr::UNSPECIFIED, 0);
 
 /// Default amount of time to wait for operations to succeed (query/cmd) before giving up and returning an error.
-pub const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(120);
+pub const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(500);
 // /// Default idle timeout on the elder connection
 // const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 // /// Default keep alive for elder comms

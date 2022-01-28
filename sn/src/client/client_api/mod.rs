@@ -56,6 +56,7 @@ pub struct Client {
     incoming_errors: Arc<RwLock<Receiver<CmdError>>>,
     session: Session,
     pub(crate) query_timeout: Duration,
+    pub(crate) cmd_timeout: Duration,
     chunks_cache: Arc<RwLock<ChunksCache>>,
 }
 
@@ -167,6 +168,7 @@ impl Client {
             session,
             incoming_errors: Arc::new(RwLock::new(err_receiver)),
             query_timeout: config.query_timeout,
+            cmd_timeout: config.cmd_timeout,
             chunks_cache: Arc::new(RwLock::new(ChunksCache::default())),
         };
 
