@@ -71,8 +71,10 @@ pub async fn run_chunk_soak() -> Result<()> {
     let files_to_put = files_count();
 
     let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
-    let max_batch_count = 5;
+    let max_batch_count = 25;
     let batches = files_to_put /  max_batch_count;
+
+    let client = Client::new(config.clone(), bootstrap_nodes.clone(), None).await?;
 
     let mut prev_max = 0;
     for i in 0..batches {
@@ -86,10 +88,10 @@ pub async fn run_chunk_soak() -> Result<()> {
         prev_max = max;
         // so we dont start w/ 0 file size
         for j in min..max {
-
+            let client = client.clone();
             let all_data_put = all_data_put.clone();
             let put_handle: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
-                let (address, hash) = upload_data_using_fresh_client(j).await?;
+                let (address, hash) = upload_data_using_fresh_client(client, j).await?;
                 all_data_put.write().await.push((address, hash));
                 Ok(())
             });
@@ -153,14 +155,14 @@ pub async fn run_chunk_soak() -> Result<()> {
     Ok(())
 }
 
-async fn upload_data_using_fresh_client(iteration: usize) -> Result<(BytesAddress, [u8; 32])> {
+async fn upload_data_using_fresh_client(client:Client, iteration: usize) -> Result<(BytesAddress, [u8; 32])> {
     // Now we upload the data.
-    let (genesis_key, bootstrap_nodes) =
-        read_network_conn_info().map_err(|_e| Error::NoNetworkKnowledge)?;
-    let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
-    let client = Client::new(config, bootstrap_nodes, None).await?;
-    let one_mb = 1024 * 10;
-    // let one_mb = 1024 * 1024 * 10;
+    // let (genesis_key, bootstrap_nodes) =
+    //     read_network_conn_info().map_err(|_e| Error::NoNetworkKnowledge)?;
+    // let config = ClientConfig::new(None, None, genesis_key, None, None, None).await;
+    // let client = Client::new(config, bootstrap_nodes, None).await?;
+    // let one_mb = 1024;
+    let one_mb = 1024 * 1024;
     // start small and build up
     let bytes = random_bytes(one_mb * iteration);
 
