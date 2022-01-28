@@ -47,9 +47,10 @@ impl Client {
         let op_limit = self.query_timeout;
 
         let mut backoff = ExponentialBackoff {
-            initial_interval: Duration::from_millis(1500),
-            max_interval: Duration::from_secs(30),
+            initial_interval: Duration::from_secs(5),
+            max_interval: Duration::from_secs(60),
             max_elapsed_time: Some(op_limit),
+            randomization_factor: 1.8,
             ..Default::default()
         };
 
