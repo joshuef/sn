@@ -30,7 +30,7 @@ build-tests/
 
 # Manual
 .cargo/
-*.log 
+*.log
 
 # Misc
 packages/
@@ -64,3 +64,7 @@ installer/docker/.env
 nodes
 fake_node_data.json
 *.orig
+
+#flamegraph
+cargo-flamegraph.stacks
+*flame.svg

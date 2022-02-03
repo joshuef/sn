@@ -3263,7 +3263,7 @@ dependencies = [
  "serde_json",
  "signature",
  "sled",
- "sn_launch_tool",
+ "sn_launch_tool 0.9.4",
  "structopt",
  "strum",
  "strum_macros",
@@ -3664,7 +3664,7 @@ dependencies = [
  "shrust",
  "sn_api",
  "sn_cmd_test_utilities",
- "sn_launch_tool",
+ "sn_launch_tool 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt",
  "tokio",
  "tracing",
@@ -3691,6 +3691,19 @@ dependencies = [
  "sn_api",
  "tiny-keccak 2.0.2",
  "walkdir",
+]
+
+[[package]]
+name = "sn_launch_tool"
+version = "0.9.4"
+dependencies = [
+ "color-eyre",
+ "dirs-next 1.0.2",
+ "eyre",
+ "serde_json",
+ "structopt",
+ "tracing",
+ "tracing-subscriber 0.3.6",
 ]
 
 [[package]]

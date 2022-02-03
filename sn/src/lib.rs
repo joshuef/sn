@@ -159,7 +159,7 @@ where
     ) -> std::fmt::Result {
         // Write level and target
         let level = *event.metadata().level();
-        let target = event.metadata().file().expect("will never be `None`");
+        let target = event.metadata().file().unwrap_or("No target file known.");
         let span_separation_string = "\t ➤ ";
         let time = SystemTime::default();
         write!(writer, " {} ", level)?;
@@ -170,7 +170,7 @@ where
             writer,
             " [{}:L{}]:",
             target,
-            event.metadata().line().expect("will never be `None`"),
+            event.metadata().line().unwrap_or(0),
         )?;
 
         write!(writer, "{}", span_separation_string)?;

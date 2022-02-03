@@ -10,9 +10,6 @@ readme = "README.md"
 repository = "https://github.com/maidsafe/safe_network"
 version = "0.55.2"
 
-#[profile.release]
-#incremental = true
-
 [[bench]]
 name = "upload_bytes"
 harness = false
@@ -37,7 +34,6 @@ required-features = ["test-utils"]
 [features]
 default = []
 always-joinable = []
-unstable-command-prioritisation = []
 chaos = []
 unstable-wiremsg-debuginfo = []
 test-utils = []
@@ -80,7 +76,7 @@ serde_bytes = "0.11.5"
 serde_json = "1.0.53"
 signature = "1.1.10"
 sled = "0.34.6"
-sn_launch_tool = "0.9.4"
+sn_launch_tool = {path="../../sn_launch_tool"}
 structopt = "~0.3.17"
 strum = "0.21"
 strum_macros = "0.21"

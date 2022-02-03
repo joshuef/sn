@@ -96,6 +96,8 @@ pub(crate) async fn compare_and_write_prefix_map_to_disk(
         .await
         .map_err(|e| Error::FileHandling(e.to_string()))?;
 
+    debug!("END of prefixmapwrite");
+
     Ok(())
 }
 

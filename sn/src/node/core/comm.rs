@@ -798,6 +798,7 @@ mod tests {
         // Keep the socket alive to keep the address bound, but don't read/write to it so any
         // attempt to connect to it will fail.
         let _handle = tokio::spawn(async move {
+            debug!("get invalid peer");
             future::pending::<()>().await;
             let _ = socket;
         });
