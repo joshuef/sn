@@ -151,6 +151,7 @@ impl Core {
         let members = self
             .network_knowledge
             .section_signed_members()
+            .await
             .iter()
             .map(|state| state.clone().into_authed_msg())
             .collect();
@@ -202,6 +203,7 @@ impl Core {
         let nodes: Vec<_> = self
             .network_knowledge
             .section_members()
+            .await
             .into_iter()
             .filter(|info| info.name() != our_name)
             .map(|info| info.peer().clone())

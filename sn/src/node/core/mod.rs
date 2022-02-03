@@ -382,7 +382,7 @@ impl Core {
         self.comm.print_stats();
     }
 
-    pub(super) async fn log_network_stats(&self) {
+    pub(super) async fn log_section_stats(&self) {
         let adults = self.network_knowledge.adults().await.len();
         let elders = self
             .network_knowledge

@@ -586,7 +586,12 @@ impl Dispatcher {
             ]),
             Command::TestConnectivity(name) => {
                 let mut commands = vec![];
-                if let Some(member_info) = self.core.network_knowledge().get_section_member(&name) {
+                if let Some(member_info) = self
+                    .core
+                    .network_knowledge()
+                    .get_section_member(&name)
+                    .await
+                {
                     if self
                         .core
                         .comm

@@ -23,7 +23,6 @@ use std::{
 /// A new `SectionAuthorityProvider` is created whenever the elders change, due to an elder being
 /// added or removed, or the section splitting or merging.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-// TODO: make pub(crate) - but it's used by routing stress_example atm
 pub struct SectionAuthorityProvider {
     prefix: Prefix,
     public_key_set: PublicKeySet,
@@ -135,16 +134,11 @@ impl SectionAuthorityProvider {
     }
 
     /// Key of the section.
-    // TODO: make pub(crate) - but it's used by routing stress_example atm
     pub fn section_key(&self) -> PublicKey {
         self.public_key_set.public_key()
     }
-}
 
-// Add conversion methods to/from `messaging::...::NodeState`
-// We prefer this over `From<...>` to make it easier to read the conversion.
-
-impl SectionAuthorityProvider {
+    // We prefer this over `From<...>` to make it easier to read the conversion.
     pub(crate) fn to_msg(&self) -> SectionAuthorityProviderMsg {
         SectionAuthorityProviderMsg {
             prefix: self.prefix,

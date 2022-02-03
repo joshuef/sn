@@ -52,10 +52,10 @@ impl Core {
         let mut commands = vec![];
         if let Some(old_info) = self
             .network_knowledge
-            .get_section_signed_member(&new_info.name())
+            .is_either_member_or_archived(&new_info.name())
+            .await
         {
             // This node is rejoin with same name.
-
             if old_info.state() != MembershipState::Left {
                 debug!(
                     "Ignoring Online node {} - {:?} not Left.",
@@ -104,7 +104,7 @@ impl Core {
         })
         .await;
 
-        self.log_network_stats().await;
+        self.log_section_stats().await;
 
         // Do not disable node joins in first section.
         if !self.network_knowledge.prefix().await.is_empty() {

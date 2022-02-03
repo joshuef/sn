@@ -640,6 +640,7 @@ async fn handle_agreement_on_offline_of_non_elder() -> Result<()> {
         .core
         .network_knowledge()
         .section_members()
+        .await
         .contains(&node_state));
 
     Ok(())
@@ -662,6 +663,7 @@ async fn handle_agreement_on_offline_of_elder() -> Result<()> {
 
     let remove_node_state = section
         .get_section_member(&remove_peer.name())
+        .await
         .expect("member not found")
         .leave()?;
 
@@ -735,6 +737,7 @@ async fn handle_agreement_on_offline_of_elder() -> Result<()> {
         .core
         .network_knowledge()
         .section_members()
+        .await
         .contains(&remove_node_state));
 
     // The removed peer is still our elder because we haven't yet processed the section update.

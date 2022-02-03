@@ -11,40 +11,31 @@ use crate::node::network_knowledge::{NodeState, SectionAuthorityProvider};
 use crate::peer::Peer;
 use dashmap::{mapref::entry::Entry, DashMap};
 use itertools::Itertools;
-use std::{cmp::Ordering, collections::BTreeSet, ops::Deref, sync::Arc};
+use secured_linked_list::SecuredLinkedList;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+    net::SocketAddr,
+    sync::Arc,
+};
 use xor_name::{Prefix, XorName};
 
-/// Container for storing information about members of our section.
+// Number of Elder churn events before a Left/Relocated member
+// can be removed from the section members archive.
+const ELDER_CHURN_EVENTS_TO_PRUNE_ARCHIVE: usize = 5;
+
+/// Container for storing information about (current and archived) members of our section.
 #[derive(Clone, Default, Debug)]
 pub(super) struct SectionPeers {
     members: Arc<DashMap<XorName, SectionAuth<NodeState>>>,
-}
-
-impl<'a> IntoIterator for &'a SectionPeers {
-    type Item = dashmap::mapref::multiple::RefMulti<'a, XorName, SectionAuth<NodeState>>;
-
-    type IntoIter = dashmap::iter::Iter<'a, XorName, SectionAuth<NodeState>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.members.iter()
-    }
+    archive: Arc<DashMap<XorName, SectionAuth<NodeState>>>,
 }
 
 impl SectionPeers {
-    pub(super) fn iter(
-        &self,
-    ) -> impl Iterator<Item = impl Deref<Target = SectionAuth<NodeState>> + '_> + '_ {
-        IntoIterator::into_iter(self)
-    }
-
-    /// Returns members that have state == `Joined`.
-    pub(super) fn joined(&self) -> BTreeSet<SectionAuth<NodeState>> {
+    /// Returns set of current members, i.e. those with state == `Joined`.
+    pub(super) fn members(&self) -> BTreeSet<SectionAuth<NodeState>> {
         self.members
             .iter()
-            .filter(|entry| {
-                let (_, state) = entry.pair();
-                state.state() == MembershipState::Joined
-            })
             .map(|entry| {
                 let (_, state) = entry.pair();
                 state.clone()
@@ -52,116 +43,106 @@ impl SectionPeers {
             .collect()
     }
 
-    /// Returns number of members that have state == `Joined`.
-    pub(super) fn num_of_joined(&self) -> usize {
-        self.members
-            .iter()
-            .filter(|entry| {
-                let (_, state) = entry.pair();
-                state.state() == MembershipState::Joined
-            })
-            .count()
+    /// Returns the number of current members.
+    pub(super) fn num_of_members(&self) -> usize {
+        self.members.len()
     }
 
-    /// Get info for the member with the given name.
+    /// Get the `NodeState` for the member with the given name.
     pub(super) fn get(&self, name: &XorName) -> Option<NodeState> {
-        self.members
-            .get(name)
-            .filter(|state| state.state() == MembershipState::Joined)
-            .map(|state| state.value.clone())
+        self.members.get(name).map(|state| state.value.clone())
     }
 
-    /// Returns whether the given peer is a joined member of our section.
-    pub(super) fn is_joined(&self, name: &XorName) -> bool {
-        self.members
-            .get(name)
-            .map(|info| info.state() == MembershipState::Joined)
-            .unwrap_or(false)
+    /// Returns whether the given peer is currently a member of our section.
+    pub(super) fn is_member(&self, name: &XorName) -> bool {
+        self.members.get(name).is_some()
     }
 
     /// Returns whether the given peer is already relocated to our section.
     pub(super) fn is_relocated_to_our_section(&self, name: &XorName) -> bool {
-        self.members
-            .get(name)
-            .map(|state| state.previous_name() == Some(*name))
-            .unwrap_or(false)
+        let is_previous_name_of_member = self.members.iter().any(|entry| {
+            let (_, state) = entry.pair();
+            state.previous_name() == Some(*name)
+        });
+
+        is_previous_name_of_member
+            || self.archive.iter().any(|entry| {
+                let (_, state) = entry.pair();
+                state.previous_name() == Some(*name)
+            })
     }
 
-    /// Get section_signed info for the member with the given name.
-    pub(super) fn get_section_signed(&self, name: &XorName) -> Option<SectionAuth<NodeState>> {
-        self.members.get(name).map(|oneref| oneref.value().clone())
+    /// Get section signed `NodeState` for the member with the given name.
+    pub(super) fn is_either_member_or_archived(
+        &self,
+        name: &XorName,
+    ) -> Option<SectionAuth<NodeState>> {
+        if let Some(member) = self.members.get(name).map(|state| state.value().clone()) {
+            Some(member)
+        } else {
+            self.archive.get(name).map(|state| state.value().clone())
+        }
     }
 
-    /// Returns the candidates for elders out of all the nodes in this section.
+    /// Returns the nodes that should be candidates to become the next elders, sorted by names.
     pub(super) fn elder_candidates(
         &self,
         elder_size: usize,
         current_elders: &SectionAuthorityProvider,
         excluded_names: &BTreeSet<XorName>,
+        prefix: Option<&Prefix>,
     ) -> Vec<Peer> {
-        let mut candidates = vec![];
-        let members = &*self.members;
-
-        for entry in members.into_iter() {
-            let (name, info) = entry.pair();
-
-            if is_active(info, current_elders) && !excluded_names.contains(name) {
-                candidates.push(info.clone())
-            }
-        }
-
-        elder_candidates(elder_size, current_elders, candidates)
-    }
-
-    /// Returns the candidates for elders out of all nodes matching the prefix.
-    pub(super) fn elder_candidates_matching_prefix(
-        &self,
-        prefix: &Prefix,
-        elder_size: usize,
-        current_elders: &SectionAuthorityProvider,
-        excluded_names: &BTreeSet<XorName>,
-    ) -> Vec<Peer> {
-        let mut candidates = vec![];
-        let members = &*self.members;
-
-        for entry in members.into_iter() {
-            let (name, info) = entry.pair();
-
-            if info.state() == MembershipState::Joined
-                && prefix.matches(name)
-                && !excluded_names.contains(name)
-            {
-                candidates.push(info.clone())
-            }
-        }
-
-        elder_candidates(elder_size, current_elders, candidates)
+        self.members
+            .iter()
+            .filter(|entry| {
+                let (name, _) = entry.pair();
+                prefix.map_or_else(|| true, |p| p.matches(name)) && !excluded_names.contains(name)
+            })
+            .map(|entry| {
+                let (_, node_state) = entry.pair();
+                node_state.clone()
+            })
+            .sorted_by(|lhs, rhs| cmp_elder_candidates(lhs, rhs, current_elders))
+            .take(elder_size)
+            .map(|node_state| node_state.peer().clone())
+            .collect()
     }
 
     /// Update a member of our section.
     /// Returns whether anything actually changed.
-    pub(super) fn update(&self, new_info: SectionAuth<NodeState>) -> bool {
-        match self.members.entry(new_info.name()) {
-            Entry::Vacant(entry) => {
-                let _prev = entry.insert(new_info);
+    /// To maintain commutativity, the only allowed transitions are:
+    /// - Joined -> Joined if the new age is greater than the old age
+    /// - Joined -> Left
+    /// - Joined -> Relocated
+    /// - Relocated <--> Left (should not happen, but needed for consistency)
+    pub(super) fn update(&self, new_state: SectionAuth<NodeState>) -> bool {
+        let node_name = new_state.name();
+        match (self.members.entry(new_state.name()), new_state.state()) {
+            (Entry::Vacant(entry), MembershipState::Joined) => {
+                // unless it was already archived, insert it as current member
+                if self.archive.get(&node_name).is_none() {
+                    let _prev = entry.insert(new_state);
+                    true
+                } else {
+                    false
+                }
+            }
+            (Entry::Vacant(_), MembershipState::Left | MembershipState::Relocated(_)) => {
+                // insert it in our archive regardless it was there with another state
+                let _prev = self.archive.insert(node_name, new_state);
                 true
             }
-            Entry::Occupied(mut entry) => {
-                // To maintain commutativity, the only allowed transitions are:
-                // - Joined -> Joined if the new age is greater than the old age
-                // - Joined -> Left
-                // - Joined -> Relocated
-                // - Relocated -> Left (should not happen, but needed for consistency)
-                match (entry.get().state(), new_info.state()) {
-                    (MembershipState::Joined, MembershipState::Joined)
-                        if new_info.age() > entry.get().age() => {}
-                    (MembershipState::Joined, MembershipState::Left)
-                    | (MembershipState::Joined, MembershipState::Relocated(_))
-                    | (MembershipState::Relocated(_), MembershipState::Left) => {}
-                    _ => return false,
-                };
-
-                let _prev = entry.insert(new_info);
+            (Entry::Occupied(mut entry), MembershipState::Joined)
+                if new_state.age() > entry.get().age() =>
+            {
+                let _prev = entry.insert(new_state);
+                true
+            }
+            (Entry::Occupied(_), MembershipState::Joined) => false,
+            (Entry::Occupied(entry), MembershipState::Left | MembershipState::Relocated(_)) => {
+                //  remove it from our current members, and insert it into our archive
+                let _prev = entry.remove_entry();
+                let _prev = self.archive.insert(node_name, new_state);
                 true
             }
         }
@@ -169,24 +150,26 @@ impl SectionPeers {
 
     /// Remove all members whose name does not match `prefix`.
     pub(super) fn retain(&self, prefix: &Prefix) {
-        self.members.retain(|name, _value| prefix.matches(name))
+        self.members.retain(|name, _| prefix.matches(name))
     }
-}
 
-// Returns the nodes that should become the next elders out of the given members, sorted by names.
-// It is assumed that `members` contains only "active" peers (see the `is_active` function below
-// for explanation)
-fn elder_candidates(
-    elder_size: usize,
-    current_elders: &SectionAuthorityProvider,
-    members: Vec<SectionAuth<NodeState>>,
-) -> Vec<Peer> {
-    members
-        .into_iter()
-        .sorted_by(|lhs, rhs| cmp_elder_candidates(lhs, rhs, current_elders))
-        .map(|auth| auth.peer().clone())
-        .take(elder_size)
-        .collect()
+    /// Merge connections into of our current members
+    pub(super) async fn merge_connections(&self, sources: &BTreeMap<SocketAddr, &Peer>) {
+        for entry in self.members.iter() {
+            let (_, node) = entry.pair();
+            if let Some(source) = sources.get(&node.addr()) {
+                node.peer().merge_connection(source).await;
+            }
+        }
+    }
+
+    // Remove any member which Left, or was Relocated, more
+    // than ELDER_CHURN_EVENTS_TO_PRUNE_ARCHIVE section keys ago.
+    pub(super) async fn prune_members_archive(&self, section_chain: &SecuredLinkedList) {
+        let last_section_keys = section_chain.truncate(ELDER_CHURN_EVENTS_TO_PRUNE_ARCHIVE);
+        self.archive
+            .retain(|_, node_state| last_section_keys.has_key(&node_state.sig.public_key))
+    }
 }
 
 // Compare candidates for the next elders. The one comparing `Less` wins.
@@ -198,11 +181,11 @@ fn cmp_elder_candidates(
     // Older nodes are preferred. In case of a tie, prefer current elders. If still a tie, break
     // it comparing by the signed signatures because it's impossible for a node to predict its
     // signature and therefore game its chances of promotion.
-    cmp_elder_candidates_by_membership_state(&lhs.state(), &rhs.state())
-        .then_with(|| rhs.age().cmp(&lhs.age()))
+    rhs.age()
+        .cmp(&lhs.age())
         .then_with(|| {
-            let lhs_is_elder = is_elder(lhs, current_elders);
-            let rhs_is_elder = is_elder(rhs, current_elders);
+            let lhs_is_elder = current_elders.contains_elder(&lhs.name());
+            let rhs_is_elder = current_elders.contains_elder(&rhs.name());
 
             match (lhs_is_elder, rhs_is_elder) {
                 (true, false) => Ordering::Less,
@@ -211,36 +194,4 @@ fn cmp_elder_candidates(
             }
         })
         .then_with(|| lhs.sig.signature.cmp(&rhs.sig.signature))
-}
-
-// Compare candidates for the next elders according to their peer state. The one comparing `Less`
-// wins. `Joined` is preferred over `Relocated` which is preferred over `Left`.
-// NOTE: we only consider `Relocated` peers as elder candidates if we don't have enough `Joined`
-// members to reach `elder_count()`.
-fn cmp_elder_candidates_by_membership_state(
-    lhs: &MembershipState,
-    rhs: &MembershipState,
-) -> Ordering {
-    use MembershipState::*;
-
-    match (lhs, rhs) {
-        (Joined, Joined) | (Relocated(_), Relocated(_)) => Ordering::Equal,
-        (Joined, Relocated(_)) | (_, Left) => Ordering::Less,
-        (Relocated(_), Joined) | (Left, _) => Ordering::Greater,
-    }
-}
-
-// A peer is considered active if either it is joined or it is a current elder who is being
-// relocated. This is because such elder still fulfils its duties and only when demoted can it
-// leave.
-fn is_active(info: &NodeState, current_elders: &SectionAuthorityProvider) -> bool {
-    match info.state() {
-        MembershipState::Joined => true,
-        MembershipState::Relocated(_) if is_elder(info, current_elders) => true,
-        _ => false,
-    }
-}
-
-fn is_elder(info: &NodeState, current_elders: &SectionAuthorityProvider) -> bool {
-    current_elders.contains_elder(&info.name())
 }

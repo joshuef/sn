@@ -255,6 +255,7 @@ impl Core {
         let members = self
             .network_knowledge
             .section_signed_members()
+            .await
             .into_iter()
             .map(|itr| itr.into_authed_msg())
             .collect();

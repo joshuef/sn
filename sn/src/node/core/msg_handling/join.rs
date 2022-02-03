@@ -87,7 +87,7 @@ impl Core {
         }
 
         // Check if we already have this peer in our section
-        if self.network_knowledge.is_section_member(&peer.name()) {
+        if self.network_knowledge.is_section_member(&peer.name()).await {
             debug!(
                 "Ignoring JoinRequest from {} - already member of our section.",
                 peer
@@ -204,7 +204,7 @@ impl Core {
         // During the first section, nodes shall use ranged age to avoid too many nodes getting
         // relocated at the same time. After the first section splits, nodes shall only
         // start with an age of MIN_ADULT_AGE
-        let current_section_size = self.network_knowledge.section_size();
+        let current_section_size = self.network_knowledge.section_size().await;
         let our_prefix = self.network_knowledge.prefix().await;
 
         // Prefix will be empty for first section
@@ -279,7 +279,7 @@ impl Core {
             ]);
         }
 
-        if self.network_knowledge.is_section_member(&peer.name()) {
+        if self.network_knowledge.is_section_member(&peer.name()).await {
             debug!(
                 "Ignoring JoinAsRelocatedRequest from {} - already member of our section.",
                 peer
@@ -344,6 +344,7 @@ impl Core {
         if self
             .network_knowledge
             .is_relocated_to_our_section(&relocate_details.previous_name)
+            .await
         {
             debug!(
                 "Ignoring JoinAsRelocatedRequest from {} - original node {:?} already relocated to us.",

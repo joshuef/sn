@@ -38,7 +38,7 @@ impl Display for ChurnId {
 }
 
 /// Find all nodes to relocate after a churn event and generate the relocation details for them.
-pub(super) fn find_nodes_to_relocate(
+pub(super) async fn find_nodes_to_relocate(
     network_knowledge: &NetworkKnowledge,
     churn_id: &ChurnId,
     excluded: BTreeSet<XorName>,
@@ -46,17 +46,19 @@ pub(super) fn find_nodes_to_relocate(
     // Find the peers that pass the relocation check and take only the oldest ones to avoid
     // relocating too many nodes at the same time.
     // Capped by criteria that cannot relocate too many node at once.
-    let joined_nodes = network_knowledge.section_members();
+    let joined_nodes = network_knowledge.section_members().await;
 
     if joined_nodes.len() < recommended_section_size() {
         return vec![];
     }
+
     let max_reloctions = elder_count() / 2;
     let allowed_relocations = min(
         joined_nodes.len() - recommended_section_size(),
         max_reloctions,
     );
 
+    // Find the peers that pass the relocation check
     let candidates: BTreeSet<_> = joined_nodes
             .into_iter()
             .filter(|info| check(info.age(), churn_id))
@@ -71,14 +73,13 @@ pub(super) fn find_nodes_to_relocate(
     };
 
     let mut relocating_nodes = vec![];
-
     for node_state in candidates {
         if node_state.age() == max_age {
             let dst = dst(&node_state.name(), churn_id);
             let age = node_state.age().saturating_add(1);
             let relocate_details =
                 RelocateDetails::with_age(network_knowledge, node_state.peer(), dst, age);
-            relocating_nodes.push((node_state, relocate_details))
+            relocating_nodes.push((node_state, relocate_details));
         }
     }
 
@@ -243,8 +244,11 @@ mod tests {
                 .to_vec(),
         );
 
-        let relocations =
-            find_nodes_to_relocate(&network_knowledge, &churn_id, BTreeSet::default());
+        let relocations = futures::executor::block_on(find_nodes_to_relocate(
+            &network_knowledge,
+            &churn_id,
+            BTreeSet::default(),
+        ));
 
         let relocations: Vec<_> = relocations
             .into_iter()

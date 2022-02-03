@@ -21,7 +21,6 @@ use xor_name::{XorName, XOR_NAME_LEN};
 pub(crate) struct Node {
     // Keep the secret key in Arc to allow Clone while also preventing multiple copies to exist in
     // memory which might be insecure.
-    // TODO: find a way to not require `Clone`.
     #[debug(skip)]
     pub(crate) keypair: Arc<Keypair>,
     pub(crate) addr: SocketAddr,

@@ -43,22 +43,24 @@ impl Core {
         }
         let section_auth = self.network_knowledge().authority_provider().await;
 
-        let elder_candidates = ElderCandidates::new(
-            prefix,
-            elders.into_iter().map(|(name, addr)| {
-                // Reuse known peers from network_knowledge, in order to preserve connections
-                if let Some(elder) = section_auth
-                    .get_elder(&name)
-                    .filter(|elder| elder.addr() == addr)
-                {
-                    elder.clone()
-                } else if let Some(peer) = self.network_knowledge().find_member_by_addr(&addr) {
-                    peer
-                } else {
-                    Peer::new(name, addr)
-                }
-            }),
-        );
+        let mut peers = vec![];
+        for (name, addr) in elders.into_iter() {
+            // Reuse known peers from network_knowledge, in order to preserve connections
+            let peer = if let Some(elder) = section_auth
+                .get_elder(&name)
+                .filter(|elder| elder.addr() == addr)
+            {
+                elder.clone()
+            } else if let Some(peer) = self.network_knowledge().find_member_by_addr(&addr).await {
+                peer
+            } else {
+                Peer::new(name, addr)
+            };
+
+            peers.push(peer);
+        }
+
+        let elder_candidates = ElderCandidates::new(prefix, peers);
 
         trace!(
             "Received DkgStart for {:?} - {:?}",
@@ -197,7 +199,7 @@ impl Core {
         sender: &XorName,
         failure_set: &DkgFailureSigSet,
     ) -> Result<Vec<Command>> {
-        if !self.network_knowledge.is_section_member(sender) {
+        if !self.network_knowledge.is_section_member(sender).await {
             return Err(Error::InvalidSrcLocation);
         }
 

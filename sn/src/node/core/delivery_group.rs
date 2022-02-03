@@ -48,7 +48,7 @@ pub(crate) async fn delivery_targets(
             if name == our_name {
                 return Ok((Vec::new(), 0));
             }
-            if let Some(node) = get_peer(name, network_knowledge) {
+            if let Some(node) = get_peer(name, network_knowledge).await {
                 return Ok((vec![node], 1));
             }
 
@@ -155,8 +155,8 @@ async fn candidates(
 }
 
 // Returns a `Peer` for a known node.
-fn get_peer(name: &XorName, network_knowledge: &NetworkKnowledge) -> Option<Peer> {
-    match network_knowledge.get_section_member(name) {
+async fn get_peer(name: &XorName, network_knowledge: &NetworkKnowledge) -> Option<Peer> {
+    match network_knowledge.get_section_member(name).await {
         Some(info) => Some(info.peer().clone()),
         None => network_knowledge
             .section_by_name(name)

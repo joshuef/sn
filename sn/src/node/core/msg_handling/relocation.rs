@@ -51,7 +51,7 @@ impl Core {
 
         let mut commands = vec![];
         for (node_state, relocate_details) in
-            find_nodes_to_relocate(&self.network_knowledge, &churn_id, excluded)
+            find_nodes_to_relocate(&self.network_knowledge, &churn_id, excluded).await
         {
             debug!(
                 "Relocating {:?} to {} (on churn of {})",
