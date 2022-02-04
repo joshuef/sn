@@ -125,9 +125,7 @@ async fn main() -> Result<()> {
         info!("Building current sn_node");
         debug!("Building current sn_node with args: {:?}", build_args);
 
-
         if !cmd_args.flame {
-
             Command::new("cargo")
                 .args(build_args.clone())
                 .current_dir("sn")
@@ -141,7 +139,6 @@ async fn main() -> Result<()> {
                 .wrap_err_with(|| format!("Failed to run build command with args: {:?}", build_args))?;
             info!("sn_node built successfully");
         }
-
     }
 
     run_network().await?;

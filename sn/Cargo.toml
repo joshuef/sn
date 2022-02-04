@@ -50,7 +50,7 @@ color-eyre = "0.5.11"
 console-subscriber = { version = "0.1.0", optional = true }
 crdts = "~7.0"
 custom_debug = "0.5.0"
-dashmap = {version = "~4.0.2", features = [ "serde" ]}
+dashmap = {version = "5.0.0", features = [ "serde" ]}
 dirs-next = "2.0.0"
 ed25519 = { version = "1.2.0", features = ["serde_bytes"] }
 ed25519-dalek = { version = "1.0.0", features = ["serde"] }

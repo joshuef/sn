@@ -117,11 +117,15 @@ impl SectionPeers {
     /// - Relocated <--> Left (should not happen, but needed for consistency)
     pub(super) fn update(&self, new_state: SectionAuth<NodeState>) -> bool {
         let node_name = new_state.name();
-        match (self.members.entry(new_state.name()), new_state.state()) {
-            (Entry::Vacant(entry), MembershipState::Joined) => {
+        // do ops on the dashmap _after_ matching, so we can drop any refs to prevent deadlocking
+        let mut should_insert = false;
+        let mut should_remove = false;
+
+        let updating_something = match (self.members.entry(node_name), new_state.state()) {
+            (Entry::Vacant(_entry), MembershipState::Joined) => {
                 // unless it was already archived, insert it as current member
                 if self.archive.get(&node_name).is_none() {
-                    let _prev = entry.insert(new_state);
+                    should_insert = true;
                     true
                 } else {
                     false
@@ -129,23 +133,33 @@ impl SectionPeers {
             }
             (Entry::Vacant(_), MembershipState::Left | MembershipState::Relocated(_)) => {
                 // insert it in our archive regardless it was there with another state
-                let _prev = self.archive.insert(node_name, new_state);
+                let _prev = self.archive.insert(node_name, new_state.clone());
                 true
             }
-            (Entry::Occupied(mut entry), MembershipState::Joined)
+            (Entry::Occupied(entry), MembershipState::Joined)
                 if new_state.age() > entry.get().age() =>
             {
-                let _prev = entry.insert(new_state);
+                should_insert = true;
                 true
             }
             (Entry::Occupied(_), MembershipState::Joined) => false,
-            (Entry::Occupied(entry), MembershipState::Left | MembershipState::Relocated(_)) => {
+            (Entry::Occupied(_entry), MembershipState::Left | MembershipState::Relocated(_)) => {
                 //  remove it from our current members, and insert it into our archive
-                let _prev = entry.remove_entry();
-                let _prev = self.archive.insert(node_name, new_state);
+                should_remove = true;
+                let _prev = self.archive.insert(node_name, new_state.clone());
                 true
             }
+        };
+
+        // now we have dropped the entry ref
+        if should_insert {
+            let _prev = self.members.insert(node_name, new_state);
         }
+        if should_remove {
+            let _prev = self.members.remove(&node_name);
+        }
+
+        updating_something
     }
 
     /// Remove all members whose name does not match `prefix`.
