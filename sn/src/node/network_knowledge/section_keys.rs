@@ -86,6 +86,7 @@ impl SectionKeysProvider {
     /// Adds a new key to the cache, and removes the oldest
     /// key if cache size is exceeded.
     pub(crate) async fn insert(&self, share: SectionKeyShare) {
+        trace!("Adding key share to the SectionKeysProvider {share:?}");
         let public_key = share.public_key_set.public_key();
         if let Some(evicted) = self.cache.write().await.insert(share) {
             trace!("evicted old key share from cache: {:?}", evicted);

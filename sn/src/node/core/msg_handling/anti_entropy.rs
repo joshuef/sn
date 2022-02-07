@@ -80,6 +80,8 @@ impl Core {
         let dst_section_key = section_auth.section_key();
         let snapshot = self.state_snapshot().await;
 
+        // TODO: detect elder retry loop w/ bad keys. After more than X msgs we should vote the elder out.
+
         let to_resend = self
             .update_network_knowledge(
                 section_auth,
