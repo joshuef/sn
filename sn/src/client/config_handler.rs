@@ -26,7 +26,7 @@ const DEFAULT_LOCAL_ADDR: (Ipv4Addr, u16) = (Ipv4Addr::UNSPECIFIED, 0);
 pub const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(120);
 /// Default amount of time to wait (to keep the client alive) after sending a cmd. This allows AE messages to be parsed/resent.
 /// Larger PUT operations may need larger ae wait time
-pub const DEFAULT_ACK_WAIT: Duration = Duration::from_secs(5);
+pub const DEFAULT_ACK_WAIT: Duration = Duration::from_secs(10);
 
 const DEFAULT_ROOT_DIR_NAME: &str = "root_dir";
 const SN_QUERY_TIMEOUT: &str = "SN_QUERY_TIMEOUT";

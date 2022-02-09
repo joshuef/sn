@@ -317,7 +317,7 @@ impl Core {
             .take(data_copy_count())
             .collect::<BTreeSet<_>>();
 
-        trace!(
+        debug!(
             "Target chunk holders of {:?} are empty adults: {:?} and full adults that were ignored: {:?}",
             target,
             candidates,

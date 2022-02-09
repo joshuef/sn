@@ -32,12 +32,6 @@ impl Core {
         if self.is_elder().await {
             let targets = self.get_adults_who_should_store_data(data.name()).await;
 
-            info!(
-                "Replicating data {:?} to holders {:?}",
-                data.name(),
-                &targets,
-            );
-
             let msg = SystemMsg::NodeCmd(NodeCmd::ReplicateData(data));
             self.send_node_msg_to_nodes(msg, targets, false).await
         } else {
