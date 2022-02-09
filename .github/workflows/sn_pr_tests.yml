@@ -341,163 +341,163 @@ jobs:
           rm -rf ~/.safe
           killall -9 sn_node
 
-  e2e-split:
-    if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
-    name: E2E tests w/ full network
-    runs-on: "${{ matrix.os }}"
-    needs: ["e2e"]
-    env:
-      NODE_COUNT: 33
-    strategy:
-      matrix:
-        os: [self-hosted-ubuntu]
-    steps:
-      - uses: actions/checkout@v2
+  # e2e-split:
+  #   if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
+  #   name: E2E tests w/ full network
+  #   runs-on: "${{ matrix.os }}"
+  #   needs: ["e2e"]
+  #   env:
+  #     NODE_COUNT: 33
+  #   strategy:
+  #     matrix:
+  #       os: [self-hosted-ubuntu]
+  #   steps:
+  #     - uses: actions/checkout@v2
 
-      # Install Rust
-      - name: Install Rust
-        id: toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+  #     # Install Rust
+  #     - name: Install Rust
+  #       id: toolchain
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: stable
+  #         override: true
 
-      - uses: Swatinem/rust-cache@v1
-        continue-on-error: true
-        with:
-          cache-on-failure: true
-          sharedKey: ${{github.run_id}}
+  #     - uses: Swatinem/rust-cache@v1
+  #       continue-on-error: true
+  #       with:
+  #         cache-on-failure: true
+  #         sharedKey: ${{github.run_id}}
 
-      - name: ubuntu install ripgrep
-        run: sudo apt-get -y install ripgrep
+  #     - name: ubuntu install ripgrep
+  #       run: sudo apt-get -y install ripgrep
 
-      - name: Build all safe_network tests
-        run: cd sn && cargo test --no-run --release --features=test-utils
-        timeout-minutes: 60
+  #     - name: Build all safe_network tests
+  #       run: cd sn && cargo test --no-run --release --features=test-utils
+  #       timeout-minutes: 60
 
-      - name: Build all safe_network bins
-        run: cargo build -p safe_network --release --features=test-utils --bins
-        timeout-minutes: 60
+  #     - name: Build all safe_network bins
+  #       run: cargo build -p safe_network --release --features=test-utils --bins
+  #       timeout-minutes: 60
 
-      - name: Start the network
-        run: ./target/release/testnet --interval 15000
-        id: section-startup
+  #     - name: Start the network
+  #       run: ./target/release/testnet --interval 15000
+  #       id: section-startup
 
-      - name: Print Network Log Stats at start
-        shell: bash
-        run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
-        if: steps.section-startup.outcome
+  #     - name: Print Network Log Stats at start
+  #       shell: bash
+  #       run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+  #       if: steps.section-startup.outcome
 
-      - name: Wait for all nodes to join
-        shell: bash
-        # we are not running with 'always-joinable' set, so we should not have the full 33 nodes as yet.
-        run: NODE_COUNT=28 ./resources/scripts/wait_for_nodes_to_join.sh
-        timeout-minutes: 5
+  #     - name: Wait for all nodes to join
+  #       shell: bash
+  #       # we are not running with 'always-joinable' set, so we should not have the full 33 nodes as yet.
+  #       run: NODE_COUNT=28 ./resources/scripts/wait_for_nodes_to_join.sh
+  #       timeout-minutes: 5
 
-      - name: Is the network split and ready?
-        shell: bash
-        run: ./resources/scripts/network_is_ready.sh
-        timeout-minutes: 5
+  #     - name: Is the network split and ready?
+  #       shell: bash
+  #       run: ./resources/scripts/network_is_ready.sh
+  #       timeout-minutes: 5
 
-      - name: Print Network Log Stats after nodes joined
-        shell: bash
-        run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+  #     - name: Print Network Log Stats after nodes joined
+  #       shell: bash
+  #       run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
 
-      - name: ubuntu install zsh
-        run: |
-          sudo apt-get -y install zsh
+  #     - name: ubuntu install zsh
+  #       run: |
+  #         sudo apt-get -y install zsh
 
-      - name: Run network asserts one by one
-        shell: bash
-        # here test-threads=1 is important so we dont pollute log counts by running tests in parallel
-        run: cd sn && cargo test --release --features=always-joinable,test-utils -- --ignored network_assert --test-threads=1 --skip health && sleep $POST_TEST_SLEEP
-        timeout-minutes: 5
-        continue-on-error: true
+  #     - name: Run network asserts one by one
+  #       shell: bash
+  #       # here test-threads=1 is important so we dont pollute log counts by running tests in parallel
+  #       run: cd sn && cargo test --release --features=always-joinable,test-utils -- --ignored network_assert --test-threads=1 --skip health && sleep $POST_TEST_SLEEP
+  #       timeout-minutes: 5
+  #       continue-on-error: true
 
-      # many_clients test
-      - name: many client tests
-        run: cd sn && cargo test --release --features=always-joinable,test-utils -- from_many_clients  && sleep $POST_TEST_SLEEP
-        timeout-minutes: 15
+  #     # many_clients test
+  #     - name: many client tests
+  #       run: cd sn && cargo test --release --features=always-joinable,test-utils -- from_many_clients  && sleep $POST_TEST_SLEEP
+  #       timeout-minutes: 15
 
-      # a catchall to ensure any new client api tests are run (ideally any major new section should have its own test run)
-      - name: Initial client tests... (unix)
-        shell: zsh {0}
-        # always joinable not actually needed here, but should speed up compilation as we've just built with it
-        run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client --skip client_api::reg --skip client_api::file --test-threads=2 && sleep $POST_TEST_SLEEP
-        timeout-minutes: 7
-
-
-      # register api
-      - name: Client reg tests against local network (unix)
-        shell: zsh {0}
-        run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client_api::reg --test-threads=1 --skip ae --skip batching && sleep $POST_TEST_SLEEP
-        timeout-minutes: 10
+  #     # a catchall to ensure any new client api tests are run (ideally any major new section should have its own test run)
+  #     - name: Initial client tests... (unix)
+  #       shell: zsh {0}
+  #       # always joinable not actually needed here, but should speed up compilation as we've just built with it
+  #       run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client --skip client_api::reg --skip client_api::file --test-threads=2 && sleep $POST_TEST_SLEEP
+  #       timeout-minutes: 7
 
 
-      # register api batching check, only run this once as it's slow, and we verify the basic tests above
-      - name: Client register batching
-        shell: bash
-        run: cd sn && cargo test --release --features=always-joinable,test-utils -- register_batching --test-threads=1 --skip ae && sleep $POST_TEST_SLEEP
-        timeout-minutes: 10
-
-      # file api
-      - name: client file tests against local network (unix)
-        shell: zsh {0}
-        run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client_api::file --test-threads=1 --skip ae --skip from_many_clients  && sleep $POST_TEST_SLEEP
-        timeout-minutes: 25
+  #     # register api
+  #     - name: Client reg tests against local network (unix)
+  #       shell: zsh {0}
+  #       run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client_api::reg --test-threads=1 --skip ae --skip batching && sleep $POST_TEST_SLEEP
+  #       timeout-minutes: 10
 
 
-      # ae tests api
-      - name: client ae tests against local network (unix)
-        shell: zsh {0}
-        run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- ae_checks --test-threads=2 && sleep $POST_TEST_SLEEP
-        timeout-minutes: 15
-        env:
-          SN_AE_WAIT: 10
+  #     # register api batching check, only run this once as it's slow, and we verify the basic tests above
+  #     - name: Client register batching
+  #       shell: bash
+  #       run: cd sn && cargo test --release --features=always-joinable,test-utils -- register_batching --test-threads=1 --skip ae && sleep $POST_TEST_SLEEP
+  #       timeout-minutes: 10
 
-      - name: Run example app for file API against local network
-        timeout-minutes: 10
-        shell: bash
-        run: cd sn && cargo run  --release  --features=always-joinable,test-utils --example client_files
+  #     # file api
+  #     - name: client file tests against local network (unix)
+  #       shell: zsh {0}
+  #       run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- client_api::file --test-threads=1 --skip ae --skip from_many_clients  && sleep $POST_TEST_SLEEP
+  #       timeout-minutes: 25
 
-      # # many client connections
-      # - name: many client test against local network
-      #   shell: bash
-      #   run: cd sn && cargo test --release --features=always-joinable,test-utils -- from_many_clients  && sleep $POST_TEST_SLEEP
-      #   timeout-minutes: 20
-      #   env:
-      #     SN_QUERY_TIMEOUT: 240 # 240 secs
 
-      - name: Are nodes still running...?
-        shell: bash
-        timeout-minutes: 1
-        if: failure()
-        continue-on-error: true
-        run: |
-          echo "$(pgrep sn_node | wc -l) nodes still running"
-          ls $HOME/.safe/node/local-test-network
+  #     # ae tests api
+  #     - name: client ae tests against local network (unix)
+  #       shell: zsh {0}
+  #       run: cd sn && repeat 5 cargo test --release --features=always-joinable,test-utils -- ae_checks --test-threads=2 && sleep $POST_TEST_SLEEP
+  #       timeout-minutes: 15
+  #       env:
+  #         SN_AE_WAIT: 10
 
-      - name: Print Network Log Stats
-        shell: bash
-        continue-on-error: true
-        run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+  #     - name: Run example app for file API against local network
+  #       timeout-minutes: 10
+  #       shell: bash
+  #       run: cd sn && cargo run  --release  --features=always-joinable,test-utils --example client_files
 
-      - name: Upload Node Logs
-          # Upload artifacts.
-        uses: actions/upload-artifact@v2
-        with:
-          name: sn_node_logs_e2e_split_${{matrix.os}}
-          path: ~/.safe/node/local-test-network/**/*.log*
-        if: failure()
-        continue-on-error: true
+  #     # # many client connections
+  #     # - name: many client test against local network
+  #     #   shell: bash
+  #     #   run: cd sn && cargo test --release --features=always-joinable,test-utils -- from_many_clients  && sleep $POST_TEST_SLEEP
+  #     #   timeout-minutes: 20
+  #     #   env:
+  #     #     SN_QUERY_TIMEOUT: 240 # 240 secs
 
-      # if we don't clean up, the .safe folder might persist between runs
-      - name: Cleanup self-hosted runner
-        if: matrix.os == 'self-hosted-ubuntu' && always()
-        run: |
-          rm -rf ~/.safe
-          killall -9 sn_node
+  #     - name: Are nodes still running...?
+  #       shell: bash
+  #       timeout-minutes: 1
+  #       if: failure()
+  #       continue-on-error: true
+  #       run: |
+  #         echo "$(pgrep sn_node | wc -l) nodes still running"
+  #         ls $HOME/.safe/node/local-test-network
+
+  #     - name: Print Network Log Stats
+  #       shell: bash
+  #       continue-on-error: true
+  #       run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+
+  #     - name: Upload Node Logs
+  #         # Upload artifacts.
+  #       uses: actions/upload-artifact@v2
+  #       with:
+  #         name: sn_node_logs_e2e_split_${{matrix.os}}
+  #         path: ~/.safe/node/local-test-network/**/*.log*
+  #       if: failure()
+  #       continue-on-error: true
+
+  #     # if we don't clean up, the .safe folder might persist between runs
+  #     - name: Cleanup self-hosted runner
+  #       if: matrix.os == 'self-hosted-ubuntu' && always()
+  #       run: |
+  #         rm -rf ~/.safe
+  #         killall -9 sn_node
 
 
   api:
