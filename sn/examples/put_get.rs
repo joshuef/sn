@@ -139,7 +139,6 @@ async fn upload_data_using_fresh_client(iteration: usize) -> Result<(BytesAddres
         read_network_conn_info().map_err(|_e| Error::NoNetworkKnowledge)?;
     let config = ClientConfig::new(None, None, genesis_key, None, None, None, None).await;
     let client = Client::new(config, bootstrap_nodes, None).await?;
-    // let one_mb = 1024;
     let one_mb = 1024 * 1024;
     // start small and build up
     let bytes = random_bytes(one_mb * iteration);
