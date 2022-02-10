@@ -14,7 +14,6 @@ use tracing::{debug, warn};
 
 use tiny_keccak::{Hasher, Sha3};
 
-// use eyre::{Context;
 use safe_network::{
     client::{utils::test_utils::read_network_conn_info, Client, ClientConfig, Error, Result},
     types::{utils::random_bytes, BytesAddress, Scope},
@@ -77,11 +76,10 @@ pub async fn run_chunk_soak() -> Result<()> {
     let mut put_tasks = vec![];
     // i is used to determine uppload size, so 0 is 0 bytes, which fails
     for i in 1..files_to_put + 1 {
-
         let client = client.clone();
         let all_data_put = all_data_put.clone();
         let put_handle: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
-            let (address, hash) = upload_data_using_fresh_client(client, i).await?;
+            let (address, hash) = upload_data_using_fresh_client(i).await?;
             all_data_put.write().await.push((address, hash));
             Ok(())
         });
@@ -135,10 +133,7 @@ pub async fn run_chunk_soak() -> Result<()> {
     Ok(())
 }
 
-async fn upload_data_using_fresh_client(
-    _client: Client,
-    iteration: usize,
-) -> Result<(BytesAddress, [u8; 32])> {
+async fn upload_data_using_fresh_client(iteration: usize) -> Result<(BytesAddress, [u8; 32])> {
     // Now we upload the data.
     let (genesis_key, bootstrap_nodes) =
         read_network_conn_info().map_err(|_e| Error::NoNetworkKnowledge)?;
@@ -162,10 +157,8 @@ async fn upload_data_using_fresh_client(
     println!("Storing bytes.len : {bytes_len:?} w/ hash {:?}", output);
 
     let address = client.upload(bytes, Scope::Public).await?;
-    // let address = client.upload_and_verify(bytes, Scope::Public).await?;
 
     println!("Bytes stored at xorname: {:?}", address);
-    // println!("Bytes stored and verified at xorname: {:?}", address);
 
     Ok((address, output))
 }

@@ -130,7 +130,7 @@ pub(crate) fn data_copy_count() -> usize {
     }
 }
 
-#[cfg(any(test, feature="test-utils"))]
+#[cfg(any(test, feature = "test-utils"))]
 use std::sync::Once;
 
 #[cfg(test)]
@@ -207,10 +207,10 @@ where
     }
 }
 
-#[cfg(any(test, feature="test-utils"))]
+#[cfg(any(test, feature = "test-utils"))]
 static INIT: Once = Once::new();
 
-#[cfg(any(test, feature="test-utils"))]
+#[cfg(any(test, feature = "test-utils"))]
 /// Initialise logger for tests, this is run only once, even if called multiple times.
 pub fn init_test_logger() {
     INIT.call_once(|| {
