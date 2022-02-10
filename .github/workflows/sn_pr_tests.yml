@@ -461,13 +461,17 @@ jobs:
         shell: bash
         run: cd sn && cargo run  --release  --features=always-joinable,test-utils --example client_files
 
-      # # many client connections
-      # - name: many client test against local network
-      #   shell: bash
-      #   run: cd sn && cargo test --release --features=always-joinable,test-utils -- from_many_clients  && sleep $POST_TEST_SLEEP
-      #   timeout-minutes: 20
-      #   env:
-      #     SN_QUERY_TIMEOUT: 240 # 240 secs
+
+      - name: Run example app for file API against local network
+        timeout-minutes: 10
+        shell: bash
+        run: cd sn && cargo run  --release  --features=always-joinable,test-utils --example client_files
+
+      # many client connections
+      - name: many client test against local network
+        shell: bash
+        run: cd sn && cargo test --release --features=always-joinable,test-utils -- from_many_clients  && sleep $POST_TEST_SLEEP
+        timeout-minutes: 20
 
       - name: Are nodes still running...?
         shell: bash

@@ -71,23 +71,13 @@ pub async fn run_chunk_soak() -> Result<()> {
     let files_to_put = files_count();
 
     let config = ClientConfig::new(None, None, genesis_key, None, None, None, None).await;
-    // let max_batch_count = 25;
-    // let batches = files_to_put / max_batch_count;
 
     let client = Client::new(config.clone(), bootstrap_nodes.clone(), None).await?;
 
-    // let mut prev_max = 0;
     let mut put_tasks = vec![];
     // i is used to determine uppload size, so 0 is 0 bytes, which fails
     for i in 1..files_to_put + 1 {
-        // let min = if i == 0 { 1 } else { prev_max };
-        // let max = min + max_batch_count;
 
-        // println!("Batching: {min} to {max}");
-
-        // prev_max = max;
-        // so we dont start w/ 0 file size
-        // for j in min..max {
         let client = client.clone();
         let all_data_put = all_data_put.clone();
         let put_handle: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
@@ -97,13 +87,6 @@ pub async fn run_chunk_soak() -> Result<()> {
         });
 
         put_tasks.push(put_handle);
-        // }
-
-        // assert_eq!(
-        //     all_data_put.read().await.len(),
-        //     max - 1,
-        //     "put data len is same as we tried to put"
-        // );
     }
 
     futures::future::join_all(put_tasks).await;
@@ -113,7 +96,6 @@ pub async fn run_chunk_soak() -> Result<()> {
         "put data len is same as we tried to put"
     );
 
-    // let config = ClientConfig::new(None, None, genesis_key, None, Some(QUERY_TIMEOUT), None).await;
     let client = Client::new(config, bootstrap_nodes, None).await?;
 
     println!("Now we retrieve the data");
