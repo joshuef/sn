@@ -152,7 +152,7 @@ pub async fn run_split() -> Result<()> {
     // Now we add more nodes
     // ======================
 
-    let additional_node_count_str = &ADDITIONAL_NODES_TO_SPLIT.to_string();
+    let additional_node_count = ADDITIONAL_NODES_TO_SPLIT;
 
     sn_launch_tool_args.push("--add");
     sn_launch_tool_args.push("-n");
