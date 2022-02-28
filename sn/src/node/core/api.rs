@@ -8,18 +8,20 @@
 
 use super::{delivery_group, Comm, Node};
 
-use crate::messaging::{
+use crate::node::{
+    api::cmds::Cmd,
+    error::{Error, Result},
+    Event, NodeInfo,
+};
+use crate::UsedSpace;
+use sn_interface::messaging::{
     system::{JoinResponse, MembershipState, NodeState, SigShare, SystemMsg},
     WireMsg,
 };
-use crate::node::{
-    api::cmds::Cmd,
-    error::Result,
-    network_knowledge::{NetworkKnowledge, SectionAuthorityProvider, SectionKeyShare},
-    Event, NodeInfo,
+use sn_interface::network_knowledge::{
+    NetworkKnowledge, SectionAuthorityProvider, SectionKeyShare,
 };
-use crate::types::{log_markers::LogMarker, Peer};
-use crate::UsedSpace;
+use sn_interface::types::{log_markers::LogMarker, Peer};
 
 use secured_linked_list::SecuredLinkedList;
 use std::{collections::BTreeSet, net::SocketAddr, path::PathBuf};
@@ -100,7 +102,10 @@ impl Node {
         data: &[u8],
         public_key: &bls::PublicKey,
     ) -> Result<(usize, bls::SignatureShare)> {
-        self.section_keys_provider.sign_with(data, public_key).await
+        self.section_keys_provider
+            .sign_with(data, public_key)
+            .await
+            .map_err(Error::from)
     }
 
     /// Returns the current BLS public key set
@@ -113,14 +118,19 @@ impl Node {
         &self,
         name: &XorName,
     ) -> Result<SectionAuthorityProvider> {
-        self.network_knowledge.section_by_name(name)
+        self.network_knowledge
+            .section_by_name(name)
+            .map_err(Error::from)
     }
 
     /// Returns our key share in the current BLS group if this node is a member of one, or
     /// `Error::MissingSecretKeyShare` otherwise.
     pub(crate) async fn key_share(&self) -> Result<SectionKeyShare> {
         let section_key = self.network_knowledge.section_key().await;
-        self.section_keys_provider.key_share(&section_key).await
+        self.section_keys_provider
+            .key_share(&section_key)
+            .await
+            .map_err(Error::from)
     }
 
     pub(crate) async fn send_event(&self, event: Event) {

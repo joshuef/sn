@@ -14,7 +14,7 @@ use hmac::Hmac;
 use rand::rngs::StdRng;
 use rand_core::SeedableRng;
 use safe_network::client::client_api::Client;
-use safe_network::types::{Keypair, RegisterAddress};
+use sn_interface::types::{Keypair, RegisterAddress};
 use sha3::Sha3_256;
 use std::{
     collections::HashSet,
@@ -512,7 +512,7 @@ mod tests {
     use super::*;
     use anyhow::{Context, Result};
     use proptest::prelude::*;
-    use safe_network::types::PublicKey;
+    use sn_interface::types::PublicKey;
 
     #[test]
     fn get_deterministic_pk_from_known_seed() -> Result<()> {

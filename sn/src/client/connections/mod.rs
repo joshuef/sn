@@ -9,11 +9,12 @@
 mod listeners;
 mod messaging;
 
-use crate::messaging::{
+use sn_interface::messaging::{
     data::{CmdError, OperationId, QueryResponse},
     MsgId,
 };
-use crate::types::{prefix_map::NetworkPrefixMap, PeerLinks};
+use sn_interface::network_knowledge::prefix_map::NetworkPrefixMap;
+use sn_interface::types::PeerLinks;
 
 use dashmap::DashMap;
 use qp2p::Endpoint;

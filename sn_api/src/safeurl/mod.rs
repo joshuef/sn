@@ -15,7 +15,7 @@ mod xorurl_media_types;
 
 pub use errors::{Error, Result};
 use multibase::{decode as base_decode, encode as base_encode, Base};
-use safe_network::types::{BytesAddress, DataAddress, RegisterAddress, SafeKeyAddress, Scope};
+use sn_interface::types::{BytesAddress, DataAddress, RegisterAddress, SafeKeyAddress, Scope};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tracing::{info, trace, warn};
@@ -1207,7 +1207,7 @@ mod tests {
     use super::*;
     use color_eyre::{eyre::bail, eyre::eyre, Result};
     use rand::Rng;
-    use safe_network::types::{register::EntryHash, BytesAddress};
+    use sn_interface::types::{register::EntryHash, BytesAddress};
 
     macro_rules! verify_expected_result {
             ($result:expr, $pattern:pat $(if $cond:expr)?) => {

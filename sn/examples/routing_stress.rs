@@ -38,14 +38,14 @@ use tracing_subscriber::EnvFilter;
 use xor_name::{Prefix, XorName};
 use yansi::{Color, Style};
 
-use safe_network::messaging::{
-    data::Error::FailedToWriteFile, system::SystemMsg, DstLocation, MsgId,
-};
 use safe_network::node::{
     create_test_max_capacity_and_root_storage, Config, Event as RoutingEvent, NodeApi,
     NodeElderChange,
 };
-use safe_network::types::Cache;
+use sn_interface::messaging::{
+    data::Error::FailedToWriteFile, system::SystemMsg, DstLocation, MsgId,
+};
+use sn_interface::types::Cache;
 
 // Minimal delay between two consecutive prints of the network status.
 const MIN_PRINT_DELAY: Duration = Duration::from_millis(500);

@@ -7,15 +7,17 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::data_copy_count;
-use crate::messaging::{
+use crate::node::{api::cmds::Cmd, core::Node, Result};
+use sn_interface::messaging::{
     data::{CmdError, DataCmd, DataQuery, Error as ErrorMsg, ServiceMsg},
     system::{NodeQueryResponse, SystemMsg},
     AuthorityProof, DstLocation, EndUser, MsgId, ServiceAuth, WireMsg,
 };
-use crate::node::{api::cmds::Cmd, core::Node, Result};
-use crate::types::{log_markers::LogMarker, register::User, Peer, PublicKey, ReplicatedData};
+use sn_interface::types::{
+    log_markers::LogMarker, register::User, Peer, PublicKey, ReplicatedData,
+};
 
-use crate::messaging::system::NodeEvent;
+use sn_interface::messaging::system::NodeEvent;
 use xor_name::XorName;
 
 impl Node {

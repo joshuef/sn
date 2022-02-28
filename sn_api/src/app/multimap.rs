@@ -13,7 +13,7 @@ use crate::{Error, Result, Safe};
 
 use log::debug;
 use rand::Rng;
-use safe_network::types::DataAddress;
+use sn_interface::types::DataAddress;
 use std::collections::BTreeSet;
 use xor_name::XorName;
 

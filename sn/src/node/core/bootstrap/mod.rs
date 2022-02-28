@@ -15,7 +15,7 @@ pub(crate) use relocate::JoiningAsRelocated;
 #[cfg(not(test))]
 use crate::node::Error;
 use crate::node::Result;
-use crate::types::prefix_map::NetworkPrefixMap;
+use sn_interface::network_knowledge::prefix_map::NetworkPrefixMap;
 
 use bls::PublicKey as BlsPublicKey;
 use std::{collections::HashSet, net::SocketAddr};

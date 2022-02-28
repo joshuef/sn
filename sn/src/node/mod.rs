@@ -19,9 +19,8 @@ mod ed25519;
 mod error;
 mod logging;
 mod messages;
-mod network_knowledge;
 
-use crate::types::{Peer, PublicKey};
+use sn_interface::types::{Peer, PublicKey};
 
 use ed25519_dalek::Keypair;
 use std::{
@@ -37,11 +36,12 @@ pub use self::{
         NodeApi,
     },
     cfg::config_handler::{add_connection_info, set_connection_info, Config},
-    dkg::SectionAuthUtils,
     error::{Error, Result},
-    network_knowledge::node_state::{FIRST_SECTION_MAX_AGE, FIRST_SECTION_MIN_AGE, MIN_ADULT_AGE},
 };
 pub use qp2p::{Config as NetworkConfig, SendStream};
+pub use sn_interface::network_knowledge::{
+    FIRST_SECTION_MAX_AGE, FIRST_SECTION_MIN_AGE, MIN_ADULT_AGE,
+};
 pub use xor_name::{Prefix, XorName, XOR_NAME_LEN}; // TODO remove pub on API update
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -50,22 +50,10 @@ pub use test_utils::*;
 #[cfg(test)]
 pub(crate) use dkg::test_utils::section_signed;
 #[cfg(test)]
-pub(crate) use network_knowledge::test_utils::gen_section_authority_provider;
+pub(crate) use sn_interface::network_knowledge::test_utils::gen_section_authority_provider;
 
-pub(crate) use self::{core::MIN_LEVEL_WHEN_FULL, network_knowledge::SectionAuthorityProvider};
+pub(crate) use self::core::MIN_LEVEL_WHEN_FULL;
 
-/// Recommended section size.
-/// The section will keep adding nodes when requested by the upper layers, until it can split.
-/// A split happens if both post-split sections would have at least this number of nodes.
-pub(crate) fn recommended_section_size() -> usize {
-    2 * crate::elder_count()
-}
-
-/// SuperMajority of a given group (i.e. > 2/3)
-#[inline]
-pub(crate) const fn supermajority(group_size: usize) -> usize {
-    1 + group_size * 2 / 3
-}
 
 /// Information and state of our node
 #[derive(Clone, custom_debug::Debug)]

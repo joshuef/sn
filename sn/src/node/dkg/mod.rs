@@ -17,9 +17,8 @@ pub(crate) use self::{
     dkg_msgs_utils::{DkgFailureSigSetUtils, DkgSessionIdUtils},
     voter::DkgVoter,
 };
-pub(crate) use crate::messaging::system::{KeyedSig, SigShare};
-pub use section_signed::SectionAuthUtils;
 use serde::Serialize;
+pub(crate) use sn_interface::messaging::system::{KeyedSig, SigShare};
 
 // Verify the integrity of `message` against `sig`.
 pub(crate) fn verify_sig<T: Serialize>(sig: &KeyedSig, message: &T) -> bool {

@@ -8,8 +8,9 @@
 
 use std::mem;
 
-use crate::messaging::system::SectionAuth;
-use crate::node::{dkg::KeyedSig, network_knowledge::SectionAuthorityProvider};
+use crate::node::dkg::KeyedSig;
+use sn_interface::messaging::system::SectionAuth;
+use sn_interface::network_knowledge::SectionAuthorityProvider;
 use xor_name::Prefix;
 
 type Entry = (SectionAuth<SectionAuthorityProvider>, KeyedSig);

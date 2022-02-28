@@ -8,13 +8,13 @@
 
 use super::Client;
 use crate::client::Error;
-use crate::messaging::{
+use backoff::{backoff::Backoff, ExponentialBackoff};
+use bytes::Bytes;
+use sn_interface::messaging::{
     data::{DataCmd, ServiceMsg},
     ServiceAuth, WireMsg,
 };
-use crate::types::{PublicKey, Signature};
-use backoff::{backoff::Backoff, ExponentialBackoff};
-use bytes::Bytes;
+use sn_interface::types::{PublicKey, Signature};
 use tokio::time::Duration;
 use xor_name::XorName;
 

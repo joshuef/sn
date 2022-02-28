@@ -12,9 +12,9 @@ mod msg_count;
 use back_pressure::BackPressure;
 use msg_count::MsgCount;
 
-use crate::messaging::{system::LoadReport, MsgId, WireMsg};
 use crate::node::error::{Error, Result};
-use crate::types::{log_markers::LogMarker, Peer, PeerLinks, SendToOneError};
+use sn_interface::messaging::{system::LoadReport, MsgId, WireMsg};
+use sn_interface::types::{log_markers::LogMarker, Peer, PeerLinks, SendToOneError};
 
 use bytes::Bytes;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -485,14 +485,14 @@ pub(crate) enum SendStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messaging::data::{DataQuery, ServiceMsg};
-    use crate::messaging::{DstLocation, MsgId, MsgKind, ServiceAuth};
-    use crate::types::{ChunkAddress, Keypair, Peer};
     use assert_matches::assert_matches;
     use eyre::Result;
     use futures::future;
     use qp2p::Config;
     use rand::rngs::OsRng;
+    use sn_interface::messaging::data::{DataQuery, ServiceMsg};
+    use sn_interface::messaging::{DstLocation, MsgId, MsgKind, ServiceAuth};
+    use sn_interface::types::{ChunkAddress, Keypair, Peer};
     use std::{net::Ipv4Addr, time::Duration};
     use tokio::{net::UdpSocket, sync::mpsc, time};
     use xor_name::XorName;

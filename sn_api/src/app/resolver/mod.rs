@@ -250,7 +250,7 @@ mod tests {
     use anyhow::{anyhow, bail, Context, Result};
     use bytes::Bytes;
     use rand::{distributions::Alphanumeric, thread_rng, Rng};
-    use safe_network::types::DataAddress;
+    use sn_interface::types::DataAddress;
     use std::io::Read;
 
     #[tokio::test]

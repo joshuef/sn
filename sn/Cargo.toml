@@ -69,6 +69,7 @@ resource_proof = "1.0.38"
 rmp-serde = "1.0.0"
 secured_linked_list = "~0.5.0"
 self_encryption = "0.27.1"
+sn_interface = { path = "../sn_interface", version = "^0.1.0" }
 serde = { version = "1.0.111", features = ["derive", "rc"] }
 serde_bytes = "~0.11.5"
 serde_json = "~1.0.53"

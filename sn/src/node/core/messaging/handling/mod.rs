@@ -19,23 +19,23 @@ mod update_section;
 pub(crate) use proposals::handle_proposal;
 
 use crate::dbs::Error as DbError;
-use crate::messaging::{
+use crate::node::{
+    api::cmds::Cmd,
+    core::{DkgSessionInfo, Node, Proposal as CoreProposal, DATA_QUERY_LIMIT},
+    messages::{NodeMsgAuthorityUtils, WireMsgUtils},
+    Error, Event, MessageReceived, Result, MIN_LEVEL_WHEN_FULL,
+};
+use sn_interface::messaging::{
     data::{ServiceMsg, StorageLevel},
     signature_aggregator::Error as AggregatorError,
     system::{
-        JoinRequest, JoinResponse, NodeCmd, NodeEvent, NodeQuery, SectionAuth as SystemSectionAuth,
-        SystemMsg,
+        JoinRequest, JoinResponse, NodeCmd, NodeEvent, NodeQuery, Proposal as ProposalMsg,
+        SectionAuth as SystemSectionAuth, SystemMsg,
     },
     AuthorityProof, DstLocation, MsgId, MsgType, NodeMsgAuthority, SectionAuth, WireMsg,
 };
-use crate::node::{
-    api::cmds::Cmd,
-    core::{DkgSessionInfo, Node, DATA_QUERY_LIMIT},
-    messages::{NodeMsgAuthorityUtils, WireMsgUtils},
-    network_knowledge::NetworkKnowledge,
-    Error, Event, MessageReceived, Result, MIN_LEVEL_WHEN_FULL,
-};
-use crate::types::{log_markers::LogMarker, Peer, PublicKey};
+use sn_interface::network_knowledge::NetworkKnowledge;
+use sn_interface::types::{log_markers::LogMarker, Peer, PublicKey};
 
 use bls::PublicKey as BlsPublicKey;
 use bytes::Bytes;
@@ -584,9 +584,19 @@ impl Node {
 
                 trace!("Handling msg: Propose from {}: {:?}", sender, msg_id);
 
+                // lets convert our message into a usable proposal for core
+                let core_proposal = match proposal {
+                    ProposalMsg::Offline(node_state) => {
+                        CoreProposal::Offline(node_state.into_state())
+                    }
+                    ProposalMsg::SectionInfo(sap) => CoreProposal::SectionInfo(sap.into_state()),
+                    ProposalMsg::NewElders(sap) => CoreProposal::NewElders(sap.into_authed_state()),
+                    ProposalMsg::JoinsAllowed(allowed) => CoreProposal::JoinsAllowed(allowed),
+                };
+
                 handle_proposal(
                     msg_id,
-                    proposal.into_state(),
+                    core_proposal,
                     sig_share,
                     sender,
                     &self.network_knowledge,

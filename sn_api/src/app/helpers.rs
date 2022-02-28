@@ -10,7 +10,7 @@
 use crate::{Error, Result};
 use ::time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-use safe_network::types::{Error as SafeNdError, PublicKey, Token};
+use sn_interface::types::{Error as SafeNdError, PublicKey, Token};
 use std::{
     str::{self, FromStr},
     time,

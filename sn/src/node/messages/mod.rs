@@ -10,13 +10,14 @@ mod msg_authority;
 
 pub(super) use self::msg_authority::NodeMsgAuthorityUtils;
 
-use crate::messaging::{
+use crate::node::{Error, NodeInfo, Result};
+use sn_interface::messaging::{
     system::{SigShare, SystemMsg},
     AuthorityProof, BlsShareAuth, DstLocation, MsgId, MsgKind, NodeAuth, WireMsg,
 };
-use crate::node::{network_knowledge::SectionKeyShare, Error, NodeInfo, Result};
 
 use bls::PublicKey as BlsPublicKey;
+use sn_interface::network_knowledge::SectionKeyShare;
 use xor_name::XorName;
 
 // Utilities for WireMsg.

@@ -8,11 +8,11 @@
 
 use crate::node::XorName;
 
-use crate::messaging::data::{chunk_operation_id, OperationId};
-use crate::types::ChunkAddress;
-use crate::DEFAULT_ELDER_COUNT;
 use dashmap::DashMap;
 use itertools::Itertools;
+use sn_interface::messaging::data::{chunk_operation_id, OperationId};
+use sn_interface::network_knowledge::DEFAULT_ELDER_COUNT;
+use sn_interface::types::ChunkAddress;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -265,9 +265,9 @@ impl Liveness {
 mod tests {
     use super::{Liveness, EXCESSIVE_OPS_TOLERANCE};
 
-    use crate::messaging::data::chunk_operation_id;
     use crate::node::Error;
-    use crate::types::ChunkAddress;
+    use sn_interface::messaging::data::chunk_operation_id;
+    use sn_interface::types::ChunkAddress;
 
     use crate::node::core::data::records::liveness_tracking::MIN_PENDING_OPS;
     use itertools::Itertools;

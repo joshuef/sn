@@ -9,11 +9,11 @@
 use super::Client;
 
 use crate::client::Error;
-use crate::messaging::data::{
+use sn_interface::messaging::data::{
     CreateRegister, DataCmd, DataQuery, DeleteRegister, EditRegister, QueryResponse, RegisterCmd,
     RegisterQuery, SignedRegisterCreate, SignedRegisterDelete, SignedRegisterEdit,
 };
-use crate::types::{
+use sn_interface::types::{
     register::{Entry, EntryHash, Permissions, Policy, Register, User},
     RegisterAddress as Address,
 };
@@ -76,7 +76,7 @@ impl Client {
         let cmd = DataCmd::Register(RegisterCmd::Create {
             cmd: SignedRegisterCreate {
                 op,
-                auth: crate::messaging::ServiceAuth {
+                auth: sn_interface::messaging::ServiceAuth {
                     public_key: self.keypair.public_key(),
                     signature,
                 },
@@ -100,7 +100,7 @@ impl Client {
 
         let update = SignedRegisterDelete {
             op,
-            auth: crate::messaging::ServiceAuth {
+            auth: sn_interface::messaging::ServiceAuth {
                 public_key: self.keypair.public_key(),
                 signature,
             },
@@ -140,7 +140,7 @@ impl Client {
 
         let edit = SignedRegisterEdit {
             op,
-            auth: crate::messaging::ServiceAuth {
+            auth: sn_interface::messaging::ServiceAuth {
                 public_key: self.keypair.public_key(),
                 signature,
             },
@@ -256,8 +256,8 @@ impl Client {
 }
 
 // temp dummy
-fn section_auth() -> crate::messaging::SectionAuth {
-    use crate::messaging::system::KeyedSig;
+fn section_auth() -> sn_interface::messaging::SectionAuth {
+    use sn_interface::messaging::system::KeyedSig;
 
     let sk = bls::SecretKey::random();
     let public_key = sk.public_key();
@@ -267,8 +267,8 @@ fn section_auth() -> crate::messaging::SectionAuth {
         public_key,
         signature,
     };
-    crate::messaging::SectionAuth {
-        src_name: crate::types::PublicKey::Bls(public_key).into(),
+    sn_interface::messaging::SectionAuth {
+        src_name: sn_interface::types::PublicKey::Bls(public_key).into(),
         sig,
     }
 }
@@ -282,17 +282,17 @@ mod tests {
         },
         Error,
     };
-    use crate::messaging::data::Error as ErrorMsg;
     use crate::retry_loop_for_pattern;
-    use crate::types::{
+    use eyre::{bail, eyre, Result};
+    use rand::Rng;
+    use sn_interface::messaging::data::Error as ErrorMsg;
+    use sn_interface::types::{
         log_markers::LogMarker,
         register::{
             Action, EntryHash, Permissions, Policy, PrivatePolicy, PublicPermissions, PublicPolicy,
             User,
         },
     };
-    use eyre::{bail, eyre, Result};
-    use rand::Rng;
     use std::{
         collections::{BTreeMap, BTreeSet},
         time::Instant,

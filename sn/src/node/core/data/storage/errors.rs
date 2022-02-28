@@ -6,8 +6,8 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::data::Error as ErrorMsg;
-use crate::types::convert_dt_error_to_error_msg;
+use sn_interface::messaging::data::Error as ErrorMsg;
+use sn_interface::types::convert_dt_error_to_error_msg;
 use std::io;
 use thiserror::Error;
 use xor_name::XorName;
@@ -30,7 +30,7 @@ pub enum Error {
     Io(#[from] io::Error),
     /// NetworkData error.
     #[error("Network data error:: {0}")]
-    NetworkData(#[from] crate::types::Error),
+    NetworkData(#[from] use sn_interface::types::Error),
     /// No filename found
     #[error("Path contains no file name")]
     NoFilename,

@@ -11,14 +11,6 @@
 use super::{Cmd, Comm, Dispatcher};
 
 use crate::dbs::UsedSpace;
-use crate::messaging::{
-    system::{
-        JoinAsRelocatedRequest, JoinRequest, JoinResponse, KeyedSig, MembershipState,
-        NodeState as NodeStateMsg, RelocateDetails, ResourceProofResponse, SectionAuth, SystemMsg,
-    },
-    AuthorityProof, DstLocation, MsgId, MsgKind, MsgType, NodeAuth,
-    SectionAuth as MsgKindSectionAuth, WireMsg,
-};
 use crate::node::{
     core::{
         relocation_check, ChurnId, ConnectionEvent, Node, Proposal, RESOURCE_PROOF_DATA_SIZE,
@@ -28,14 +20,22 @@ use crate::node::{
     dkg::test_utils::{prove, section_signed},
     ed25519,
     messages::{NodeMsgAuthorityUtils, WireMsgUtils},
-    network_knowledge::{
-        test_utils::*, NetworkKnowledge, NodeState, SectionAuthorityProvider, SectionKeyShare,
-    },
-    recommended_section_size, supermajority, Error, Event, NodeInfo, Result as RoutingResult,
-    FIRST_SECTION_MAX_AGE, FIRST_SECTION_MIN_AGE, MIN_ADULT_AGE,
+    Error, Event, NodeInfo, Result as RoutingResult
+
 };
-use crate::types::{Keypair, Peer, PublicKey};
+use sn_interface::network_knowledge::{
+    test_utils::*, NetworkKnowledge, NodeState, SectionAuthorityProvider, SectionKeyShare,FIRST_SECTION_MAX_AGE,     FIRST_SECTION_MIN_AGE, MIN_ADULT_AGE,supermajority,recommended_section_size
+};
 use crate::{elder_count, init_test_logger};
+use sn_interface::messaging::{
+    system::{
+        JoinAsRelocatedRequest, JoinRequest, JoinResponse, KeyedSig, MembershipState,
+        NodeState as NodeStateMsg, RelocateDetails, ResourceProofResponse, SectionAuth, SystemMsg,
+    },
+    AuthorityProof, DstLocation, MsgId, MsgKind, MsgType, NodeAuth,
+    SectionAuth as MsgKindSectionAuth, WireMsg,
+};
+use sn_interface::types::{Keypair, Peer, PublicKey};
 
 use assert_matches::assert_matches;
 use bls_dkg::message::Message;
@@ -499,7 +499,7 @@ async fn handle_online_cmd(
             Ok(MsgType::System {
                 msg:
                     SystemMsg::Propose {
-                        proposal: crate::messaging::system::Proposal::Offline(node_state),
+                        proposal: sn_interface::messaging::system::Proposal::Offline(node_state),
                         ..
                     },
                 ..
@@ -1035,7 +1035,7 @@ async fn relocation(relocated_peer_role: RelocatedPeerRole) -> Result<()> {
         if let Ok(MsgType::System {
             msg:
                 SystemMsg::Propose {
-                    proposal: crate::messaging::system::Proposal::Offline(node_state),
+                    proposal: sn_interface::messaging::system::Proposal::Offline(node_state),
                     ..
                 },
             ..
@@ -1102,7 +1102,7 @@ async fn message_to_self(dst: MessageDst) -> Result<()> {
     };
 
     let node_msg = SystemMsg::NodeMsgError {
-        error: crate::messaging::data::Error::FailedToWriteFile,
+        error: sn_interface::messaging::data::Error::FailedToWriteFile,
         correlation_id: MsgId::new(),
     };
     let wire_msg = WireMsg::single_src(&info, dst_location, node_msg.clone(), section_pk)?;

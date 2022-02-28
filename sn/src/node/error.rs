@@ -8,8 +8,8 @@
 
 use super::Prefix;
 
-use crate::messaging::data::Error as ErrorMsg;
-use crate::types::{convert_dt_error_to_error_msg, DataAddress, PublicKey};
+use sn_interface::messaging::data::Error as ErrorMsg;
+use sn_interface::types::{convert_dt_error_to_error_msg, DataAddress, PublicKey};
 
 use secured_linked_list::error::Error as SecuredLinkedListError;
 use std::io;
@@ -67,7 +67,7 @@ pub enum Error {
     #[error("Invalid section chain: {0}")]
     InvalidSectionChain(#[from] SecuredLinkedListError),
     #[error("Messaging protocol error: {0}")]
-    Messaging(#[from] crate::messaging::Error),
+    Messaging(#[from] sn_interface::messaging::Error),
     #[error("Invalid payload")]
     InvalidPayload,
     #[error("The section is currently set to not allow taking any new node")]
@@ -117,10 +117,13 @@ pub enum Error {
     Bincode(#[from] bincode::Error),
     /// Network service message error.
     #[error("Network service message error:: {0}")]
-    ServiceMsg(#[from] crate::messaging::data::Error),
+    ServiceMsg(#[from] sn_interface::messaging::data::Error),
     /// Network data error.
     #[error("Network data error:: {0}")]
-    NetworkData(#[from] crate::types::Error),
+    NetworkData(#[from] sn_interface::types::Error),
+    /// Network Knowledge error.
+    #[error("Network data error:: {0}")]
+    NetworkKnowledge(#[from] sn_interface::network_knowledge::Error),
     /// Data owner provided is invalid.
     #[error("Provided PublicKey is not a valid owner. Provided PublicKey: {0}")]
     InvalidOwner(PublicKey),

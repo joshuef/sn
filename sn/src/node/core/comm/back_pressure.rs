@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::system::{CpuLoad, LoadReport};
+use sn_interface::messaging::system::{CpuLoad, LoadReport};
 
 use futures::future::join;
 use itertools::Itertools;
@@ -233,21 +233,21 @@ fn evaluate(load: sysinfo::LoadAvg) -> LoadReport {
     }
 }
 
-impl LoadReport {
-    fn is_good(&self) -> bool {
-        self.mid_term.low && self.long_term.low && !self.short_term.critical
-    }
+// impl LoadReport {
+//     fn is_good(&self) -> bool {
+//         self.mid_term.low && self.long_term.low && !self.short_term.critical
+//     }
 
-    fn is_ok(&self) -> bool {
-        !self.is_good() && !self.mid_term.high && !self.long_term.moderate
-    }
+//     fn is_ok(&self) -> bool {
+//         !self.is_good() && !self.mid_term.high && !self.long_term.moderate
+//     }
 
-    fn is_bad(&self) -> bool {
-        self.short_term.critical
-            || self.mid_term.very_high
-            || self.mid_term.critical
-            || self.long_term.high
-            || self.long_term.very_high
-            || self.long_term.critical
-    }
-}
+//     fn is_bad(&self) -> bool {
+//         self.short_term.critical
+//             || self.mid_term.very_high
+//             || self.mid_term.critical
+//             || self.long_term.high
+//             || self.long_term.very_high
+//             || self.long_term.critical
+//     }
+// }

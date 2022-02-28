@@ -14,18 +14,20 @@ pub(crate) use self::liveness_tracking::Liveness;
 
 use crate::{
     data_copy_count,
-    messaging::{
-        data::{CmdError, DataQuery, MetadataExchange, StorageLevel},
-        system::{NodeCmd, NodeQuery, SystemMsg},
-        AuthorityProof, DstLocation, EndUser, MsgId, ServiceAuth, WireMsg,
-    },
     node::{
         core::{Cmd, Node, Prefix, MAX_WAITING_PEERS_PER_QUERY},
         error::convert_to_error_msg,
         messages::WireMsgUtils,
         Error, Result,
     },
-    types::{log_markers::LogMarker, Peer, PublicKey, ReplicatedData, ReplicatedDataAddress},
+};
+use sn_interface::messaging::{
+    data::{CmdError, DataQuery, MetadataExchange, StorageLevel},
+    system::{NodeCmd, NodeQuery, SystemMsg},
+    AuthorityProof, DstLocation, EndUser, MsgId, ServiceAuth, WireMsg,
+};
+use sn_interface::types::{
+    log_markers::LogMarker, Peer, PublicKey, ReplicatedData, ReplicatedDataAddress,
 };
 
 use itertools::Itertools;

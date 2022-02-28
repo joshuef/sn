@@ -9,12 +9,13 @@
 use super::{QueryResult, Session};
 
 use crate::client::{connections::CmdResponse, Error, Result};
-use crate::messaging::{
+use crate::{at_least_one_correct_elder, elder_count};
+use sn_interface::messaging::{
     data::{CmdError, DataQuery, QueryResponse},
     DstLocation, MsgId, MsgKind, ServiceAuth, WireMsg,
 };
-use crate::types::{prefix_map::NetworkPrefixMap, Peer, PeerLinks, PublicKey, SendToOneError};
-use crate::{at_least_one_correct_elder, elder_count};
+use sn_interface::network_knowledge::prefix_map::NetworkPrefixMap;
+use sn_interface::types::{Peer, PeerLinks, PublicKey, SendToOneError};
 
 use backoff::{backoff::Backoff, ExponentialBackoff};
 use bytes::Bytes;

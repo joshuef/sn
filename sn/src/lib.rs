@@ -48,11 +48,13 @@ mod dbs;
 /// Helpers for analysis of testnet logs
 mod testnet_grep;
 
+pub use sn_interface::network_knowledge::elder_count;
+
 pub use dbs::UsedSpace;
 
-pub mod messaging;
 pub mod node;
-pub mod types;
+
+mod utils;
 
 use tracing_core::{Event, Subscriber};
 use tracing_subscriber::{
@@ -64,12 +66,12 @@ use tracing_subscriber::{
     registry::LookupSpan,
 };
 
-/// Number of elders per section.
-pub(crate) const DEFAULT_ELDER_COUNT: usize = 7;
+// /// Number of elders per section.
+// pub(crate) const DEFAULT_ELDER_COUNT: usize = 7;
 /// Number of copies of a chunk
 pub(crate) const DEFAULT_DATA_COPY_COUNT: usize = 4;
 
-const SN_ELDER_COUNT: &str = "SN_ELDER_COUNT";
+// const SN_ELDER_COUNT: &str = "SN_ELDER_COUNT";
 const SN_DATA_COPY_COUNT: &str = "SN_DATA_COPY_COUNT";
 
 /// Max number of faulty Elders is assumed to be less than 1/3.
@@ -84,27 +86,27 @@ pub(crate) fn at_least_one_correct_elder() -> usize {
     max_num_faulty_elders() + 1
 }
 
-/// Get the expected elder count for our network.
-/// Defaults to DEFAULT_ELDER_COUNT, but can be overridden by the env var SN_ELDER_COUNT.
-pub(crate) fn elder_count() -> usize {
-    // if we have an env var for this, lets override
-    match std::env::var(SN_ELDER_COUNT) {
-        Ok(count) => match count.parse() {
-            Ok(count) => {
-                warn!(
-                    "ELDER_COUNT count set from env var SN_ELDER_COUNT: {:?}",
-                    SN_ELDER_COUNT
-                );
-                count
-            }
-            Err(error) => {
-                warn!("There was an error parsing {:?} env var. DEFAULT_ELDER_COUNT will be used: {:?}", SN_ELDER_COUNT, error);
-                DEFAULT_ELDER_COUNT
-            }
-        },
-        Err(_) => DEFAULT_ELDER_COUNT,
-    }
-}
+// /// Get the expected elder count for our network.
+// /// Defaults to DEFAULT_ELDER_COUNT, but can be overridden by the env var SN_ELDER_COUNT.
+// pub(crate) fn elder_count() -> usize {
+//     // if we have an env var for this, lets override
+//     match std::env::var(SN_ELDER_COUNT) {
+//         Ok(count) => match count.parse() {
+//             Ok(count) => {
+//                 warn!(
+//                     "ELDER_COUNT count set from env var SN_ELDER_COUNT: {:?}",
+//                     SN_ELDER_COUNT
+//                 );
+//                 count
+//             }
+//             Err(error) => {
+//                 warn!("There was an error parsing {:?} env var. DEFAULT_ELDER_COUNT will be used: {:?}", SN_ELDER_COUNT, error);
+//                 DEFAULT_ELDER_COUNT
+//             }
+//         },
+//         Err(_) => DEFAULT_ELDER_COUNT,
+//     }
+// }
 
 /// Get the expected chunk copy count for our network.
 /// Defaults to DEFAULT_DATA_COPY_COUNT, but can be overridden by the env var SN_DATA_COPY_COUNT.
@@ -228,8 +230,8 @@ pub fn init_test_logger() {
 mod tests {
     use crate::elder_count;
     use crate::testnet_grep::search_testnet_results_per_node;
-    use crate::types::log_markers::LogMarker;
     use eyre::Result;
+    use sn_interface::types::log_markers::LogMarker;
 
     // Check that with one split we have 14 elders.
     // This is intended to be run, just after split, in order to confirm splits are functioning correctly

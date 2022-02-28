@@ -8,8 +8,8 @@
 
 use super::{Error, Result};
 
-use crate::types::{Chunk, ChunkAddress};
 use crate::UsedSpace;
+use sn_interface::types::{Chunk, ChunkAddress};
 
 use bytes::Bytes;
 use std::path::{Path, PathBuf};
@@ -177,7 +177,7 @@ fn list_files_in(path: &Path) -> Result<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::utils::random_bytes;
+    use sn_interface::types::utils::random_bytes;
 
     use super::*;
     use futures::future::join_all;

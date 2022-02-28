@@ -6,16 +6,13 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::{
+use crate::node::{core::Proposal, XorName};
+use sn_interface::messaging::{
     system::{DkgFailureSigSet, KeyedSig, NodeState, SectionAuth, SystemMsg},
     DstLocation, MsgId, NodeMsgAuthority, WireMsg,
 };
-use crate::node::{
-    core::Proposal,
-    network_knowledge::{SectionAuthorityProvider, SectionKeyShare},
-    XorName,
-};
-use crate::types::Peer;
+use sn_interface::network_knowledge::{SectionAuthorityProvider, SectionKeyShare};
+use sn_interface::types::Peer;
 
 use bls::PublicKey as BlsPublicKey;
 use bytes::Bytes;

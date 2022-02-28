@@ -9,7 +9,7 @@
 use crate::{ipc::NodeConfig, Safe, SafeUrl};
 use anyhow::{anyhow, bail, Context, Result};
 use rand::{distributions::Alphanumeric, rngs::OsRng, thread_rng, Rng};
-use safe_network::types::{Keypair, PublicKey};
+use sn_interface::types::{Keypair, PublicKey};
 use std::{
     collections::{BTreeSet, HashMap},
     env::var,

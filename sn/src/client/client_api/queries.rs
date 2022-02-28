@@ -8,13 +8,13 @@
 
 use super::Client;
 use crate::client::{connections::QueryResult, errors::Error};
-use crate::messaging::{
+use bytes::Bytes;
+use rand::Rng;
+use sn_interface::messaging::{
     data::{DataQuery, ServiceMsg},
     ServiceAuth, WireMsg,
 };
-use crate::types::{PublicKey, Signature};
-use bytes::Bytes;
-use rand::Rng;
+use sn_interface::types::{PublicKey, Signature};
 use tracing::{debug, info_span};
 
 // We divide the total query timeout by this number.

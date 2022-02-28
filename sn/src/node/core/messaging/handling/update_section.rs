@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{api::cmds::Cmd, core::Node, Result};
-use crate::types::log_markers::LogMarker;
+use sn_interface::types::log_markers::LogMarker;
 use std::collections::BTreeSet;
 use xor_name::XorName;
 

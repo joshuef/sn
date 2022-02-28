@@ -70,7 +70,7 @@ where
 mod test {
     use super::EventStore;
     use crate::node::{Error, Result};
-    use crate::types::Token;
+    use sn_interface::types::Token;
     use std::path::Path;
     use tempfile::tempdir;
 

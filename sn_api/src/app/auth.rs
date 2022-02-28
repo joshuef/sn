@@ -16,7 +16,7 @@ use crate::{
     Error, Result,
 };
 use log::{debug, info};
-use safe_network::types::Keypair;
+use sn_interface::types::Keypair;
 use serde_json::json;
 
 // Method for requesting application's authorisation

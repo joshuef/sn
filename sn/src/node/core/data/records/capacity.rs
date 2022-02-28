@@ -6,11 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::{
-    messaging::data::StorageLevel,
-    node::{Prefix, XorName},
-};
+use crate::node::{Prefix, XorName};
 use itertools::Itertools;
+use sn_interface::messaging::data::StorageLevel;
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,

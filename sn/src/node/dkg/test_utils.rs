@@ -6,10 +6,10 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::{KeyedSig, SectionAuthUtils};
+use super::KeyedSig;
 
-use crate::messaging::system::SectionAuth;
 use crate::node::{Error, Result};
+use sn_interface::messaging::system::SectionAuth;
 
 use serde::Serialize;
 

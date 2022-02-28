@@ -15,14 +15,13 @@ mod register_apis;
 pub use register_apis::RegisterWriteAheadLog;
 
 use crate::client::{connections::Session, errors::Error, ClientConfig};
-use crate::messaging::{
+use crate::utils::read_prefix_map_from_disk;
+use sn_interface::messaging::{
     data::{CmdError, DataQuery, RegisterQuery, ServiceMsg},
     ServiceAuth, WireMsg,
 };
-use crate::types::{
-    prefix_map::NetworkPrefixMap, utils::read_prefix_map_from_disk, Chunk, Keypair, Peer,
-    PublicKey, RegisterAddress,
-};
+use sn_interface::network_knowledge::prefix_map::NetworkPrefixMap;
+use sn_interface::types::{Chunk, Keypair, Peer, PublicKey, RegisterAddress};
 
 use bytes::Bytes;
 use itertools::Itertools;
@@ -285,9 +284,9 @@ mod tests {
     use crate::client::utils::test_utils::{
         create_test_client, create_test_client_with, init_test_logger,
     };
-    use crate::types::utils::random_bytes;
-    use crate::types::Scope;
     use eyre::Result;
+    use sn_interface::types::utils::random_bytes;
+    use sn_interface::types::Scope;
     use std::{
         collections::HashSet,
         net::{IpAddr, Ipv4Addr, SocketAddr},

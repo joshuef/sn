@@ -60,13 +60,13 @@ pub fn ed_sk_from_hex(hex_str: &str) -> Result<ed25519_dalek::SecretKey> {
 }
 
 // Get hex string of a SecretKey
-pub fn sk_to_hex(sk: safe_network::types::SecretKey) -> String {
+pub fn sk_to_hex(sk: sn_interface::types::SecretKey) -> String {
     match sk {
-        safe_network::types::SecretKey::Ed25519(sk) => {
+        sn_interface::types::SecretKey::Ed25519(sk) => {
             sk.to_bytes().iter().map(|b| format!("{:02x}", b)).collect()
         }
         //SecretKey::Bls(sk) => sk.inner().reveal(), // FIXME: it includes bls in the text
-        safe_network::types::SecretKey::BlsShare(sk) => sk.inner().reveal(), // FIXME: it includes bls in the text
+        sn_interface::types::SecretKey::BlsShare(sk) => sk.inner().reveal(), // FIXME: it includes bls in the text
     }
 }
 

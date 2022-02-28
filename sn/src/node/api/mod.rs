@@ -22,7 +22,6 @@ use self::{
     event_stream::EventStream,
 };
 
-use crate::messaging::{system::SystemMsg, DstLocation, WireMsg};
 use crate::node::{
     cfg::keypair_storage::{get_reward_pk, store_network_keypair, store_new_reward_keypair},
     core::{join_network, Comm, ConnectionEvent, Node},
@@ -30,11 +29,12 @@ use crate::node::{
     error::{Error, Result},
     logging::{log_ctx::LogCtx, run_system_logger},
     messages::WireMsgUtils,
-    network_knowledge::SectionAuthorityProvider,
-    Config, NodeInfo, Peer, MIN_ADULT_AGE,
+    Config, NodeInfo, Peer,
 };
-use crate::types::{log_markers::LogMarker, PublicKey as TypesPublicKey};
 use crate::UsedSpace;
+use sn_interface::messaging::{system::SystemMsg, DstLocation, WireMsg};
+use sn_interface::network_knowledge::{SectionAuthorityProvider, MIN_ADULT_AGE};
+use sn_interface::types::{log_markers::LogMarker, PublicKey as TypesPublicKey};
 
 use ed25519_dalek::PublicKey;
 use itertools::Itertools;
@@ -56,7 +56,7 @@ use xor_name::{Prefix, XorName};
 /// A node is a part of the network that can route messages and be a member of a section or group
 /// location. Its methods can be used to send requests and responses as either an individual
 /// `Node` or as a part of a section or group location. Their `src` argument indicates that
-/// role, and can be `crate::messaging::SrcLocation::Node` or `crate::messaging::SrcLocation::Section`.
+/// role, and can be `use sn_interface::messaging::SrcLocation::Node` or `use sn_interface::messaging::SrcLocation::Section`.
 #[allow(missing_debug_implementations)]
 pub struct NodeApi {
     dispatcher: Arc<Dispatcher>,

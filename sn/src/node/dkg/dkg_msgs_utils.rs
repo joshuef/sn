@@ -6,12 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::system::{DkgFailureSig, DkgFailureSigSet, DkgSessionId};
-use crate::node::{
-    ed25519::{self, Digest256, Keypair, Verifier},
-    network_knowledge::ElderCandidates,
-    supermajority,
-};
+use crate::node::ed25519::{self, Digest256, Keypair, Verifier};
+use sn_interface::messaging::system::{DkgFailureSig, DkgFailureSigSet, DkgSessionId};
+use sn_interface::network_knowledge::{supermajority, ElderCandidates};
 use std::collections::BTreeSet;
 use tiny_keccak::{Hasher, Sha3};
 use xor_name::XorName;

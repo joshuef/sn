@@ -6,13 +6,13 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-pub use crate::messaging::data::Error as ErrorMsg;
-use crate::messaging::{
+use bls::PublicKey;
+pub use sn_interface::messaging::data::Error as ErrorMsg;
+use sn_interface::messaging::{
     data::{CmdError, OperationId, QueryResponse},
     Error as MessagingError, MsgId,
 };
-use crate::types::Error as DtError;
-use bls::PublicKey;
+use sn_interface::types::Error as DtError;
 use std::io;
 use std::net::SocketAddr;
 use thiserror::Error;

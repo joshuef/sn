@@ -36,7 +36,7 @@ use crate::NodeConfig;
 
 use rand::rngs::OsRng;
 use safe_network::client::{Client, ClientConfig, DEFAULT_OPERATION_TIMEOUT};
-use safe_network::types::Keypair;
+use sn_interface::types::Keypair;
 use tracing::debug;
 
 use std::path::Path;

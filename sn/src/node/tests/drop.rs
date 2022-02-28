@@ -11,7 +11,7 @@ mod utils;
 use self::utils::*;
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
-use crate::messaging::{Aggregation, DstLocation, Itinerary, SrcLocation};
+use sn_interface::messaging::{Aggregation, DstLocation, Itinerary, SrcLocation};
 use crate::node::routing_api::routing::{Event, NodeElderChange};
 /*
 #[tokio::test(flavor = "multi_thread")]

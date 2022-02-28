@@ -6,12 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::system::{Proposal as ProposalMsg, SectionAuth};
-use crate::node::{
-    dkg::SigShare,
-    network_knowledge::{NodeState, SectionAuthorityProvider},
-    Result,
-};
+use crate::node::{dkg::SigShare, Result};
+use sn_interface::messaging::system::{Proposal as ProposalMsg, SectionAuth};
+use sn_interface::network_knowledge::{NodeState, SectionAuthorityProvider};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq)]
@@ -46,12 +43,9 @@ impl Proposal {
             Self::JoinsAllowed(joins_allowed) => bincode::serialize(&joins_allowed),
         }?)
     }
-}
 
-// Add conversion methods to/from `messaging::...::Proposal`
-// We prefer this over `From<...>` to make it easier to read the conversion.
-
-impl Proposal {
+    // Add conversion methods to/from `messaging::...::Proposal`
+    // We prefer this over `From<...>` to make it easier to read the conversion.
     pub(crate) fn into_msg(self) -> ProposalMsg {
         match self {
             Self::Offline(node_state) => ProposalMsg::Offline(node_state.to_msg()),
@@ -62,23 +56,16 @@ impl Proposal {
     }
 }
 
-impl ProposalMsg {
-    pub(crate) fn into_state(self) -> Proposal {
-        match self {
-            Self::Offline(node_state) => Proposal::Offline(node_state.into_state()),
-            Self::SectionInfo(sap) => Proposal::SectionInfo(sap.into_state()),
-            Self::NewElders(sap) => Proposal::NewElders(sap.into_authed_state()),
-            Self::JoinsAllowed(allowed) => Proposal::JoinsAllowed(allowed),
-        }
-    }
-}
+// impl Proposal {
+// }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{dkg, network_knowledge};
+    use crate::node::dkg;
     use eyre::Result;
     use serde::Serialize;
+    use sn_interface::network_knowledge;
     use std::fmt::Debug;
     use xor_name::Prefix;
 
@@ -86,7 +73,10 @@ mod tests {
     fn serialize_for_signing() -> Result<()> {
         // Proposal::SectionInfo
         let (section_auth, _, _) =
-            network_knowledge::test_utils::gen_section_authority_provider(Prefix::default(), 4);
+            sn_interface::network_knowledge::test_utils::gen_section_authority_provider(
+                Prefix::default(),
+                4,
+            );
         let proposal = Proposal::SectionInfo(section_auth.clone());
         verify_serialize_for_signing(&proposal, &section_auth)?;
 

@@ -1,0 +1,107 @@
+[package]
+authors = ["MaidSafe Developers <dev@maidsafe.net>"]
+description = "Safe Network Interfaces. Messaging and Types."
+documentation = "https://docs.rs/sn_node"
+edition = "2021"
+homepage = "https://maidsafe.net"
+license = "GPL-3.0"
+name = "sn_interface"
+readme = "README.md"
+repository = "https://github.com/maidsafe/safe_network"
+version = "0.1.0"
+
+
+[features]
+default = []
+
+
+[dependencies]
+base64 = "0.13.0"
+bincode = "1.3.1"
+bls = { package = "blsttc", version = "3.1.0" }
+bls_dkg = "0.9.0"
+bytes = { version = "1.0.1", features = ["serde"] }
+color-eyre = "0.6.0"
+console-subscriber = { version = "0.1.0", optional = true }
+crdts = "~7.0"
+custom_debug = "0.5.0"
+dashmap = {version = "5.1.0", features = [ "serde" ]}
+dirs-next = "2.0.0"
+ed25519 = { version = "1.2.0", features = ["serde_bytes"] }
+ed25519-dalek = { version = "1.0.0", features = ["serde"] }
+eyre = "~0.6.5"
+futures = "~0.3.13"
+hex = "0.4.3"
+hex_fmt = "~0.3.0"
+itertools = "0.10.0"
+lazy_static = "1"
+multibase = "0.9.1"
+num_cpus = "1.13.0"
+priority-queue = "1.2.1"
+qp2p = "~0.28.3"
+rand = "~0.7.3"
+rayon = "1.5.1"
+resource_proof = "1.0.38"
+rmp-serde = "1.0.0"
+secured_linked_list = "~0.5.0"
+self_encryption = "0.27.1"
+serde = { version = "1.0.111", features = ["derive", "rc"] }
+serde_bytes = "~0.11.5"
+serde_json = "~1.0.53"
+signature = "1.1.10"
+sled = "~0.34.6"
+structopt = "~0.3.17"
+strum = "~0.23.0"
+strum_macros = "~0.23.1"
+sysinfo = "~0.23.2"
+tempfile = "~3.2.0"
+thiserror = "~1.0.23"
+tiny-keccak = { version = "2.0.2", features = ["sha3"] }
+tracing = "~0.1.26"
+tracing-core = "~0.1.21"
+tracing-appender = "~0.2.0"
+tracing-subscriber = { version = "0.3.1", features = ["env-filter", "json"] }
+uluru="~3.0.0"
+url = "~2.2.0"
+walkdir = "~2"
+xor_name = "~3.1.0"
+file-rotate = "~0.6.0"
+
+[dependencies.tokio]
+version = "~1.17.0"
+features = ["fs", "io-util", "macros", "rt", "rt-multi-thread", "sync"]
+
+
+[dependencies.backoff]
+version = "0.4.0"
+features = [ "tokio" ]
+
+[dependencies.self_update]
+version = "0.28.0"
+default-features = false
+features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate", "rustls"]
+
+[dev-dependencies]
+assert_matches = "1.3"
+criterion = { version = "0.3", features = ["async_tokio"] }
+ctor = "0.1.20"
+proptest = "0.10.1"
+rand = { version = "~0.7.3", features = ["small_rng"] }
+rand_xorshift = "~0.2.0"
+termcolor="1.1.2"
+tokio-util = { version = "0.6.7", features = ["time"] }
+walkdir = "2"
+yansi = "~0.5.0"
+grep="~0.2.8"
+sn_launch_tool = "~0.9.7"
+
+
+[dev-dependencies.cargo-husky]
+version = "1.5.0"
+default-features = false # Disable features which are enabled by default
+features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt", "run-cargo-check"]
+
+
+
+[package.metadata.cargo-udeps.ignore]
+development = ["cargo-husky"]

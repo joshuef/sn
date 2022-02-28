@@ -22,7 +22,8 @@ use file_system::{
 use files_map::add_or_update_file_item;
 use log::{debug, info, warn};
 use relative_path::RelativePath;
-use safe_network::{client::Client, types::BytesAddress};
+use safe_network::client::Client;
+use sn_interface::types::BytesAddress;
 use std::{
     collections::{BTreeMap, HashSet},
     iter::FromIterator,

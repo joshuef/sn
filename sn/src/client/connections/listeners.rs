@@ -16,13 +16,14 @@ use crate::client::{
     },
     Error, Result,
 };
-use crate::messaging::{
+use crate::utils::compare_and_write_prefix_map_to_disk;
+use sn_interface::messaging::{
     data::{CmdError, ServiceMsg},
     system::{KeyedSig, SectionAuth, SystemMsg},
     AuthorityProof, DstLocation, MsgId, MsgKind, MsgType, ServiceAuth, WireMsg,
 };
-use crate::node::SectionAuthorityProvider;
-use crate::types::{log_markers::LogMarker, utils::compare_and_write_prefix_map_to_disk, Peer};
+use sn_interface::network_knowledge::SectionAuthorityProvider;
+use sn_interface::types::{log_markers::LogMarker, Peer};
 
 use bytes::Bytes;
 use itertools::Itertools;

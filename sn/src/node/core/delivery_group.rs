@@ -7,9 +7,10 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::elder_count;
-use crate::messaging::DstLocation;
-use crate::node::{network_knowledge::NetworkKnowledge, supermajority, Error, Result};
-use crate::types::Peer;
+use crate::node::{Error, Result};
+use sn_interface::messaging::DstLocation;
+use sn_interface::network_knowledge::{supermajority, NetworkKnowledge};
+use sn_interface::types::Peer;
 
 use itertools::Itertools;
 use std::{cmp, iter};
@@ -169,18 +170,14 @@ async fn get_peer(name: &XorName, network_knowledge: &NetworkKnowledge) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{
-        dkg::test_utils::section_signed,
-        ed25519,
-        network_knowledge::{
-            test_utils::{gen_addr, gen_section_authority_provider},
-            NodeState, SectionAuthorityProvider,
-        },
-        MIN_ADULT_AGE,
-    };
+    use crate::node::{dkg::test_utils::section_signed, ed25519};
     use eyre::{ContextCompat, Result};
     use rand::seq::IteratorRandom;
     use secured_linked_list::SecuredLinkedList;
+    use sn_interface::network_knowledge::{
+        test_utils::{gen_addr, gen_section_authority_provider},
+        NodeState, SectionAuthorityProvider, MIN_ADULT_AGE,
+    };
     use xor_name::Prefix;
 
     #[tokio::test]

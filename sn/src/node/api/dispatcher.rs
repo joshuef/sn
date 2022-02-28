@@ -8,13 +8,13 @@
 
 use super::Cmd;
 
-use crate::messaging::{system::SystemMsg, MsgKind, WireMsg};
 use crate::node::{
     core::{Node, Proposal, SendStatus},
     messages::WireMsgUtils,
     Error, Result,
 };
-use crate::types::{log_markers::LogMarker, Peer};
+use sn_interface::messaging::{system::SystemMsg, MsgKind, WireMsg};
+use sn_interface::types::{log_markers::LogMarker, Peer};
 
 use std::{sync::Arc, time::Duration};
 use tokio::time::MissedTickBehavior;

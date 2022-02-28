@@ -10,9 +10,9 @@
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 
-use crate::types::{Encryption, PublicKey, Result as TypesResult, Scope};
 use bytes::Bytes;
 use rand::{self, distributions::Alphanumeric, rngs::OsRng, Rng};
+use sn_interface::types::{Encryption, PublicKey, Result as TypesResult, Scope};
 
 struct DummyEncryption {
     public_key: PublicKey,
@@ -89,7 +89,7 @@ pub fn bin_data_format(data: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::utils::random_bytes;
+    use sn_interface::types::utils::random_bytes;
 
     use super::*;
 

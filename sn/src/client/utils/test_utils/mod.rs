@@ -10,10 +10,10 @@
 mod test_client;
 
 use crate::client::Error;
-use crate::types::{Keypair, PublicKey};
 use backoff::ExponentialBackoff;
 use dirs_next::home_dir;
 use eyre::{eyre, Context, Result};
+use sn_interface::types::{Keypair, PublicKey};
 use std::time::Duration;
 use std::{
     collections::BTreeSet, fs::File, future::Future, io::BufReader, net::SocketAddr, path::Path,

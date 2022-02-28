@@ -6,21 +6,21 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-pub use safe_network::types::register::{Entry, EntryHash};
+pub use sn_interface::types::register::{Entry, EntryHash};
 
 use crate::safeurl::{ContentType, SafeUrl, XorUrl};
 use crate::{Error, Result, Safe};
 
 use log::debug;
 use rand::Rng;
+use sn_interface::types::{
+    register::{
+        Policy, PrivatePermissions, PrivatePolicy, PublicPermissions, PublicPolicy, User,
+    },
+    DataAddress, Error as SafeNdError, RegisterAddress, Scope,
+};
 use safe_network::{
     client::Error as ClientError,
-    types::{
-        register::{
-            Policy, PrivatePermissions, PrivatePolicy, PublicPermissions, PublicPolicy, User,
-        },
-        DataAddress, Error as SafeNdError, RegisterAddress, Scope,
-    },
 };
 use std::collections::{BTreeMap, BTreeSet};
 use tracing::info;
@@ -167,7 +167,7 @@ impl Safe {
             .await
             .map_err(|err| {
                 if let ClientError::ErrorMsg {
-                    source: safe_network::messaging::data::Error::NoSuchEntry,
+                    source: sn_interface::messaging::data::Error::NoSuchEntry,
                     ..
                 } = err
                 {

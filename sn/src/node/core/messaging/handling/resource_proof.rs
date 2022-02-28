@@ -6,13 +6,13 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::system::{JoinResponse, ResourceProofResponse, SystemMsg};
 use crate::node::{
     api::cmds::Cmd,
     core::{Node, RESOURCE_PROOF_DATA_SIZE, RESOURCE_PROOF_DIFFICULTY},
     ed25519, Error, Result,
 };
-use crate::types::{log_markers::LogMarker, Peer};
+use sn_interface::messaging::system::{JoinResponse, ResourceProofResponse, SystemMsg};
+use sn_interface::types::{log_markers::LogMarker, Peer};
 
 use ed25519_dalek::Verifier;
 use xor_name::XorName;

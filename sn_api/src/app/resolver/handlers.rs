@@ -15,7 +15,7 @@ use crate::app::{
 use crate::{Error, Result};
 use bytes::Bytes;
 use log::{debug, warn};
-use safe_network::types::BytesAddress;
+use sn_interface::types::BytesAddress;
 use std::collections::BTreeSet;
 
 impl Safe {

@@ -10,11 +10,9 @@ use super::{
     data::{encrypt_large, to_chunk, LargeFile, SmallFile},
     Client,
 };
-use crate::{
-    client::{client_api::data::DataMapLevel, utils::encryption, Error, Result},
-    messaging::data::{DataCmd, DataQuery, QueryResponse},
-    types::{BytesAddress, Chunk, ChunkAddress, Encryption, PublicKey, Scope},
-};
+use crate::client::{client_api::data::DataMapLevel, utils::encryption, Error, Result};
+use sn_interface::messaging::data::{DataCmd, DataQuery, QueryResponse};
+use sn_interface::types::{BytesAddress, Chunk, ChunkAddress, Encryption, PublicKey, Scope};
 
 use bincode::deserialize;
 use bytes::Bytes;
@@ -384,8 +382,8 @@ mod tests {
         utils::test_utils::{create_test_client, init_test_logger},
         Client,
     };
-    use crate::types::log_markers::LogMarker;
-    use crate::types::{utils::random_bytes, BytesAddress, Keypair, Scope};
+    use sn_interface::types::log_markers::LogMarker;
+    use sn_interface::types::{utils::random_bytes, BytesAddress, Keypair, Scope};
 
     use bytes::Bytes;
     use eyre::Result;

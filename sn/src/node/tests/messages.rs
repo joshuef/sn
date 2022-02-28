@@ -11,9 +11,9 @@ mod utils;
 use anyhow::{anyhow, format_err, Result};
 use bytes::Bytes;
 use qp2p::QuicP2p;
-use crate::types::Keypair;
-use crate::messaging::client::ServiceMsg;
-use crate::messaging::{
+use sn_interface::types::Keypair;
+use sn_interface::messaging::client::ServiceMsg;
+use sn_interface::messaging::{
     client::{ServiceMsg, ClientSig, Query, TransferQuery},
     location::{Aggregation, Itinerary},
     DstLocation, MsgId, SrcLocation,

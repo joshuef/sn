@@ -7,16 +7,17 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::elder_count;
-use crate::messaging::system::{
-    JoinAsRelocatedRequest, JoinAsRelocatedResponse, JoinRejectionReason, JoinRequest,
-    JoinResponse, MembershipState, SystemMsg,
-};
 use crate::node::{
     api::cmds::Cmd,
     core::{relocation::RelocateDetailsUtils, Node},
-    Error, Result, SectionAuthUtils, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE,
+    Error, Result,
 };
-use crate::types::{log_markers::LogMarker, Peer};
+use sn_interface::messaging::system::{
+    JoinAsRelocatedRequest, JoinAsRelocatedResponse, JoinRejectionReason, JoinRequest,
+    JoinResponse, MembershipState, SystemMsg,
+};
+use sn_interface::network_knowledge::{SectionAuthUtils, FIRST_SECTION_MAX_AGE, MIN_ADULT_AGE};
+use sn_interface::types::{log_markers::LogMarker, Peer};
 
 use bls::PublicKey as BlsPublicKey;
 use std::vec;

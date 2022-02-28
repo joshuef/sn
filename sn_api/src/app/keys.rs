@@ -10,7 +10,7 @@ use super::Safe;
 use crate::{Error, Result};
 use hex::encode;
 use rand::rngs::OsRng;
-use safe_network::types::{Keypair, SecretKey};
+use sn_interface::types::{Keypair, SecretKey};
 use xor_name::XorName;
 
 impl Safe {

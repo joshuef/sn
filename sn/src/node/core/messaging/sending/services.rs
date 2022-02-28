@@ -6,12 +6,12 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::{
+use crate::node::{api::cmds::Cmd, core::Node, Result};
+use sn_interface::messaging::{
     data::{CmdError, ServiceMsg},
     DstLocation, EndUser, MsgId, MsgKind, ServiceAuth, WireMsg,
 };
-use crate::node::{api::cmds::Cmd, core::Node, Result};
-use crate::types::{Peer, PublicKey, Signature};
+use sn_interface::types::{Peer, PublicKey, Signature};
 
 use bytes::Bytes;
 use ed25519_dalek::Signer;

@@ -67,7 +67,7 @@ pub const TIMEOUT: Duration = Duration::from_secs(60);
 #[macro_export]
 macro_rules! assert_next_event {
     ($event_stream:expr, $pattern:pat $(if $cond:expr)?) => {
-        match tokio::time::timeout($crate::utils::TIMEOUT, $event_stream.next()).await {
+        match tokio::time::timeout($crate::node::utils::TIMEOUT, $event_stream.next()).await {
             Ok(Some($pattern)) $(if $cond)? => {}
             Ok(other) => panic!("Expecting {}, got {:?}", stringify!($pattern), other),
             Err(_) => panic!("Timeout when expecting {}", stringify!($pattern)),
@@ -81,7 +81,7 @@ macro_rules! assert_next_event {
 macro_rules! assert_event {
     ($event_stream:expr, $pattern:pat $(if $cond:expr)?) => {
         loop {
-            match tokio::time::timeout($crate::utils::TIMEOUT, $event_stream.next()).await {
+            match tokio::time::timeout($crate::node::utils::TIMEOUT, $event_stream.next()).await {
                 Ok(Some($pattern)) $(if $cond)? => break,
                 Ok(other) => tracing::trace!("Received {:?}", other),
                 Err(_) => panic!("Timeout when expecting {}", stringify!($pattern)),

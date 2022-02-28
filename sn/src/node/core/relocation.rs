@@ -9,12 +9,10 @@
 //! Relocation related types and utilities.
 
 use crate::elder_count;
-use crate::messaging::system::RelocateDetails;
-use crate::node::{
-    ed25519,
-    network_knowledge::{NetworkKnowledge, NodeState},
-    recommended_section_size, Peer,
-};
+use crate::node::ed25519;
+use sn_interface::messaging::system::RelocateDetails;
+use sn_interface::network_knowledge::{recommended_section_size, NetworkKnowledge, NodeState};
+use sn_interface::types::Peer;
 
 use ed25519_dalek::{Signature, Verifier};
 use std::{
@@ -170,7 +168,7 @@ mod tests {
     use crate::elder_count;
     use crate::node::{
         api::tests::SecretKeySet, dkg::test_utils::section_signed,
-        network_knowledge::SectionAuthorityProvider, MIN_ADULT_AGE,
+        sn_interface::network_knowledge::SectionAuthorityProvider, MIN_ADULT_AGE,
     };
 
     use eyre::Result;

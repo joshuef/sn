@@ -8,8 +8,8 @@
 
 use super::read_network_conn_info;
 use crate::client::{Client, ClientConfig};
-use crate::types::Keypair;
 use eyre::Result;
+use sn_interface::types::Keypair;
 use std::{sync::Once, time::Duration};
 use tempfile::tempdir;
 use tracing_core::{Event, Subscriber};

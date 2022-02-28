@@ -7,12 +7,12 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::client::{Error, Result};
-use crate::types::{BytesAddress, Chunk, Encryption};
 use bincode::serialize;
 use bytes::Bytes;
 use rayon::prelude::*;
 use self_encryption::{DataMap, EncryptedChunk};
 use serde::{Deserialize, Serialize};
+use sn_interface::types::{BytesAddress, Chunk, Encryption};
 use std::path::Path;
 
 #[derive(Serialize, Deserialize)]

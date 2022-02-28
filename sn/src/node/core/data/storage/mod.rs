@@ -11,15 +11,16 @@ mod registers;
 
 use crate::{
     dbs::Result,
-    messaging::{
-        data::{DataQuery, RegisterStoreExport, StorageLevel},
-        system::{NodeCmd, NodeQueryResponse, SystemMsg},
-        DstLocation,
-    },
     node::core::{Cmd, Node},
-    types::{register::User, ReplicatedData, ReplicatedDataAddress as DataAddress},
     UsedSpace,
 };
+
+use sn_interface::messaging::{
+    data::{DataQuery, RegisterStoreExport, StorageLevel},
+    system::{NodeCmd, NodeQueryResponse, SystemMsg},
+    DstLocation,
+};
+use sn_interface::types::{register::User, ReplicatedData, ReplicatedDataAddress as DataAddress};
 
 pub(crate) use chunks::ChunkStorage;
 pub(crate) use registers::RegisterStorage;

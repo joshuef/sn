@@ -6,19 +6,19 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::{
-    system::{DkgFailureSig, DkgFailureSigSet, DkgSessionId, SystemMsg},
-    DstLocation, WireMsg,
-};
 use crate::node::{
     api::cmds::{next_timer_token, Cmd},
     dkg::dkg_msgs_utils::{DkgFailureSigSetUtils, DkgFailureSigUtils},
     ed25519,
     messages::WireMsgUtils,
-    network_knowledge::{ElderCandidates, SectionAuthorityProvider, SectionKeyShare},
     NodeInfo, Result,
 };
-use crate::types::{log_markers::LogMarker, Peer, PublicKey};
+use sn_interface::messaging::{
+    system::{DkgFailureSig, DkgFailureSigSet, DkgSessionId, SystemMsg},
+    DstLocation, WireMsg,
+};
+use sn_interface::network_knowledge::{ElderCandidates, SectionAuthorityProvider, SectionKeyShare};
+use sn_interface::types::{log_markers::LogMarker, Peer, PublicKey};
 
 use bls::PublicKey as BlsPublicKey;
 use bls_dkg::key_gen::{
@@ -480,11 +480,11 @@ mod tests {
     use super::*;
 
     use crate::elder_count;
-    use crate::messaging::MsgType;
     use crate::node::{
         dkg::voter::DkgVoter, dkg::DkgSessionIdUtils, ed25519,
-        network_knowledge::test_utils::gen_addr, NodeInfo, MIN_ADULT_AGE,
+        sn_interface::network_knowledge::test_utils::gen_addr, NodeInfo, MIN_ADULT_AGE,
     };
+    use sn_interface::messaging::MsgType;
 
     use assert_matches::assert_matches;
     use eyre::{bail, ContextCompat, Result};

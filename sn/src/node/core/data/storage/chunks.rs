@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::dbs::{convert_to_error_msg, ChunkStore, Error, Result};
-use crate::messaging::system::NodeQueryResponse;
-use crate::types::{log_markers::LogMarker, Chunk, ChunkAddress};
 use crate::UsedSpace;
+use sn_interface::messaging::system::NodeQueryResponse;
+use sn_interface::types::{log_markers::LogMarker, Chunk, ChunkAddress};
 
 use std::{
     fmt::{self, Display, Formatter},

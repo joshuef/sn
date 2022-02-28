@@ -28,4 +28,5 @@ structopt = "~0.3.17"
 strum = "0.23.0"
 strum_macros = "0.23.1"
 walkdir = "2"
+sn_interface = { path = "../sn_interface", version = "^0.1.0" }
 safe_network = { path = "../sn", version = "^0.58.2", features=["test-utils"] }

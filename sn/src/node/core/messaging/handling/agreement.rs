@@ -6,15 +6,15 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::system::{KeyedSig, MembershipState, SectionAuth};
 use crate::node::{
     api::cmds::Cmd,
     core::{relocation::ChurnId, Node, Proposal},
-    dkg::SectionAuthUtils,
-    network_knowledge::{NodeState, SectionAuthorityProvider},
-    Event, Result, MIN_ADULT_AGE,
+    Event, Result,
 };
-use crate::types::log_markers::LogMarker;
+use sn_interface::messaging::system::{KeyedSig, MembershipState, SectionAuth};
+use sn_interface::network_knowledge::SectionAuthUtils;
+use sn_interface::network_knowledge::{NodeState, SectionAuthorityProvider, MIN_ADULT_AGE};
+use sn_interface::types::log_markers::LogMarker;
 
 use std::{cmp, collections::BTreeSet};
 

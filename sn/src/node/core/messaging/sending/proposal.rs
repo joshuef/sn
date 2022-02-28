@@ -6,15 +6,15 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::{system::SystemMsg, DstLocation, WireMsg};
 use crate::node::{
     api::cmds::Cmd,
     core::{Node, Proposal},
     messages::WireMsgUtils,
-    network_knowledge::SectionKeyShare,
     Result,
 };
-use crate::types::Peer;
+use sn_interface::messaging::{system::SystemMsg, DstLocation, WireMsg};
+use sn_interface::network_knowledge::SectionKeyShare;
+use sn_interface::types::Peer;
 
 impl Node {
     /// Send proposal to all our elders.
