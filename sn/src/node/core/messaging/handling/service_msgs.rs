@@ -55,6 +55,20 @@ impl Node {
         Ok(cmds)
     }
 
+    /// see if a client is waiting in the pending queries for a response
+    /// If not, we could remove its link eg.
+    pub(crate) async fn pending_data_queries_contains_client(&self, peer: &Peer) -> bool {
+        // now we check if our peer is still waiting...
+        for (_op_id, peer_vec) in self.pending_data_queries.get_items().await {
+            let vec = peer_vec.object;
+            if vec.contains(peer) {
+                return true;
+            }
+        }
+
+        false
+    }
+
     /// Handle data read
     /// Records response in liveness tracking
     /// Forms a response to send to the requester
@@ -76,13 +90,16 @@ impl Node {
         let node_id = XorName::from(sending_node_pk);
         let op_id = response.operation_id()?;
 
-        let waiting_peers = if let Some(peers) = self.pending_data_queries.remove(&op_id).await {
+        let querys_peers = self.pending_data_queries.remove(&op_id).await;
+
+        let waiting_peers = if let Some(peers) = querys_peers {
             peers
         } else {
             warn!(
                 "Dropping chunk query response from Adult {}. We might have already forwarded this chunk to the requesting client or the client connection cache has expired: {}",
                 sending_node_pk, user.0
             );
+
             return Ok(cmds);
         };
 
@@ -220,7 +237,7 @@ impl Node {
             });
             return self.send_cmd_error_response(error, origin, msg_id).await;
         }
-        cmds.extend(self.send_cmd_ack(origin, msg_id).await?);
+        cmds.extend(self.send_cmd_ack(origin.clone(), msg_id).await?);
         Ok(cmds)
     }
 

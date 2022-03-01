@@ -30,6 +30,8 @@ use std::{
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub(crate) enum Cmd {
+    /// Cleanup node's PeerLinks, removing any unsused, unconnected peers
+    CleanupPeerLinks,
     /// Handle `message` from `sender`.
     /// Holding the WireMsg that has been received from the network,
     HandleMsg {
@@ -105,6 +107,9 @@ pub(crate) enum Cmd {
 impl fmt::Display for Cmd {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Cmd::CleanupPeerLinks => {
+                write!(f, "CleanupPeerLinks")
+            }
             Cmd::HandleTimeout(_) => write!(f, "HandleTimeout"),
             Cmd::ScheduleTimeout { .. } => write!(f, "ScheduleTimeout"),
             Cmd::HandleSystemMsg { msg_id, .. } => {

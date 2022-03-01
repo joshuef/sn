@@ -265,6 +265,7 @@ impl NodeApi {
         ));
 
         dispatcher.clone().start_network_probing().await;
+        dispatcher.clone().start_cleaning_peer_links().await;
         dispatcher.clone().write_prefixmap_to_disk().await;
 
         let api = Self { dispatcher };

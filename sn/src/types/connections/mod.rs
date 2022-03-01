@@ -11,7 +11,12 @@ mod link;
 pub(crate) use link::{Link, SendToOneError};
 
 use qp2p::Endpoint;
-use std::{collections::BTreeMap, fmt::Debug, net::SocketAddr, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Debug,
+    net::SocketAddr,
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 use xor_name::XorName;
 
@@ -32,6 +37,11 @@ impl PeerLinks {
             links: Arc::new(RwLock::new(BTreeMap::new())),
             endpoint,
         }
+    }
+    pub(crate) async fn linked_peers(&self) -> BTreeSet<PeerId> {
+        let links = self.links.read().await;
+
+        links.keys().into_iter().cloned().collect()
     }
 
     /// Any number of incoming qp2p:Connections can be added.
@@ -59,10 +69,19 @@ impl PeerLinks {
         }
     }
 
+    pub(crate) async fn peer_is_connected(&self, id: &PeerId) -> bool {
+        let link = self.links.read().await;
+        if let Some(c) = link.get(id) {
+            // peer id exists, check if connected
+            return c.is_connected().await;
+        }
+
+        false
+    }
+
     /// This method is tailored to the use-case of connecting on send.
     /// I.e. it will not connect here, but on calling send on the returned link.
     pub(crate) async fn get_or_create(&self, id: &PeerId) -> Link {
-        debug!("Total links known: {:?}", self.links.read().await.len());
         if let Some(link) = self.get(id).await {
             return link;
         }
@@ -91,8 +110,12 @@ impl PeerLinks {
             // someone else inserted in the meanwhile, so use that
             Some(link) => link,
             // none here, all good
-            None => return,
+            None => {
+                trace!("Attempted to remove {id:?}, it was not found");
+                return;
+            }
         };
+
         link.disconnect().await;
     }
 

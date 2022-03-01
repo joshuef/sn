@@ -15,13 +15,14 @@ use msg_count::MsgCount;
 use crate::messaging::{system::LoadReport, MsgId, WireMsg};
 use crate::node::error::{Error, Result};
 use crate::types::{log_markers::LogMarker, Peer, PeerLinks, SendToOneError};
-
 use bytes::Bytes;
 use futures::stream::{FuturesUnordered, StreamExt};
 use qp2p::{ConnectionIncoming, Endpoint};
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use tokio::{sync::mpsc, task};
 use tracing::Instrument;
+use xor_name::XorName;
 
 // Communication component of the node to interact with other nodes.
 #[derive(Clone)]
@@ -80,6 +81,10 @@ impl Comm {
         })
     }
 
+    pub(crate) async fn linked_peers(&self) -> BTreeSet<(XorName, SocketAddr)> {
+        self.peer_links.linked_peers().await
+    }
+
     #[tracing::instrument(skip(local_addr, config, event_tx))]
     pub(crate) async fn bootstrap(
         local_addr: SocketAddr,
@@ -129,6 +134,10 @@ impl Comm {
         ))
     }
 
+    pub(crate) async fn peer_is_connected(&self, peer: &Peer) -> bool {
+        self.peer_links.peer_is_connected(&peer.id()).await
+    }
+
     pub(crate) fn our_connection_info(&self) -> SocketAddr {
         self.endpoint.public_addr()
     }
@@ -136,7 +145,7 @@ impl Comm {
     /// Disposes of the link to the peer and all underlying resources.
     /// TODO: Use this when new membership is in place, call whenever we drop a member.
     #[allow(unused)]
-    pub(crate) async fn disconnect(&self, peer: &Peer) {
+    pub(crate) async fn unlink_peer(&self, peer: &Peer) {
         self.peer_links.disconnect(peer.id()).await;
     }
 

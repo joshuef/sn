@@ -92,6 +92,16 @@ where
             .map(|k| k.object.clone())
     }
 
+    /// Get a list of all items in the cache
+    ///
+    pub async fn get_items(&self) -> BTreeMap<T, Item<V>>
+    where
+        T: Eq + Hash,
+        V: Clone,
+    {
+        self.items.read().await.clone()
+    }
+
     /// Set a value in the cache and return the previous value, if any.
     ///
     /// This will override an existing value for the same key, if there is one. `custom_duration`

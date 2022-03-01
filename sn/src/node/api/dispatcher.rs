@@ -8,6 +8,7 @@
 
 use super::Cmd;
 
+use crate::elder_count;
 use crate::messaging::{system::SystemMsg, MsgKind, WireMsg};
 use crate::node::{
     core::{Node, Proposal, SendStatus},
@@ -22,6 +23,7 @@ use tokio::{sync::watch, time};
 use tracing::Instrument;
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(30);
+const LINK_CLEANUP_INTERVAL: Duration = Duration::from_secs(15);
 
 // A command/subcommand id e.g. "963111461", "963111461.0"
 type CmdId = String;
@@ -137,6 +139,26 @@ impl Dispatcher {
             }
         });
     }
+    pub(super) async fn start_cleaning_peer_links(self: Arc<Self>) {
+        info!("Starting cleaning up network links");
+        let _handle = tokio::spawn(async move {
+            let dispatcher = self.clone();
+            let mut interval = tokio::time::interval(LINK_CLEANUP_INTERVAL);
+            interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+            loop {
+                let _instant = interval.tick().await;
+                let cmd = Cmd::CleanupPeerLinks;
+                if let Err(e) = dispatcher
+                    .clone()
+                    .enqueue_and_handle_next_cmd_and_offshoots(cmd, None)
+                    .await
+                {
+                    error!("Error sending a cleaning up unused PeerLinks: {:?}", e);
+                }
+            }
+        });
+    }
 
     pub(super) async fn write_prefixmap_to_disk(self: Arc<Self>) {
         info!("Writing our PrefixMap to disk");
@@ -209,6 +231,39 @@ impl Dispatcher {
     /// Actually process the cmd
     async fn try_processing_cmd(&self, cmd: Cmd) -> Result<Vec<Cmd>> {
         match cmd {
+            Cmd::CleanupPeerLinks => {
+                let linked_peers = self.node.comm.linked_peers().await;
+                let section_members = self.node.list_section_members().await;
+
+                if linked_peers.len() < elder_count() {
+                    return Ok(vec![]);
+                }
+
+                trace!(
+                    "Cleaning up PeerLinks, current len: {:?}",
+                    linked_peers.len()
+                );
+
+                for (name, addr) in linked_peers.clone() {
+                    if !section_members.contains(&name) {
+                        // not in our section
+                        let peer = Peer::new(name, addr);
+
+                        // this will cleanup all adults too.
+                        // but we can reestablish conns there happily, so not soo much a bother.
+                        if !self.node.pending_data_queries_contains_client(&peer).await
+                            && !self.node.comm.peer_is_connected(&peer).await
+                        {
+                            trace!("{peer:?} not waiting on queries and not in the section, so lets unlink them");
+                            self.node.comm.unlink_peer(&peer).await;
+                        }
+                    }
+                }
+
+                trace!("Cleaned up PeerLinks, new len: {:?}", linked_peers.len());
+
+                Ok(vec![])
+            }
             Cmd::HandleSystemMsg {
                 sender,
                 msg_id,

@@ -172,6 +172,20 @@ impl Link {
         }
     }
 
+    /// Is this Link currently connected?
+    pub(crate) async fn is_connected(&self) -> bool {
+        self.remove_expired().await;
+        // get the most recently used connection
+        let res = { self.queue.read().await.peek_max().map(|(id, _prio)| *id) };
+        match res {
+            None => false,
+            Some(id) => match self.connections.read().await.get(&id) {
+                Some(conn) => conn.expired().await,
+                None => false,
+            },
+        }
+    }
+
     async fn read_conn<F: Fn(qp2p::Connection, IncomingMsgs)>(
         &self,
         id: usize,
