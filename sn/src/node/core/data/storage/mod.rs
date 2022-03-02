@@ -187,17 +187,17 @@ impl Node {
         let old_adult_list = remaining.union(lost_adults).copied().collect();
         let new_adult_list = remaining.union(new_adults).copied().collect();
         let new_holders = self.compute_holders(address, &new_adult_list);
+
+        debug!("New holders len: {:?}", new_holders.len());
         let old_holders = self.compute_holders(address, &old_adult_list);
 
-        let we_are_a_holder_now = new_holders.contains(our_name);
         let new_adult_is_holder = !new_holders.is_disjoint(new_adults);
         let lost_old_holder = !old_holders.is_disjoint(lost_adults);
 
-        if !we_are_a_holder_now || new_adult_is_holder || lost_old_holder {
+        if new_adult_is_holder || lost_old_holder {
             info!("Republishing data at {:?}", address);
             trace!(
-                "We are a holder now {}, New Adult is Holder? {}, Lost Adult was holder? {}",
-                we_are_a_holder_now,
+                "New Adult is Holder? {}, Lost Adult was holder? {}",
                 new_adult_is_holder,
                 lost_old_holder
             );
