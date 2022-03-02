@@ -214,11 +214,11 @@ impl Node {
             .ok()?;
 
             // Do not delete data if this is just for preemptive replication
-            if !we_are_a_holder_now && !preemptive_replication {
-                if let Err(err) = storage.remove(address).await {
-                    warn!("Error deleting data during republish: {:?}", err);
-                }
-            }
+            // if !we_are_a_holder_now && !preemptive_replication {
+            //     if let Err(err) = storage.remove(address).await {
+            //         warn!("Error deleting data during republish: {:?}", err);
+            //     }
+            // }
             Some((data, new_holders))
         } else {
             None
