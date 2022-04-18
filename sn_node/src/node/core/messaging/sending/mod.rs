@@ -10,5 +10,6 @@ mod anti_entropy;
 mod approval;
 mod dkg_start;
 mod proposal;
+#[cfg(feature = "service-msgs")]
 mod services;
 mod system;

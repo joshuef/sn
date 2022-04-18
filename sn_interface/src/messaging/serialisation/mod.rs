@@ -26,8 +26,10 @@ pub(crate) const DYSFUNCTION_MSG_PRIORITY: i32 = 2;
 pub(crate) const BACKPRESSURE_MSG_PRIORITY: i32 = 0;
 // not maintaining network structure, so can wait
 pub(crate) const NODE_DATA_MSG_PRIORITY: i32 = -6;
+#[cfg(feature = "service-msgs")]
 // has payment throttle, but is not critical for network function
 pub(crate) const SERVICE_CMD_PRIORITY: i32 = -8;
+#[cfg(feature = "service-msgs")]
 // has no throttle and is sent by clients, lowest prio
 pub(crate) const SERVICE_QUERY_PRIORITY: i32 = -10;
 
@@ -46,6 +48,7 @@ use super::{
 #[derive(PartialEq, Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum MsgType {
+    #[cfg(feature = "service-msgs")]
     /// Service message
     Service {
         /// Message ID
@@ -133,6 +136,16 @@ impl MsgType {
             // Inter-node comms related to processing client requests
             MsgType::System {
                 msg:
+
+
+                    SystemMsg::NodeMsgError { .. },
+                ..
+            } => NODE_DATA_MSG_PRIORITY,
+            // Inter-node comms related to processing client requests
+            #[cfg(feature = "service-msgs")]
+            MsgType::System {
+                msg:
+
                     SystemMsg::NodeCmd(_)
                     | SystemMsg::NodeEvent(NodeEvent::CouldNotStoreData { .. })
                     | SystemMsg::NodeQuery(_)
@@ -142,10 +155,12 @@ impl MsgType {
             } => NODE_DATA_MSG_PRIORITY,
 
             // Client <-> node service comms
+            #[cfg(feature = "service-msgs")]
             MsgType::Service {
                 msg: ServiceMsg::Cmd(_),
                 ..
             } => SERVICE_CMD_PRIORITY,
+            #[cfg(feature = "service-msgs")]
             MsgType::Service { .. } => SERVICE_QUERY_PRIORITY,
         }
     }

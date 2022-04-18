@@ -76,15 +76,19 @@ impl Node {
 
         cmds.extend(result);
 
-        self.liveness_retain_only(
-            self.network_knowledge
-                .adults()
-                .await
-                .iter()
-                .map(|peer| peer.name())
-                .collect(),
-        )
-        .await?;
+        let members = self
+            .network_knowledge
+            .adults()
+            .await
+            .iter()
+            .map(|peer| peer.name())
+            .collect();
+
+        #[cfg(feature = "service-msgs")]
+        self.data_records_retain_only(members.clone()).await?;
+
+        let _ = self.dysfunction_tracking.retain_members_only(members).await;
+
         *self.joins_allowed.write().await = true;
 
         Ok(cmds)

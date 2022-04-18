@@ -15,6 +15,8 @@ mod membership;
 mod proposals;
 mod relocation;
 mod resource_proof;
+
+#[cfg(feature = "service-msgs")]
 mod service_msgs;
 mod update_section;
 
@@ -25,8 +27,12 @@ use crate::node::{
     api::cmds::Cmd,
     core::{DkgSessionInfo, Node, Proposal as CoreProposal, DATA_QUERY_LIMIT},
     messages::{NodeMsgAuthorityUtils, WireMsgUtils},
-    Error, Event, MessageReceived, Result, MIN_LEVEL_WHEN_FULL,
+    Error, Event, MessageReceived, Result,
 };
+
+#[cfg(feature = "service-msgs")]
+use crate::node::MIN_LEVEL_WHEN_FULL;
+
 use sn_interface::messaging::{
     data::{ServiceMsg, StorageLevel},
     signature_aggregator::Error as AggregatorError,
@@ -198,6 +204,7 @@ impl Node {
 
                 Ok(cmds)
             }
+            #[cfg(feature = "service-msgs")]
             MsgType::Service {
                 msg_id,
                 msg,
@@ -226,6 +233,7 @@ impl Node {
                     return Ok(cmds);
                 }
 
+                #[cfg(feature = "service-msgs")]
                 // First we check if it's query and we have too many on the go at the moment...
                 if let ServiceMsg::Query(_) = msg {
                     // we have a query, check if we have too many on the go....
@@ -247,27 +255,30 @@ impl Node {
                     }
                 };
 
-                let msg_bytes = original_bytes.unwrap_or(wire_msg.serialize()?);
-                if let Some(cmd) = self
-                    .check_for_entropy(
-                        // a cheap clone w/ Bytes
-                        msg_bytes,
-                        &src_location,
-                        &received_section_pk,
-                        dst_name,
-                        &sender,
-                    )
-                    .await?
+                #[cfg(feature = "service-msgs")]
                 {
-                    // short circuit and send those AE responses
-                    cmds.push(cmd);
-                    return Ok(cmds);
-                }
+                    let msg_bytes = original_bytes.unwrap_or(wire_msg.serialize()?);
+                    if let Some(cmd) = self
+                        .check_for_entropy(
+                            // a cheap clone w/ Bytes
+                            msg_bytes,
+                            &src_location,
+                            &received_section_pk,
+                            dst_name,
+                            &sender,
+                        )
+                        .await?
+                    {
+                        // short circuit and send those AE responses
+                        cmds.push(cmd);
+                        return Ok(cmds);
+                    }
 
-                cmds.extend(
-                    self.handle_service_msg(msg_id, msg, dst_location, auth, sender)
-                        .await?,
-                );
+                    cmds.extend(
+                        self.handle_service_msg(msg_id, msg, dst_location, auth, sender)
+                            .await?,
+                    );
+                }
 
                 Ok(cmds)
             }
@@ -618,19 +629,26 @@ impl Node {
                 self.handle_dkg_retry(&session_id, message_history, message, sender)
                     .await
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeCmd(NodeCmd::RecordStorageLevel { node_id, level, .. }) => {
+                #[cfg(feature = "service-msgs")]
                 let changed = self.set_storage_level(&node_id, level).await;
+
+                #[cfg(feature = "service-msgs")]
                 if changed && level.value() == MIN_LEVEL_WHEN_FULL {
                     // ..then we accept a new node in place of the full node
                     *self.joins_allowed.write().await = true;
                 }
                 Ok(vec![])
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeCmd(NodeCmd::ReceiveMetadata { metadata }) => {
                 info!("Processing received MetadataExchange packet: {:?}", msg_id);
+                #[cfg(feature = "service-msgs")]
                 self.set_adult_levels(metadata).await;
                 Ok(vec![])
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeEvent(NodeEvent::CouldNotStoreData {
                 node_id,
                 data,
@@ -640,6 +658,8 @@ impl Node {
                     "Processing CouldNotStoreData event with MsgId: {:?}",
                     msg_id
                 );
+
+                #[cfg(feature = "service-msgs")]
                 return if self.is_elder().await {
                     if full {
                         let changed = self
@@ -657,13 +677,14 @@ impl Node {
                 };
             }
             SystemMsg::NodeEvent(NodeEvent::SuspiciousNodesDetected(suspects)) => {
-                info!(
-                    "Received probable suspects nodes {suspects:?} Starting preemptive data replication"
-                );
+                info!("Received probable suspects nodes {suspects:?}");
                 debug!("{}", LogMarker::DeviantsDetected);
-
+                #[cfg(feature = "service-msgs")]
                 return self.replicate_data_of_suspicious_nodes(suspects).await;
+                #[cfg(not(feature = "service-msgs"))]
+                return Ok(vec![]);
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeCmd(NodeCmd::ReplicateData(data_collection)) => {
                 info!("ReplicateData MsgId: {:?}", msg_id);
                 return if self.is_elder().await {
@@ -671,7 +692,7 @@ impl Node {
                     Ok(vec![])
                 } else {
                     let mut cmds = vec![];
-
+                    #[cfg(feature = "service-msgs")]
                     for data in data_collection {
                         // We are an adult here, so just store away!
                         // This may return a DatabaseFull error... but we should have reported storage increase
@@ -709,9 +730,11 @@ impl Node {
                     Ok(cmds)
                 };
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeCmd(NodeCmd::SendReplicateDataAddress(data_addresses)) => {
                 info!("ReplicateData MsgId: {:?}", msg_id);
 
+                #[cfg(feature = "service-msgs")]
                 return if self.is_elder().await {
                     error!("Received unexpected message while Elder");
                     Ok(vec![])
@@ -775,9 +798,11 @@ impl Node {
                     Ok(vec![cmd])
                 };
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeCmd(NodeCmd::FetchReplicateData(data_addresses)) => {
                 let mut cmds = vec![];
                 info!("FetchReplicateData MsgId: {:?}", msg_id);
+                #[cfg(feature = "service-msgs")]
                 return if self.is_elder().await {
                     error!("Received unexpected message while Elder");
                     Ok(vec![])
@@ -821,6 +846,7 @@ impl Node {
                     Ok(cmds)
                 };
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeCmd(node_cmd) => {
                 self.send_event(Event::MessageReceived {
                     msg_id,
@@ -832,6 +858,7 @@ impl Node {
 
                 Ok(vec![])
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeQuery(node_query) => {
                 match node_query {
                     // A request from EndUser - via elders - for locally stored data
@@ -865,6 +892,7 @@ impl Node {
                     }
                 }
             }
+            #[cfg(feature = "service-msgs")]
             SystemMsg::NodeQueryResponse {
                 response,
                 correlation_id,
@@ -977,6 +1005,7 @@ impl Node {
         }
     }
 
+    #[cfg(feature = "service-msgs")]
     async fn record_storage_level_if_any(&self, level: Option<StorageLevel>) -> Vec<Cmd> {
         let mut cmds = vec![];
         if let Some(level) = level {
@@ -1001,6 +1030,7 @@ impl Node {
         cmds
     }
 
+    #[cfg(feature = "service-msgs")]
     async fn replicate_data_of_suspicious_nodes(
         &self,
         suspects: BTreeSet<XorName>,

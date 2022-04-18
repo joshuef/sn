@@ -13,6 +13,7 @@ version = "0.2.0"
 [features]
 default = []
 back-pressure = []
+service-msgs = []
 test-utils=["proptest"]
 
 [dependencies]

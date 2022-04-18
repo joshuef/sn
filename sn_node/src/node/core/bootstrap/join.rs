@@ -435,6 +435,7 @@ impl<'a> Join<'a> {
                 MsgEvent::Received {
                     sender, wire_msg, ..
                 } => match wire_msg.msg_kind() {
+                    #[cfg(feature = "service-msgs")]
                     MsgKind::ServiceMsg(_) => continue,
                     MsgKind::NodeBlsShareAuthMsg(_) => {
                         trace!(
@@ -449,7 +450,16 @@ impl<'a> Join<'a> {
                             msg: SystemMsg::JoinResponse(resp),
                             ..
                         }) => (*resp, sender),
-                        Ok(MsgType::Service { msg_id, .. } | MsgType::System { msg_id, .. }) => {
+                        #[cfg(feature = "service-msgs")]
+                        Ok(MsgType::Service { msg_id, .. }) => {
+                            trace!(
+                                "Bootstrap message discarded: sender: {:?} msg_id: {:?}",
+                                sender,
+                                msg_id
+                            );
+                            continue;
+                        }
+                        Ok(MsgType::System { msg_id, .. }) => {
                             trace!(
                                 "Bootstrap message discarded: sender: {:?} msg_id: {:?}",
                                 sender,

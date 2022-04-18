@@ -302,6 +302,7 @@ impl Dispatcher {
                     .flat_map(|info| info.elders_vec())
                     .collect_vec();
 
+                #[cfg(feature = "service-msgs")]
                 for peer in linked_peers.clone() {
                     if !network_peers.contains(&peer) {
                         // not among known peers in the network
@@ -430,6 +431,7 @@ impl Dispatcher {
                 self.deliver_msgs(recipients, delivery_group_size, wire_msg)
                     .await?
             }
+            #[cfg(feature = "service-msgs")]
             MsgKind::ServiceMsg(_) => {
                 // we should never be sending such a msg to more than one recipient
                 // need refactors further up to solve in a nicer way

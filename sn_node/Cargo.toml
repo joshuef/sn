@@ -20,8 +20,11 @@ required-features = ["test-utils"]
 
 [features]
 default = []
+# default = ["service-msgs"]
 chaos = []
 back-pressure = ["sn_interface/back-pressure"]
+# registers = []
+service-msgs = []
 unstable-wiremsg-debuginfo = []
 test-utils = ["sn_interface/test-utils", "sn_interface/proptest"]
 # Needs to be built with RUSTFLAGS="--cfg tokio_unstable"

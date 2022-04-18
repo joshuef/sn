@@ -75,6 +75,7 @@ impl Node {
         }
     }
 
+    #[cfg(feature = "service-msgs")]
     /// Send `MetadataExchange` packet to the specified nodes
     pub(crate) async fn send_metadata_updates_to_nodes(
         &self,
@@ -134,13 +135,17 @@ impl Node {
             let previous_section_key = our_prev_state.section_key;
             let sibling_prefix = sibling_sap.prefix();
 
-            let mut cmds = self
-                .send_metadata_updates_to_nodes(
+            let mut cmds = vec![];
+
+            #[cfg(feature = "service-msgs")]
+            cmds.extend(
+                self.send_metadata_updates_to_nodes(
                     promoted_sibling_elders.clone(),
                     &sibling_prefix,
                     previous_section_key,
                 )
-                .await?;
+                .await?,
+            );
 
             // Also send AE update to sibling section's new Elders
             cmds.extend(

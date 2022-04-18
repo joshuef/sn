@@ -168,12 +168,15 @@ pub enum SystemMsg {
     /// Message that notifies a section to test
     /// the connectivity to a node
     StartConnectivityTest(XorName),
+    #[cfg(feature = "service-msgs")]
     /// Cmds are orders to perform some operation, only sent internally in the network.
     NodeCmd(NodeCmd),
+    #[cfg(feature = "service-msgs")]
     /// Queries is a read-only operation.
     NodeQuery(NodeQuery),
     /// Events are facts about something that happened on a node.
     NodeEvent(NodeEvent),
+    #[cfg(feature = "service-msgs")]
     /// The response to a query, containing the query result.
     NodeQueryResponse {
         /// QueryResponse.

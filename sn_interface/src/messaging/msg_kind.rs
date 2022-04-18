@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum MsgKind {
+    #[cfg(feature = "service-msgs")]
     /// A data message, with the requesting peer's authority.
     ///
     /// Authority is needed to access private data, such as reading or writing a private file.
@@ -48,6 +49,7 @@ impl MsgKind {
                 name: crate::types::PublicKey::Ed25519(auth.node_ed_pk).into(),
                 section_pk: auth.section_pk,
             },
+            #[cfg(feature = "service-msgs")]
             Self::ServiceMsg(auth) => SrcLocation::EndUser(super::EndUser(auth.public_key.into())),
         }
     }

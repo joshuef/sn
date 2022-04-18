@@ -63,7 +63,9 @@ impl Node {
             )
             .await?;
 
-        let mut cmds = self.try_reorganize_data(old_adults).await?;
+        let mut cmds = vec![];
+        #[cfg(feature = "service-msgs")]
+        cmds.extend(self.try_reorganize_data(old_adults).await?);
 
         // always run this, only changes will trigger events
         cmds.extend(self.update_self_for_new_node_state(snapshot).await?);
