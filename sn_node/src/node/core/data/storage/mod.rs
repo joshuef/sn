@@ -143,6 +143,7 @@ impl DataStorage {
 
 impl Node {
     #[allow(clippy::mutable_key_type)]
+    #[cfg(feature = "service-msgs")]
     pub(crate) async fn reorganize_data(
         &self,
         new_adults: BTreeSet<XorName>,
@@ -194,6 +195,7 @@ impl Node {
     }
 
     // on adults
+    #[cfg(feature = "service-msgs")]
     async fn get_replica_targets(
         &self,
         address: &DataAddress,

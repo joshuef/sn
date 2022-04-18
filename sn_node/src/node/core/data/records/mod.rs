@@ -147,12 +147,9 @@ impl Node {
 
     /// Registered holders not present in provided list of members
     /// will be removed from adult_storage_info and no longer tracked for liveness.
-    pub(crate) async fn liveness_retain_only(&self, members: BTreeSet<XorName>) -> Result<()> {
+    pub(crate) async fn data_records_retain_only(&self, members: BTreeSet<XorName>) -> Result<()> {
         // full adults
         self.capacity.retain_members_only(&members).await;
-
-        // stop tracking liveness of absent holders
-        let _ = self.dysfunction_tracking.retain_members_only(members).await;
 
         Ok(())
     }
@@ -161,8 +158,6 @@ impl Node {
     pub(crate) async fn add_new_adult_to_trackers(&self, adult: XorName) {
         info!("Adding new Adult: {adult} to trackers");
         self.capacity.add_new_adult(adult).await;
-
-        let _ = self.dysfunction_tracking.add_new_node(adult).await;
     }
 
     /// Set storage level of a given node.

@@ -10,6 +10,7 @@ mod api;
 mod bootstrap;
 mod comm;
 mod connectivity;
+#[cfg(feature = "service-msgs")]
 mod data;
 mod delivery_group;
 mod messaging;
@@ -19,12 +20,18 @@ mod split_barrier;
 
 pub(crate) use bootstrap::{join_network, JoiningAsRelocated};
 pub(crate) use comm::{Comm, DeliveryStatus, MsgEvent};
+
+#[cfg(feature = "service-msgs")]
 pub(crate) use data::MIN_LEVEL_WHEN_FULL;
+
 pub(crate) use proposal::Proposal;
 #[cfg(test)]
 pub(crate) use relocation::{check as relocation_check, ChurnId};
 
-use self::{data::DataStorage, split_barrier::SplitBarrier};
+#[cfg(feature = "service-msgs")]
+use self::data::DataStorage;
+
+use self::split_barrier::SplitBarrier;
 use sn_interface::{
     network_knowledge::{
         recommended_section_size, supermajority, NetworkKnowledge, NodeInfo, SectionKeyShare,
@@ -57,6 +64,7 @@ use sn_interface::network_knowledge::utils::compare_and_write_prefix_map_to_disk
 
 use backoff::ExponentialBackoff;
 use dashmap::DashSet;
+#[cfg(feature = "service-msgs")]
 use data::Capacity;
 use itertools::Itertools;
 use resource_proof::ResourceProof;
@@ -111,7 +119,7 @@ pub(crate) struct Node {
     pub(crate) info: Arc<RwLock<NodeInfo>>,
 
     pub(crate) comm: Comm,
-
+    #[cfg(feature = "service-msgs")]
     pub(super) data_storage: DataStorage, // Adult only before cache
 
     resource_proof: ResourceProof,
@@ -130,8 +138,10 @@ pub(crate) struct Node {
     pub(crate) membership: Arc<RwLock<Option<Membership>>>,
     joins_allowed: Arc<RwLock<bool>>,
     // Trackers
+    #[cfg(feature = "service-msgs")]
     capacity: Capacity,
     dysfunction_tracking: DysfunctionDetection,
+    #[cfg(feature = "service-msgs")]
     pending_data_queries: Arc<Cache<OperationId, Arc<DashSet<Peer>>>>,
     /// Timed cache of suspect nodes and their score
     known_suspect_nodes: Arc<Cache<XorName, usize>>,
@@ -181,6 +191,7 @@ impl Node {
         // make sure the Node has the correct local addr as Comm
         info.addr = comm.our_connection_info();
 
+        #[cfg(feature = "service-msgs")]
         let data_storage = DataStorage::new(&root_storage_dir, used_space.clone())?;
 
         info!("Creating DysfunctionDetection checks");
@@ -211,9 +222,12 @@ impl Node {
             event_tx,
             joins_allowed: Arc::new(RwLock::new(true)),
             resource_proof: ResourceProof::new(RESOURCE_PROOF_DATA_SIZE, RESOURCE_PROOF_DIFFICULTY),
+            #[cfg(feature = "service-msgs")]
             data_storage,
+            #[cfg(feature = "service-msgs")]
             capacity: Capacity::default(),
             dysfunction_tracking: node_dysfunction_detector,
+            #[cfg(feature = "service-msgs")]
             pending_data_queries: Arc::new(Cache::with_expiry_duration(DATA_QUERY_TIMEOUT)),
             known_suspect_nodes: Arc::new(Cache::with_expiry_duration(
                 SUSPECT_NODE_RETENTION_DURATION,
@@ -624,21 +638,27 @@ impl Node {
                 }
 
                 cmds.extend(self.send_updates_to_sibling_section(&old).await?);
-                self.liveness_retain_only(
-                    self.network_knowledge
-                        .adults()
-                        .await
-                        .iter()
-                        .map(|peer| peer.name())
-                        .collect(),
-                )
-                .await?;
+
+                let members = self
+                    .network_knowledge
+                    .adults()
+                    .await
+                    .iter()
+                    .map(|peer| peer.name())
+                    .collect();
+
+                #[cfg(feature = "service-msgs")]
+                self.data_records_retain_only(members.clone()).await?;
+
+                // stop tracking liveness of absent holders
+                let _ = self.dysfunction_tracking.retain_members_only(members).await;
 
                 Event::SectionSplit {
                     elders,
                     self_status_change,
                 }
             } else {
+                #[cfg(feature = "service-msgs")]
                 cmds.extend(
                     self.send_metadata_updates_to_nodes(
                         self.network_knowledge
@@ -657,6 +677,7 @@ impl Node {
                 }
             };
 
+            #[cfg(feature = "service-msgs")]
             cmds.extend(
                 self.send_metadata_updates_to_nodes(
                     self.network_knowledge
