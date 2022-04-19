@@ -3656,7 +3656,7 @@ dependencies = [
 
 [[package]]
 name = "sn_client"
-version = "0.1.0"
+version = "0.62.0"
 dependencies = [
  "backoff 0.4.0",
  "base64 0.13.0",
