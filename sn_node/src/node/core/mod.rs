@@ -591,7 +591,7 @@ impl Node {
                     // Whenever there is an elders change, casting a round of joins_allowed
                     // proposals to sync.
                     cmds.extend(
-                        self.propose(Proposal::JoinsAllowed(*self.joins_allowed.read().await))
+                        self.propose(Proposal::JoinsAllowed(true))
                             .await?,
                     );
                 }

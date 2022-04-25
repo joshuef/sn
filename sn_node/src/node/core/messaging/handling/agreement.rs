@@ -37,7 +37,7 @@ impl Node {
                 Ok(vec![])
             }
             Proposal::JoinsAllowed(joins_allowed) => {
-                *self.joins_allowed.write().await = joins_allowed;
+                *self.joins_allowed.write().await = true;
                 Ok(vec![])
             }
         }
@@ -117,7 +117,7 @@ impl Node {
         if !our_prefix.is_empty() {
             // ..otherwise, switch off joins_allowed on a node joining.
             // TODO: fix racing issues here? https://github.com/maidsafe/safe_network/issues/890
-            *self.joins_allowed.write().await = false;
+            *self.joins_allowed.write().await = true;
         }
 
         let churn_id = ChurnId(new_info.sig.signature.to_bytes().to_vec());
