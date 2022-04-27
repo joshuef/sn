@@ -12,8 +12,11 @@ use crate::messaging::{
     },
     EndUser, MsgId, ServiceAuth,
 };
+
+#[cfg(feature = "registers")]
+use crate::types::register::{Entry, EntryHash, Permissions, Policy, Register, User};
+
 use crate::types::{
-    register::{Entry, EntryHash, Permissions, Policy, Register, User},
     Chunk, PublicKey, ReplicatedData, ReplicatedDataAddress,
 };
 

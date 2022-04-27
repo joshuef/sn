@@ -7,8 +7,11 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::{
-    chunk_operation_id, register::RegisterQuery, Error, OperationId, QueryResponse, Result,
+    chunk_operation_id, Error, OperationId, QueryResponse, Result,
+
 };
+#[cfg(feature = "registers")]
+use super::register::RegisterQuery;
 use crate::types::{ChunkAddress, ReplicatedDataAddress as DataAddress};
 use serde::{Deserialize, Serialize};
 use xor_name::XorName;

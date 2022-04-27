@@ -302,6 +302,7 @@ impl Dispatcher {
                     .flat_map(|info| info.elders_vec())
                     .collect_vec();
 
+                #[cfg(any(feature="registers", feature="chunks"))]
                 for peer in linked_peers.clone() {
                     if !network_peers.contains(&peer) {
                         // not among known peers in the network

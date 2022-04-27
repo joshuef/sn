@@ -6,8 +6,13 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::{CmdError, Error, RegisterCmd};
+use super::{CmdError, Error};
+
+#[cfg(feature = "registers")]
+use super::RegisterCmd;
+#[cfg(feature = "chunks")]
 use crate::types::Chunk;
+
 use serde::{Deserialize, Serialize};
 use xor_name::XorName;
 
