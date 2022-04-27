@@ -17,8 +17,12 @@ use crate::messaging::{
 use crate::types::register::{Entry, EntryHash, Permissions, Policy, Register, User};
 
 use crate::types::{
-    Chunk, PublicKey, ReplicatedData, ReplicatedDataAddress,
+    PublicKey, ReplicatedData, ReplicatedDataAddress,
 };
+
+
+#[cfg(feature = "chunks")]
+use crate::types::Chunk;
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;

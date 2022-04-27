@@ -56,6 +56,7 @@ impl ChunkStorage {
     }
 
     // Read chunk from local store and return NodeQueryResponse
+    #[cfg(feature="chunks")]
     pub(crate) async fn get(&self, address: &ChunkAddress) -> NodeQueryResponse {
         trace!("{:?}", LogMarker::ChunkQueryReceviedAtAdult);
         NodeQueryResponse::GetChunk(self.get_chunk(address).await.map_err(convert_to_error_msg))

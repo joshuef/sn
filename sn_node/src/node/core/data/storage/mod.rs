@@ -39,6 +39,7 @@ use xor_name::XorName;
 /// Operations on data.
 #[derive(Clone)]
 pub(crate) struct DataStorage {
+    #[cfg(feature="chunks")]
     chunks: ChunkStorage,
     registers: RegisterStorage,
     used_space: UsedSpace,
@@ -48,6 +49,7 @@ pub(crate) struct DataStorage {
 impl DataStorage {
     pub(crate) fn new(path: &Path, used_space: UsedSpace) -> Result<Self> {
         Ok(Self {
+            #[cfg(feature="chunks")]
             chunks: ChunkStorage::new(path, used_space.clone())?,
             registers: RegisterStorage::new(path, used_space.clone())?,
             used_space,
@@ -60,6 +62,7 @@ impl DataStorage {
     pub(crate) async fn store(&self, data: &ReplicatedData) -> Result<Option<StorageLevel>> {
         debug!("Replicating {data:?}");
         match data.clone() {
+            #[cfg(feature="chunks")]
             ReplicatedData::Chunk(chunk) => self.chunks.store(&chunk).await?,
             ReplicatedData::RegisterLog(data) => {
                 self.registers
@@ -90,7 +93,9 @@ impl DataStorage {
     // Query the local store and return NodeQueryResponse
     pub(crate) async fn query(&self, query: &DataQuery, requester: User) -> NodeQueryResponse {
         match query {
+            #[cfg(feature="chunks")]
             DataQuery::GetChunk(addr) => self.chunks.get(addr).await,
+            #[cfg(feature="registers")]
             DataQuery::Register(read) => self.registers.read(read, requester).await,
         }
     }
@@ -98,14 +103,18 @@ impl DataStorage {
     /// --- System calls ---
 
     // Read data from local store
+    #[cfg(any(feature="chunks", feature="registers"))]
     pub(crate) async fn get_from_local_store(
         &self,
         address: &DataAddress,
     ) -> Result<ReplicatedData> {
+
         match address {
+            #[cfg(feature="chunks")]
             DataAddress::Chunk(addr) => {
                 self.chunks.get_chunk(addr).await.map(ReplicatedData::Chunk)
             }
+            #[cfg(feature="registers")]
             DataAddress::Register(addr) => self
                 .registers
                 .get_register_replica(addr)
@@ -117,20 +126,35 @@ impl DataStorage {
     #[allow(dead_code)]
     pub(crate) async fn remove(&self, address: &DataAddress) -> Result<()> {
         match address {
+            #[cfg(feature="chunks")]
             DataAddress::Chunk(addr) => self.chunks.remove_chunk(addr).await,
+            #[cfg(feature="registers")]
             DataAddress::Register(addr) => self.registers.remove_register(addr).await,
         }
     }
 
     async fn keys(&self) -> Result<Vec<DataAddress>> {
-        let chunk_keys = self.chunks.keys()?.into_iter().map(DataAddress::Chunk);
-        let reg_keys = self
-            .registers
-            .keys()
-            .await?
-            .into_iter()
-            .map(DataAddress::Register);
-        Ok(reg_keys.chain(chunk_keys).collect())
+        let mut keys = vec![];
+        #[cfg(feature="chunks")]
+        {
+            let chunk_keys: Vec<_> = self.chunks.keys()?.into_iter().map(DataAddress::Chunk).collect();
+            keys.extend(chunk_keys)
+            // keys = keys.chain(chunk_keys).into_iter();
+        }
+
+        #[cfg(feature="registers")]
+        {
+            let reg_keys: Vec<_> = self
+                .registers
+                .keys()
+                .await?
+                .into_iter()
+                .map(DataAddress::Register).collect();
+                keys.extend(reg_keys)
+
+            // keys = keys.chain(reg_keys).into_iter();
+        }
+        Ok(keys)
     }
 
     pub(crate) async fn get_for_replication(

@@ -56,10 +56,13 @@ pub use keys::secret_key::test_utils::{keyed_signed, SecretKeySet};
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum ReplicatedData {
+    #[cfg(feature="chunks")]
     /// A chunk of data.
     Chunk(Chunk),
+    #[cfg(feature="registers")]
     /// A single cmd for a register.
     RegisterWrite(RegisterCmd),
+    #[cfg(feature="registers")]
     /// An entire op log of a register.
     RegisterLog(ReplicatedRegisterLog),
 }
@@ -67,16 +70,22 @@ pub enum ReplicatedData {
 impl ReplicatedData {
     pub fn name(&self) -> XorName {
         match self {
+            #[cfg(feature="chunks")]
             Self::Chunk(chunk) => *chunk.name(),
+            #[cfg(feature="registers")]
             Self::RegisterLog(log) => *log.address.name(),
+            #[cfg(feature="registers")]
             Self::RegisterWrite(cmd) => *cmd.dst_address().name(),
         }
     }
 
     pub fn address(&self) -> ReplicatedDataAddress {
         match self {
+            #[cfg(feature="chunks")]
             Self::Chunk(chunk) => ReplicatedDataAddress::Chunk(*chunk.address()),
+            #[cfg(feature="registers")]
             Self::RegisterLog(log) => ReplicatedDataAddress::Register(log.address),
+            #[cfg(feature="registers")]
             Self::RegisterWrite(cmd) => ReplicatedDataAddress::Register(cmd.dst_address()),
         }
     }

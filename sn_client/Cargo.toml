@@ -65,7 +65,7 @@ serde_bytes = "~0.11.5"
 serde_json = "1.0.53"
 signature = "1.1.10"
 sled = "~0.34.6"
-sn_interface = { path = "../sn_interface", version = "^0.2.0" }
+sn_interface = { path = "../sn_interface", version = "^0.2.0", features=["registers", "chunks"] }
 structopt = "~0.3.17"
 strum = "~0.23.0"
 strum_macros = "~0.23.1"

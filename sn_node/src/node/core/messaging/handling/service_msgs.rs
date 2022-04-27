@@ -60,7 +60,6 @@ impl Node {
 
     /// see if a client is waiting in the pending queries for a response
     /// If not, we could remove its link eg.
-    #[cfg(any(feature = "chunks", feature = "registers"))]
     pub(crate) async fn pending_data_queries_contains_client(&self, peer: &Peer) -> bool {
         // now we check if our peer is still waiting...
         for (_op_id, peer_vec) in self.pending_data_queries.get_items().await {
@@ -179,7 +178,9 @@ impl Node {
         // extract the data from the request
         let data = match msg {
             // These reads/writes are for adult nodes...
+            #[cfg(feature="registers")]
             ServiceMsg::Cmd(DataCmd::Register(cmd)) => ReplicatedData::RegisterWrite(cmd),
+            #[cfg(feature="chunks")]
             ServiceMsg::Cmd(DataCmd::StoreChunk(chunk)) => ReplicatedData::Chunk(chunk),
             ServiceMsg::Query(query) => {
                 return self

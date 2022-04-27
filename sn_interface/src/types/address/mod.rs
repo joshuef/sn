@@ -103,8 +103,11 @@ impl DataAddress {
 /// An address of data on the network
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Debug)]
 pub enum ReplicatedDataAddress {
+
+    #[cfg(feature="chunks")]
     ///
     Chunk(ChunkAddress),
+    #[cfg(feature="registers")]
     ///
     Register(RegisterAddress),
 }
@@ -113,7 +116,9 @@ impl ReplicatedDataAddress {
     /// The xorname.
     pub fn name(&self) -> &XorName {
         match self {
+            #[cfg(feature="chunks")]
             Self::Chunk(address) => address.name(),
+            #[cfg(feature="registers")]
             Self::Register(address) => address.name(),
         }
     }
@@ -121,7 +126,9 @@ impl ReplicatedDataAddress {
     ///
     pub fn to_replicated_address(&self) -> ReplicatedDataAddress {
         match self {
+            #[cfg(feature="chunks")]
             Self::Chunk(address) => ReplicatedDataAddress::Chunk(*address),
+            #[cfg(feature="registers")]
             Self::Register(address) => ReplicatedDataAddress::Register(*address),
         }
     }

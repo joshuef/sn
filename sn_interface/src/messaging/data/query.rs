@@ -6,13 +6,17 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+#[cfg(feature = "chunks")]
+use super::chunk_operation_id;
 use super::{
-    chunk_operation_id, Error, OperationId, QueryResponse, Result,
+     Error, OperationId, QueryResponse, Result,
 
 };
 #[cfg(feature = "registers")]
 use super::register::RegisterQuery;
-use crate::types::{ChunkAddress, ReplicatedDataAddress as DataAddress};
+use crate::types::{ReplicatedDataAddress as DataAddress};
+#[cfg(feature = "chunks")]
+use crate::types::ChunkAddress;
 use serde::{Deserialize, Serialize};
 use xor_name::XorName;
 
