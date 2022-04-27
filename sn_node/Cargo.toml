@@ -19,12 +19,12 @@ name = "routing_stress"
 required-features = ["test-utils"]
 
 [features]
-default = []
-# default = ["service-msgs"]
+# default = []
+default = ["registers", "chunks"]
 chaos = []
 back-pressure = ["sn_interface/back-pressure"]
-# registers = []
-service-msgs = []
+registers = ["sn_interface/registers"]
+chunks = ["sn_interface/chunks"]
 unstable-wiremsg-debuginfo = []
 test-utils = ["sn_interface/test-utils", "sn_interface/proptest"]
 # Needs to be built with RUSTFLAGS="--cfg tokio_unstable"

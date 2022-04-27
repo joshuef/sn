@@ -37,7 +37,13 @@ impl Node {
                 Ok(vec![])
             }
             Proposal::JoinsAllowed(joins_allowed) => {
-                *self.joins_allowed.write().await = joins_allowed;
+                // if we're not rolling with any data storage, joins can always be allowed
+                if cfg!(any(feature = "registers", feature = "chunks")) {
+                    *self.joins_allowed.write().await = joins_allowed;
+                } else {
+                    *self.joins_allowed.write().await = true;
+                }
+
                 Ok(vec![])
             }
         }
@@ -92,7 +98,7 @@ impl Node {
             return Ok(vec![]);
         }
 
-        #[cfg(feature = "service-msgs")]
+        #[cfg(any(feature = "chunks", feature = "registers"))]
         self.add_new_adult_to_trackers(new_info.name()).await;
 
         let _ = self
@@ -114,7 +120,8 @@ impl Node {
 
         // Do not disable node joins in first section.
         let our_prefix = self.network_knowledge.prefix().await;
-        if !our_prefix.is_empty() {
+        // and then as long as we have data features enabled
+        if !our_prefix.is_empty() && cfg!(any(feature = "registers", feature = "chunks")) {
             // ..otherwise, switch off joins_allowed on a node joining.
             // TODO: fix racing issues here? https://github.com/maidsafe/safe_network/issues/890
             *self.joins_allowed.write().await = false;

@@ -143,7 +143,7 @@ impl DataStorage {
 
 impl Node {
     #[allow(clippy::mutable_key_type)]
-    #[cfg(feature = "service-msgs")]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     pub(crate) async fn reorganize_data(
         &self,
         new_adults: BTreeSet<XorName>,
@@ -195,7 +195,7 @@ impl Node {
     }
 
     // on adults
-    #[cfg(feature = "service-msgs")]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     async fn get_replica_targets(
         &self,
         address: &DataAddress,

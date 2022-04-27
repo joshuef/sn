@@ -75,7 +75,7 @@ impl Node {
         }
     }
 
-    #[cfg(feature = "service-msgs")]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     /// Send `MetadataExchange` packet to the specified nodes
     pub(crate) async fn send_metadata_updates_to_nodes(
         &self,
@@ -137,7 +137,7 @@ impl Node {
 
             let mut cmds = vec![];
 
-            #[cfg(feature = "service-msgs")]
+            #[cfg(any(feature = "chunks", feature = "registers"))]
             cmds.extend(
                 self.send_metadata_updates_to_nodes(
                     promoted_sibling_elders.clone(),

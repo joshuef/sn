@@ -435,7 +435,7 @@ impl<'a> Join<'a> {
                 MsgEvent::Received {
                     sender, wire_msg, ..
                 } => match wire_msg.msg_kind() {
-                    #[cfg(feature = "service-msgs")]
+                    #[cfg(any(feature = "chunks", feature = "registers"))]
                     AuthKind::Service(_) => continue,
                     AuthKind::NodeBlsShare(_) => {
                         trace!(
@@ -450,7 +450,7 @@ impl<'a> Join<'a> {
                             msg: SystemMsg::JoinResponse(resp),
                             ..
                         }) => (*resp, sender),
-                        #[cfg(feature = "service-msgs")]
+                        #[cfg(any(feature = "chunks", feature = "registers"))]
                         Ok(MsgType::Service { msg_id, .. }) => {
                             trace!(
                                 "Bootstrap message discarded: sender: {:?} msg_id: {:?}",

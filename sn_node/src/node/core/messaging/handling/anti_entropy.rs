@@ -64,7 +64,7 @@ impl Node {
             .await?;
 
         let mut cmds = vec![];
-        #[cfg(feature = "service-msgs")]
+        #[cfg(any(feature = "chunks", feature = "registers"))]
         cmds.extend(self.try_reorganize_data(old_adults).await?);
 
         // always run this, only changes will trigger events

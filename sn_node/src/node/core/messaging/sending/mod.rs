@@ -10,6 +10,6 @@ mod anti_entropy;
 mod approval;
 mod dkg_start;
 mod proposal;
-#[cfg(feature = "service-msgs")]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 mod services;
 mod system;

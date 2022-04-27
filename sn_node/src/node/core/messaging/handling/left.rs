@@ -76,7 +76,7 @@ impl Node {
 
         cmds.extend(result);
 
-        let members = self
+        let members: BTreeSet<_> = self
             .network_knowledge
             .adults()
             .await
@@ -84,7 +84,7 @@ impl Node {
             .map(|peer| peer.name())
             .collect();
 
-        #[cfg(feature = "service-msgs")]
+        #[cfg(any(feature = "chunks", feature = "registers"))]
         self.data_records_retain_only(members.clone()).await?;
 
         let _ = self.dysfunction_tracking.retain_members_only(members).await;

@@ -10,7 +10,7 @@ mod api;
 mod bootstrap;
 mod comm;
 mod connectivity;
-#[cfg(feature = "service-msgs")]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 mod data;
 mod delivery_group;
 mod messaging;
@@ -21,14 +21,14 @@ mod split_barrier;
 pub(crate) use bootstrap::{join_network, JoiningAsRelocated};
 pub(crate) use comm::{Comm, DeliveryStatus, MsgEvent};
 
-#[cfg(feature = "service-msgs")]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 pub(crate) use data::MIN_LEVEL_WHEN_FULL;
 
 pub(crate) use proposal::Proposal;
 #[cfg(test)]
 pub(crate) use relocation::{check as relocation_check, ChurnId};
 
-#[cfg(feature = "service-msgs")]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 use self::data::DataStorage;
 
 use self::split_barrier::SplitBarrier;
@@ -64,7 +64,7 @@ use sn_interface::network_knowledge::utils::compare_and_write_prefix_map_to_disk
 
 use backoff::ExponentialBackoff;
 use dashmap::DashSet;
-#[cfg(feature = "service-msgs")]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 use data::Capacity;
 use itertools::Itertools;
 use resource_proof::ResourceProof;
@@ -119,7 +119,7 @@ pub(crate) struct Node {
     pub(crate) info: Arc<RwLock<NodeInfo>>,
 
     pub(crate) comm: Comm,
-    #[cfg(feature = "service-msgs")]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     pub(super) data_storage: DataStorage, // Adult only before cache
 
     resource_proof: ResourceProof,
@@ -138,10 +138,10 @@ pub(crate) struct Node {
     pub(crate) membership: Arc<RwLock<Option<Membership>>>,
     joins_allowed: Arc<RwLock<bool>>,
     // Trackers
-    #[cfg(feature = "service-msgs")]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     capacity: Capacity,
     dysfunction_tracking: DysfunctionDetection,
-    #[cfg(feature = "service-msgs")]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     pending_data_queries: Arc<Cache<OperationId, Arc<DashSet<Peer>>>>,
     /// Timed cache of suspect nodes and their score
     known_suspect_nodes: Arc<Cache<XorName, usize>>,
@@ -191,7 +191,7 @@ impl Node {
         // make sure the Node has the correct local addr as Comm
         info.addr = comm.our_connection_info();
 
-        #[cfg(feature = "service-msgs")]
+        #[cfg(any(feature = "chunks", feature = "registers"))]
         let data_storage = DataStorage::new(&root_storage_dir, used_space.clone())?;
 
         info!("Creating DysfunctionDetection checks");
@@ -222,12 +222,12 @@ impl Node {
             event_tx,
             joins_allowed: Arc::new(RwLock::new(true)),
             resource_proof: ResourceProof::new(RESOURCE_PROOF_DATA_SIZE, RESOURCE_PROOF_DIFFICULTY),
-            #[cfg(feature = "service-msgs")]
+            #[cfg(any(feature = "chunks", feature = "registers"))]
             data_storage,
-            #[cfg(feature = "service-msgs")]
+            #[cfg(any(feature = "chunks", feature = "registers"))]
             capacity: Capacity::default(),
             dysfunction_tracking: node_dysfunction_detector,
-            #[cfg(feature = "service-msgs")]
+            #[cfg(any(feature = "chunks", feature = "registers"))]
             pending_data_queries: Arc::new(Cache::with_expiry_duration(DATA_QUERY_TIMEOUT)),
             known_suspect_nodes: Arc::new(Cache::with_expiry_duration(
                 SUSPECT_NODE_RETENTION_DURATION,
@@ -590,10 +590,15 @@ impl Node {
 
                     // Whenever there is an elders change, casting a round of joins_allowed
                     // proposals to sync.
-                    cmds.extend(
-                        self.propose(Proposal::JoinsAllowed(*self.joins_allowed.read().await))
-                            .await?,
-                    );
+                    if cfg!(any(feature = "registers", feature = "chunks")) {
+                        cmds.extend(
+                            self.propose(Proposal::JoinsAllowed(*self.joins_allowed.read().await))
+                                .await?,
+                        );
+                    } else {
+                        // if we don't have any data, we set joins allowed to always be true
+                        cmds.extend(self.propose(Proposal::JoinsAllowed(true)).await?);
+                    }
                 }
 
                 self.print_network_stats().await;
@@ -639,7 +644,7 @@ impl Node {
 
                 cmds.extend(self.send_updates_to_sibling_section(&old).await?);
 
-                let members = self
+                let members: BTreeSet<_> = self
                     .network_knowledge
                     .adults()
                     .await
@@ -647,7 +652,7 @@ impl Node {
                     .map(|peer| peer.name())
                     .collect();
 
-                #[cfg(feature = "service-msgs")]
+                #[cfg(any(feature = "chunks", feature = "registers"))]
                 self.data_records_retain_only(members.clone()).await?;
 
                 // stop tracking liveness of absent holders
@@ -658,7 +663,7 @@ impl Node {
                     self_status_change,
                 }
             } else {
-                #[cfg(feature = "service-msgs")]
+                #[cfg(any(feature = "chunks", feature = "registers"))]
                 cmds.extend(
                     self.send_metadata_updates_to_nodes(
                         self.network_knowledge
@@ -677,7 +682,7 @@ impl Node {
                 }
             };
 
-            #[cfg(feature = "service-msgs")]
+            #[cfg(any(feature = "chunks", feature = "registers"))]
             cmds.extend(
                 self.send_metadata_updates_to_nodes(
                     self.network_knowledge

@@ -14,7 +14,7 @@ use xor_name::XorName;
 impl Node {
     /// Will reorganize data if we are an adult,
     /// and there were changes to adults (any added or removed).
-    #[cfg(feature = "service-msgs")]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     pub(crate) async fn try_reorganize_data(
         &self,
         old_adults: BTreeSet<XorName>,
