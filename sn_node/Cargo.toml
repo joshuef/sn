@@ -20,7 +20,7 @@ required-features = ["test-utils"]
 
 [features]
 # default = []
-default = ["registers"]
+default = []
 chaos = []
 back-pressure = ["sn_interface/back-pressure"]
 registers = ["sn_interface/registers"]

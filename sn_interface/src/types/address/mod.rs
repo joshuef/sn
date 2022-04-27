@@ -101,6 +101,7 @@ impl DataAddress {
 }
 
 /// An address of data on the network
+#[cfg(any(feature="chunks", feature="registers"))]
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Debug)]
 pub enum ReplicatedDataAddress {
 
@@ -112,6 +113,7 @@ pub enum ReplicatedDataAddress {
     Register(RegisterAddress),
 }
 
+#[cfg(any(feature="chunks", feature="registers"))]
 impl ReplicatedDataAddress {
     /// The xorname.
     pub fn name(&self) -> &XorName {

@@ -30,9 +30,15 @@ pub use connections::{PeerLinks, SendToOneError};
 
 pub use crate::messaging::data::{RegisterCmd, ReplicatedRegisterLog};
 pub use address::{
-    BytesAddress, ChunkAddress, DataAddress, RegisterAddress, ReplicatedDataAddress,
+    BytesAddress, ChunkAddress, DataAddress, RegisterAddress,
     SafeKeyAddress, Scope,
 };
+#[cfg(any(feature="chunks", feature="registers"))]
+pub use address::{
+    ReplicatedDataAddress
+};
+
+
 pub use cache::Cache;
 pub use chunk::{Chunk, MAX_CHUNK_SIZE_IN_BYTES};
 pub use errors::{convert_dt_error_to_error_msg, Error, Result};
@@ -53,6 +59,7 @@ use xor_name::XorName;
 pub use keys::secret_key::test_utils::{keyed_signed, SecretKeySet};
 
 ///
+#[cfg(any(feature="chunks", feature="registers"))]
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum ReplicatedData {
@@ -67,6 +74,7 @@ pub enum ReplicatedData {
     RegisterLog(ReplicatedRegisterLog),
 }
 
+#[cfg(any(feature="chunks", feature="registers"))]
 impl ReplicatedData {
     pub fn name(&self) -> XorName {
         match self {

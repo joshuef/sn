@@ -8,16 +8,21 @@
 
 use crate::messaging::{
     data::{
-        DataCmd, DataQuery, MetadataExchange, OperationId, QueryResponse, Result, StorageLevel,
+        MetadataExchange, OperationId, QueryResponse, Result, StorageLevel,
     },
     EndUser, MsgId, ServiceAuth,
 };
 
+#[cfg(any(feature="chunks", feature="registers"))]
+use crate::messaging::data::{DataCmd, DataQuery};
+
 #[cfg(feature = "registers")]
 use crate::types::register::{Entry, EntryHash, Permissions, Policy, Register, User};
 
+use crate::types::PublicKey;
+#[cfg(any(feature="chunks", feature="registers"))]
 use crate::types::{
-    PublicKey, ReplicatedData, ReplicatedDataAddress,
+    ReplicatedData, ReplicatedDataAddress,
 };
 
 
@@ -50,10 +55,13 @@ pub enum NodeCmd {
         /// The storage level reported by the node.
         level: StorageLevel,
     },
+    #[cfg(any(feature="chunks", feature="registers"))]
     /// Tells an Adult to store a replica of the data
     ReplicateData(Vec<ReplicatedData>),
+    #[cfg(any(feature="chunks", feature="registers"))]
     /// Tells an Adult to fetch and replicate data from the sender
     SendReplicateDataAddress(Vec<ReplicatedDataAddress>),
+    #[cfg(any(feature="chunks", feature="registers"))]
     /// Fetch the given replicated data we are missing
     FetchReplicateData(Vec<ReplicatedDataAddress>),
     /// Sent to all promoted nodes (also sibling if any) after

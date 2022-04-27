@@ -14,6 +14,7 @@ use super::{
 };
 #[cfg(feature = "registers")]
 use super::register::RegisterQuery;
+#[cfg(any(feature="chunks", feature="registers"))]
 use crate::types::{ReplicatedDataAddress as DataAddress};
 #[cfg(feature = "chunks")]
 use crate::types::ChunkAddress;
@@ -28,6 +29,7 @@ use xor_name::XorName;
 /// [`types`]: crate::types
 #[allow(clippy::large_enum_variant)]
 #[derive(Hash, Eq, PartialEq, PartialOrd, Clone, Serialize, Deserialize, Debug)]
+#[cfg(any(feature="chunks", feature="registers"))]
 pub enum DataQuery {
     #[cfg(feature = "chunks")]
     /// Retrieve a [`Chunk`] at the given address.
@@ -43,6 +45,7 @@ pub enum DataQuery {
     Register(RegisterQuery),
 }
 
+#[cfg(any(feature="chunks", feature="registers"))]
 impl DataQuery {
     /// Creates a Response containing an error, with the Response variant corresponding to the
     /// Request variant.
@@ -68,6 +71,7 @@ impl DataQuery {
     }
 
     /// Returns the address of the data
+    #[cfg(any(feature="chunks", feature="registers"))]
     pub fn address(&self) -> DataAddress {
         match self {
             #[cfg(feature = "chunks")]
