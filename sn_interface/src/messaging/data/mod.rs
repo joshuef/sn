@@ -9,21 +9,19 @@
 //! Data messages and their possible responses.
 
 mod cmd;
-mod data_exchange;
 mod errors;
 mod query;
 mod register;
 
-
-#[cfg(any(feature="chunks", feature="registers"))]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 pub use self::{cmd::DataCmd, query::DataQuery};
 
 pub use self::{
-    data_exchange::{MetadataExchange, RegisterStoreExport, ReplicatedRegisterLog, StorageLevel},
     errors::{Error, Result},
     register::{
         CreateRegister, DeleteRegister, EditRegister, ExtendRegister, RegisterCmd, RegisterQuery,
-        SignedRegisterCreate, SignedRegisterDelete, SignedRegisterEdit, SignedRegisterExtend,
+        RegisterStoreExport, ReplicatedRegisterLog, SignedRegisterCreate, SignedRegisterDelete,
+        SignedRegisterEdit, SignedRegisterExtend,
     },
 };
 

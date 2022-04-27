@@ -28,20 +28,21 @@ mod token;
 
 pub use connections::{PeerLinks, SendToOneError};
 
+#[cfg(any(feature = "chunks", feature = "registers"))]
 pub use crate::messaging::data::{RegisterCmd, ReplicatedRegisterLog};
-pub use address::{
-    BytesAddress, ChunkAddress, DataAddress, RegisterAddress,
-    SafeKeyAddress, Scope,
-};
-#[cfg(any(feature="chunks", feature="registers"))]
-pub use address::{
-    ReplicatedDataAddress
-};
 
+#[cfg(any(feature = "chunks", feature = "registers"))]
+pub use address::ReplicatedDataAddress;
+pub use address::{
+    BytesAddress, ChunkAddress, DataAddress, RegisterAddress, SafeKeyAddress, Scope,
+};
 
 pub use cache::Cache;
 pub use chunk::{Chunk, MAX_CHUNK_SIZE_IN_BYTES};
-pub use errors::{convert_dt_error_to_error_msg, Error, Result};
+#[cfg(any(feature = "chunks", feature = "registers"))]
+pub use errors::convert_dt_error_to_error_msg;
+
+pub use errors::{Error, Result};
 pub use keys::{
     keypair::{BlsKeypairShare, Encryption, Keypair, OwnerType, Signing},
     node_keypairs::NodeKeypairs,
@@ -59,41 +60,41 @@ use xor_name::XorName;
 pub use keys::secret_key::test_utils::{keyed_signed, SecretKeySet};
 
 ///
-#[cfg(any(feature="chunks", feature="registers"))]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum ReplicatedData {
-    #[cfg(feature="chunks")]
+    #[cfg(feature = "chunks")]
     /// A chunk of data.
     Chunk(Chunk),
-    #[cfg(feature="registers")]
+    #[cfg(feature = "registers")]
     /// A single cmd for a register.
     RegisterWrite(RegisterCmd),
-    #[cfg(feature="registers")]
+    #[cfg(feature = "registers")]
     /// An entire op log of a register.
     RegisterLog(ReplicatedRegisterLog),
 }
 
-#[cfg(any(feature="chunks", feature="registers"))]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 impl ReplicatedData {
     pub fn name(&self) -> XorName {
         match self {
-            #[cfg(feature="chunks")]
+            #[cfg(feature = "chunks")]
             Self::Chunk(chunk) => *chunk.name(),
-            #[cfg(feature="registers")]
+            #[cfg(feature = "registers")]
             Self::RegisterLog(log) => *log.address.name(),
-            #[cfg(feature="registers")]
+            #[cfg(feature = "registers")]
             Self::RegisterWrite(cmd) => *cmd.dst_address().name(),
         }
     }
 
     pub fn address(&self) -> ReplicatedDataAddress {
         match self {
-            #[cfg(feature="chunks")]
+            #[cfg(feature = "chunks")]
             Self::Chunk(chunk) => ReplicatedDataAddress::Chunk(*chunk.address()),
-            #[cfg(feature="registers")]
+            #[cfg(feature = "registers")]
             Self::RegisterLog(log) => ReplicatedDataAddress::Register(log.address),
-            #[cfg(feature="registers")]
+            #[cfg(feature = "registers")]
             Self::RegisterWrite(cmd) => ReplicatedDataAddress::Register(cmd.dst_address()),
         }
     }

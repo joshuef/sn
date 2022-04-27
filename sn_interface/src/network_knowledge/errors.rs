@@ -111,6 +111,7 @@ pub enum Error {
     /// Bincode error.
     #[error("Bincode error:: {0}")]
     Bincode(#[from] bincode::Error),
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     /// Network service message error.
     #[error("Network service message error:: {0}")]
     ServiceMsg(#[from] crate::messaging::data::Error),

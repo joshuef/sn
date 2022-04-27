@@ -5,26 +5,18 @@
 // under the GPL Licence is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
-
-use crate::messaging::{
-    data::{
-        MetadataExchange, OperationId, QueryResponse, Result, StorageLevel,
-    },
-    EndUser, MsgId, ServiceAuth,
+#[cfg(any(feature = "chunks", feature = "registers"))]
+use crate::messaging::data::{
+    DataCmd, DataQuery, OperationId, QueryResponse, Result, StorageLevel,
 };
-
-#[cfg(any(feature="chunks", feature="registers"))]
-use crate::messaging::data::{DataCmd, DataQuery};
+use crate::messaging::{section_metadata::MetadataExchange, EndUser, MsgId, ServiceAuth};
 
 #[cfg(feature = "registers")]
 use crate::types::register::{Entry, EntryHash, Permissions, Policy, Register, User};
 
 use crate::types::PublicKey;
-#[cfg(any(feature="chunks", feature="registers"))]
-use crate::types::{
-    ReplicatedData, ReplicatedDataAddress,
-};
-
+#[cfg(any(feature = "chunks", feature = "registers"))]
+use crate::types::{ReplicatedData, ReplicatedDataAddress};
 
 #[cfg(feature = "chunks")]
 use crate::types::Chunk;
@@ -37,15 +29,7 @@ use xor_name::XorName;
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum NodeCmd {
-    /// Metadata is handled by Elders
-    Metadata {
-        /// The contained cmd
-        cmd: DataCmd,
-        /// Requester pk and signature
-        auth: ServiceAuth,
-        /// Message source
-        origin: EndUser,
-    },
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     /// Notify Elders on nearing max capacity
     RecordStorageLevel {
         /// Node Id
@@ -55,13 +39,13 @@ pub enum NodeCmd {
         /// The storage level reported by the node.
         level: StorageLevel,
     },
-    #[cfg(any(feature="chunks", feature="registers"))]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     /// Tells an Adult to store a replica of the data
     ReplicateData(Vec<ReplicatedData>),
-    #[cfg(any(feature="chunks", feature="registers"))]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     /// Tells an Adult to fetch and replicate data from the sender
     SendReplicateDataAddress(Vec<ReplicatedDataAddress>),
-    #[cfg(any(feature="chunks", feature="registers"))]
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     /// Fetch the given replicated data we are missing
     FetchReplicateData(Vec<ReplicatedDataAddress>),
     /// Sent to all promoted nodes (also sibling if any) after
@@ -93,6 +77,7 @@ pub enum NodeEvent {
 /// Query originating at a node
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 pub enum NodeQuery {
     /// Metadata is handled by Elders
     Metadata {
@@ -119,6 +104,7 @@ pub enum NodeQuery {
 /// Responses to queries from Elders to Adults.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[cfg(any(feature = "chunks", feature = "registers"))]
 pub enum NodeQueryResponse {
     #[cfg(feature = "chunks")]
     //
@@ -154,6 +140,7 @@ pub enum NodeQueryResponse {
     FailedToCreateOperationId,
 }
 
+#[cfg(any(feature = "chunks", feature = "registers"))]
 impl NodeQueryResponse {
     pub fn convert(self) -> QueryResponse {
         use NodeQueryResponse::*;

@@ -19,7 +19,10 @@
 //!   may be sent by both clients and nodes.
 
 /// Data messages that clients and nodes can send.
+#[cfg(any(feature = "chunks", feature = "registers"))]
 pub mod data;
+/// Section organisation metadata (capacity info eg)
+pub mod section_metadata;
 /// The wire format and message (de)serialization API.
 pub mod serialisation;
 /// BLS Signature aggregator

@@ -7,11 +7,12 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::wire_msg_header::WireMsgHeader;
+#[cfg(any(feature = "chunks", feature = "registers"))]
+use crate::messaging::data::{ServiceError, ServiceMsg};
+
 use crate::messaging::{
-    data::{ServiceError, ServiceMsg},
-    system::SystemMsg,
-    AuthKind, AuthorityProof, DstLocation, Error, MsgId, MsgType, NodeMsgAuthority, Result,
-    ServiceAuth,
+    system::SystemMsg, AuthKind, AuthorityProof, DstLocation, Error, MsgId, MsgType,
+    NodeMsgAuthority, Result, ServiceAuth,
 };
 use bls::PublicKey as BlsPublicKey;
 use bytes::Bytes;
@@ -230,6 +231,7 @@ impl WireMsg {
     }
 
     /// Convenience function which validates the signature on a ServiceMsg.
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     pub fn verify_sig(auth: ServiceAuth, msg: ServiceMsg) -> Result<AuthorityProof<ServiceAuth>> {
         Self::serialize_msg_payload(&msg).and_then(|payload| AuthorityProof::verify(auth, &payload))
     }

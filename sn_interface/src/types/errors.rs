@@ -8,6 +8,7 @@
 
 use super::{register::User, RegisterAddress};
 
+#[cfg(any(feature = "chunks", feature = "registers"))]
 use crate::messaging::data::Error as ErrorMsg;
 
 use std::{
@@ -131,6 +132,7 @@ pub fn convert_bincode_error(err: bincode::Error) -> Error {
 }
 
 /// Convert type errors to messaging::Errors for sending scross the network
+#[cfg(any(feature = "chunks", feature = "registers"))]
 pub fn convert_dt_error_to_error_msg(error: Error) -> ErrorMsg {
     match error {
         Error::InvalidOperation => {

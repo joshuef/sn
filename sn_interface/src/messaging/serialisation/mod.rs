@@ -36,8 +36,9 @@ pub(crate) const SERVICE_QUERY_PRIORITY: i32 = -10;
 use crate::types::PublicKey;
 
 pub use self::wire_msg::WireMsg;
+#[cfg(any(feature = "chunks", feature = "registers"))]
+use super::data::ServiceMsg;
 use super::{
-    data::ServiceMsg,
     system::{NodeEvent, SystemMsg},
     AuthorityProof, BlsShareAuth, DstLocation, MsgId, NodeAuth, SectionAuth, ServiceAuth,
 };
@@ -132,12 +133,6 @@ impl MsgType {
                 msg: SystemMsg::BackPressure(_),
                 ..
             } => BACKPRESSURE_MSG_PRIORITY,
-
-            // Inter-node comms related to processing client requests
-            MsgType::System {
-                msg: SystemMsg::NodeMsgError { .. },
-                ..
-            } => NODE_DATA_MSG_PRIORITY,
             // Inter-node comms related to processing client requests
             #[cfg(any(feature = "chunks", feature = "registers"))]
             MsgType::System {
@@ -145,7 +140,8 @@ impl MsgType {
                     SystemMsg::NodeCmd(_)
                     | SystemMsg::NodeEvent(NodeEvent::CouldNotStoreData { .. })
                     | SystemMsg::NodeQuery(_)
-                    | SystemMsg::NodeQueryResponse { .. },
+                    | SystemMsg::NodeQueryResponse { .. }
+                    | SystemMsg::NodeMsgError { .. },
                 ..
             } => NODE_DATA_MSG_PRIORITY,
 

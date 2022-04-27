@@ -16,7 +16,9 @@ mod signed;
 pub use agreement::{DkgFailureSig, DkgFailureSigSet, DkgSessionId, Proposal, SectionAuth};
 pub use join::{JoinRejectionReason, JoinRequest, JoinResponse, ResourceProofResponse};
 pub use join_as_relocated::{JoinAsRelocatedRequest, JoinAsRelocatedResponse};
-pub use node_msgs::{NodeCmd, NodeEvent, NodeQuery, NodeQueryResponse};
+pub use node_msgs::{NodeCmd, NodeEvent};
+#[cfg(any(feature = "chunks", feature = "registers"))]
+pub use node_msgs::{NodeQuery, NodeQueryResponse};
 pub use node_state::{MembershipState, NodeState, RelocateDetails};
 pub use signed::{KeyedSig, SigShare};
 use sn_consensus::{Generation, SignedVote};
@@ -29,7 +31,7 @@ use bls_dkg::key_gen::message::Message as DkgMessage;
 use bytes::Bytes;
 use secured_linked_list::SecuredLinkedList;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use xor_name::XorName;
 
 use super::authority::SectionAuth as SectionAuthProof;
@@ -171,6 +173,7 @@ pub enum SystemMsg {
     /// Events are facts about something that happened on a node.
     NodeEvent(NodeEvent),
     /// The returned error, from any msg handling on recipient node.
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     NodeMsgError {
         /// The error.
         // TODO: return node::Error instead

@@ -6,7 +6,6 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::RegisterCmd;
 use crate::{
     messaging::SectionAuth,
     types::{Error, RegisterAddress as Address, Result},
@@ -20,22 +19,6 @@ use xor_name::XorName;
 pub struct MetadataExchange {
     /// Adult storage levels.
     pub adult_levels: BTreeMap<XorName, StorageLevel>,
-}
-
-/// Data to be exchanged between Register stores.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RegisterStoreExport(pub Vec<ReplicatedRegisterLog>);
-
-/// Register data exchange.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReplicatedRegisterLog {
-    ///
-    pub address: Address,
-    /// section sig over address.id()
-    /// This is a duplicated entry as it should exist in first cmd
-    pub section_auth: SectionAuth,
-    ///
-    pub op_log: Vec<RegisterCmd>,
 }
 
 /// The degree to which storage has been used.

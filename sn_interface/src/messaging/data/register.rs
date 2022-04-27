@@ -19,6 +19,22 @@ use tiny_keccak::{Hasher, Sha3};
 use serde::{Deserialize, Serialize};
 use xor_name::XorName;
 
+/// Data to be exchanged between Register stores.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegisterStoreExport(pub Vec<ReplicatedRegisterLog>);
+
+/// Register data exchange.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReplicatedRegisterLog {
+    ///
+    pub address: Address,
+    /// section sig over address.id()
+    /// This is a duplicated entry as it should exist in first cmd
+    pub section_auth: SectionAuth,
+    ///
+    pub op_log: Vec<RegisterCmd>,
+}
+
 /// [`Register`] read operations.
 #[allow(clippy::large_enum_variant)]
 #[derive(Hash, Eq, PartialEq, PartialOrd, Clone, Serialize, Deserialize, Debug)]
