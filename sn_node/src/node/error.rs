@@ -8,8 +8,12 @@
 
 use super::Prefix;
 
+#[cfg(any(feature="chunks", feature="registers"))]
 use sn_interface::messaging::data::Error as ErrorMsg;
-use sn_interface::types::{convert_dt_error_to_error_msg, DataAddress, Peer, PublicKey};
+#[cfg(any(feature="chunks", feature="registers"))]
+use sn_interface::types::{convert_dt_error_to_error_msg, DataAddress};
+
+use sn_interface::types::{Peer, PublicKey};
 
 use secured_linked_list::error::Error as SecuredLinkedListError;
 use std::io;
@@ -100,6 +104,7 @@ pub enum Error {
     /// Not Section PublicKey.
     #[error("Not section public key returned from routing for xorname {0}")]
     NoSectionPublicKeyKnown(XorName),
+    #[cfg(any(feature = "chunks", feature = "registers"))]
     /// Key, Value pair not found.
     #[error("No such data: {0:?}")]
     NoSuchData(DataAddress),
@@ -115,6 +120,7 @@ pub enum Error {
     /// Bincode error.
     #[error("Bincode error:: {0}")]
     Bincode(#[from] bincode::Error),
+    #[cfg(any(feature="chunks", feature="registers"))]
     /// Network service message error.
     #[error("Network service message error:: {0}")]
     ServiceMsg(#[from] sn_interface::messaging::data::Error),
@@ -159,6 +165,7 @@ impl From<qp2p::SendError> for Error {
     }
 }
 
+#[cfg(any(feature = "chunks", feature = "registers"))]
 pub(crate) fn convert_to_error_msg(error: Error) -> ErrorMsg {
     match error {
         Error::InvalidOwner(key) => ErrorMsg::InvalidOwner(key),

@@ -431,6 +431,7 @@ impl Dispatcher {
                 self.deliver_msgs(recipients, delivery_group_size, wire_msg)
                     .await?
             }
+            #[cfg(any(feature="chunks", feature="registers"))]
             AuthKind::Service(_) => {
                 // we should never be sending such a msg to more than one recipient
                 // need refactors further up to solve in a nicer way

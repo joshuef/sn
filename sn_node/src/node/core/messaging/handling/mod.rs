@@ -32,9 +32,11 @@ use crate::node::{
 
 #[cfg(any(feature = "chunks", feature = "registers"))]
 use crate::node::MIN_LEVEL_WHEN_FULL;
+#[cfg(any(feature="chunks", feature="registers"))]
+use sn_interface::messaging::data::ServiceMsg;
 
 use sn_interface::messaging::{
-    data::{ServiceMsg, StorageLevel},
+    section_metadata::StorageLevel,
     signature_aggregator::Error as AggregatorError,
     system::{JoinResponse, NodeCmd, NodeEvent, NodeQuery, Proposal as ProposalMsg, SystemMsg},
     AuthorityProof, DstLocation, MsgId, MsgType, NodeMsgAuthority, SectionAuth, WireMsg,
@@ -389,19 +391,7 @@ impl Node {
 
                 Ok(vec![])
             }
-            SystemMsg::NodeMsgError {
-                error,
-                correlation_id,
-            } => {
-                trace!(
-                    "From {:?}({:?}), received error {:?} correlated to {:?}",
-                    msg_authority.src_location(),
-                    msg_id,
-                    error,
-                    correlation_id
-                );
-                Ok(vec![])
-            }
+
             SystemMsg::AntiEntropyRetry {
                 section_auth,
                 section_signed,
@@ -628,6 +618,20 @@ impl Node {
             } => {
                 self.handle_dkg_retry(&session_id, message_history, message, sender)
                     .await
+            }
+            #[cfg(any(feature="chunks", feature="registers"))]
+            SystemMsg::NodeMsgError {
+                error,
+                correlation_id,
+            } => {
+                trace!(
+                    "From {:?}({:?}), received error {:?} correlated to {:?}",
+                    msg_authority.src_location(),
+                    msg_id,
+                    error,
+                    correlation_id
+                );
+                Ok(vec![])
             }
             #[cfg(any(feature = "chunks", feature = "registers"))]
             SystemMsg::NodeCmd(NodeCmd::RecordStorageLevel { node_id, level, .. }) => {

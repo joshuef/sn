@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 #[cfg(any(feature = "chunks", feature = "registers"))]
 use crate::messaging::data::{
-    DataCmd, DataQuery, OperationId, QueryResponse, Result, StorageLevel,
+    DataCmd, DataQuery, OperationId, QueryResponse, Result,
 };
-use crate::messaging::{section_metadata::MetadataExchange, EndUser, MsgId, ServiceAuth};
+use crate::messaging::{section_metadata::StorageLevel, section_metadata::MetadataExchange, EndUser, MsgId, ServiceAuth};
 
 #[cfg(feature = "registers")]
 use crate::types::register::{Entry, EntryHash, Permissions, Policy, Register, User};

@@ -51,8 +51,10 @@ use crate::node::{
     error::{Error, Result},
     membership::elder_candidates,
 };
+#[cfg(any(feature="chunks", feature="registers"))]
+use sn_interface::messaging::data::OperationId;
+
 use sn_interface::messaging::{
-    data::OperationId,
     signature_aggregator::SignatureAggregator,
     system::{DkgSessionId, NodeEvent, NodeState, SystemMsg},
     AuthorityProof, DstLocation, SectionAuth, SectionAuthorityProvider,
