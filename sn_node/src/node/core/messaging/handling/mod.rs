@@ -22,23 +22,27 @@ mod update_section;
 
 pub(crate) use proposals::handle_proposal;
 
+#[cfg(any(feature="chunks", feature="registers"))]
 use crate::dbs::Error as DbError;
 use crate::node::{
     api::cmds::Cmd,
     core::{DkgSessionInfo, Node, Proposal as CoreProposal, DATA_QUERY_LIMIT},
     messages::{NodeMsgAuthorityUtils, WireMsgUtils},
-    Error, Event, MessageReceived, Result,
+    Error, Event, Result,
 };
+
+#[cfg(any(feature="chunks", feature="registers"))]
+use crate::node::MessageReceived;
 
 #[cfg(any(feature = "chunks", feature = "registers"))]
 use crate::node::MIN_LEVEL_WHEN_FULL;
 #[cfg(any(feature="chunks", feature="registers"))]
-use sn_interface::messaging::data::ServiceMsg;
+use sn_interface::messaging::{ data::ServiceMsg, system::NodeQuery};
 
 use sn_interface::messaging::{
     section_metadata::StorageLevel,
     signature_aggregator::Error as AggregatorError,
-    system::{JoinResponse, NodeCmd, NodeEvent, NodeQuery, Proposal as ProposalMsg, SystemMsg},
+    system::{JoinResponse, NodeCmd, NodeEvent, Proposal as ProposalMsg, SystemMsg},
     AuthorityProof, DstLocation, MsgId, MsgType, NodeMsgAuthority, SectionAuth, WireMsg,
 };
 use sn_interface::network_knowledge::NetworkKnowledge;

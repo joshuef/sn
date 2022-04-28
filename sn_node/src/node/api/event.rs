@@ -5,10 +5,13 @@
 // under the GPL Licence is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
-
+#[cfg(any(feature="chunks", feature="registers"))]
 use sn_interface::messaging::{
     data::ServiceMsg,
     system::{NodeCmd, NodeQuery, NodeQueryResponse},
+};
+
+use sn_interface::messaging::{
     AuthorityProof, DstLocation, EndUser, MsgId, ServiceAuth, SrcLocation,
 };
 
@@ -54,6 +57,7 @@ pub struct Elders {
 #[allow(clippy::large_enum_variant)]
 #[derive(custom_debug::Debug)]
 pub enum Event {
+    #[cfg(any(feature="chunks", feature="registers"))]
     /// Received a message from another Node.
     MessageReceived {
         /// The message ID
@@ -109,6 +113,7 @@ pub enum Event {
         #[debug(skip)]
         new_keypair: Arc<Keypair>,
     },
+    #[cfg(any(feature="chunks", feature="registers"))]
     /// Received a message from a peer.
     ServiceMsgReceived {
         /// The message ID
@@ -138,6 +143,7 @@ pub enum Event {
 /// Type of messages that are received from a peer
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
+#[cfg(any(feature="chunks", feature="registers"))]
 pub enum MessageReceived {
     /// Cmds only sent a among Nodes in the network.
     NodeCmd(NodeCmd),

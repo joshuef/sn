@@ -6,10 +6,13 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+#[cfg(any(feature="chunks", feature="registers"))]
 use sn_interface::messaging::data::Error as ErrorMsg;
+#[cfg(any(feature="chunks", feature="registers"))]
 use sn_interface::types::{
-    convert_dt_error_to_error_msg, DataAddress, PublicKey, ReplicatedDataAddress,
+    convert_dt_error_to_error_msg, DataAddress, ReplicatedDataAddress,
 };
+use sn_interface::types::PublicKey;
 use std::io;
 use thiserror::Error;
 use xor_name::XorName;
@@ -103,6 +106,7 @@ pub enum Error {
 }
 
 /// Convert db error to messaging error message for sending over the network.
+#[cfg(any(feature="chunks", feature="registers"))]
 pub(crate) fn convert_to_error_msg(error: Error) -> ErrorMsg {
     match error {
         Error::NotEnoughSpace => ErrorMsg::FailedToWriteFile,

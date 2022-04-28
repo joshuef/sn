@@ -6,16 +6,25 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+#[cfg(feature="chunks")]
 mod chunk_store;
+#[cfg(any(feature="chunks", feature="registers"))]
 mod encoding;
+#[cfg(any(feature="chunks", feature="registers"))]
 mod errors;
+#[cfg(any(feature="chunks", feature="registers"))]
 mod event_store;
 mod lru_cache;
 mod used_space;
 
+#[cfg(feature="chunks")]
 pub(crate) use chunk_store::ChunkStore;
+
+#[cfg(any(feature="chunks", feature="registers"))]
 pub(crate) use encoding::{deserialise, serialise};
+#[cfg(any(feature="chunks", feature="registers"))]
 pub(crate) use errors::{convert_to_error_msg, Error, Result};
+#[cfg(any(feature="chunks", feature="registers"))]
 pub(crate) use event_store::EventStore;
 pub(crate) use lru_cache::LruCache;
 use std::path::Path;

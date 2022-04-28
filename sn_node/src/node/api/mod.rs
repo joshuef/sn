@@ -30,7 +30,9 @@ use crate::node::{
     messages::WireMsgUtils,
     Config, Peer,
 };
+
 use crate::UsedSpace;
+
 use sn_interface::messaging::{system::SystemMsg, DstLocation, WireMsg};
 use sn_interface::network_knowledge::{NodeInfo, SectionAuthorityProvider, MIN_ADULT_AGE};
 use sn_interface::types::{keys::ed25519, log_markers::LogMarker, PublicKey as TypesPublicKey};

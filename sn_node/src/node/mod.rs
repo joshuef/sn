@@ -22,10 +22,12 @@ pub(crate) mod membership;
 mod messages;
 
 use sn_interface::types::Peer;
+#[cfg(any(feature="chunks", feature="registers"))]
+use self::api::event::MessageReceived;
 
 pub use self::{
     api::{
-        event::{Elders, Event, MessageReceived, NodeElderChange},
+        event::{Elders, Event, NodeElderChange},
         event_stream::EventStream,
         NodeApi,
     },

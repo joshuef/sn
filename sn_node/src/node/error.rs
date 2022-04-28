@@ -89,6 +89,7 @@ pub enum Error {
     /// Timeout when trying to join the network
     #[error("Timeout when trying to join the network")]
     JoinTimeout,
+    #[cfg(any(feature="chunks", feature="registers"))]
     /// Database error.
     #[error("Database error:: {0}")]
     Database(#[from] crate::dbs::Error),
