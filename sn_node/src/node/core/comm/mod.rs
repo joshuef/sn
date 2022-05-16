@@ -87,10 +87,14 @@ impl Comm {
         self.our_endpoint.public_addr()
     }
 
-    pub(crate) async fn cleanup_peers(&self) {
+    pub(crate) async fn cleanup_peers(&self, retain_peers: Vec<&Peer>) {
         let sessions = self.sessions.read().await;
+        // let section_peers = self
         let mut peers_to_cleanup = vec![];
         for (peer, session) in sessions.iter() {
+            if retain_peers.contains(&peer) {
+                continue;
+            }
             session.remove_expired().await;
             let is_connected = session.is_connected().await;
 

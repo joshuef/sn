@@ -271,6 +271,15 @@ impl Node {
             .await
     }
 
+    /// Removes any PeerLinks not from our section
+    pub(crate) async fn cleanup_non_section_peers(&self) {
+        let section_members = self.network_knowledge.section_members().await;
+        let retain_peers = section_members
+            .iter()
+            .map(|state| state.peer())
+            .collect_vec();
+        self.comm.cleanup_peers(retain_peers).await
+    }
     /// returns names that are relatively dysfunctional
     pub(crate) async fn get_dysfunctional_node_names(&self) -> Result<BTreeSet<XorName>> {
         self.dysfunction_tracking
