@@ -51,6 +51,7 @@ pub enum LogMarker {
     ChunkQueryReceviedAtAdult,
     // Data reorganisation
     DataReorganisationUnderway,
+    FetchingMissingReplicateData,
     // Register
     RegisterWrite,
     RegisterQueryReceivedAtElder,

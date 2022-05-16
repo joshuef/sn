@@ -722,7 +722,7 @@ impl Node {
                         match self.data_storage.get_from_local_store(&data_address).await {
                             Err(crate::dbs::Error::NoSuchData(_))
                             | Err(crate::dbs::Error::ChunkNotFound(_)) => {
-                                info!("to-be-replicated data is not present");
+                                trace!("to-be-replicated data is not present: {:?}", data_address);
 
                                 // We do not have the data which we are supposed to have since the new reorg
                                 data_not_present.push(data_address);
@@ -731,11 +731,18 @@ impl Node {
                                 info!("We already have the data that was asked to be replicated");
                             }
                             Err(e) => {
-                                error!("Error Sending FetchReplicateData for replication: {e}");
+                                error!("Error retrieving current data, in order to calculate FetchReplicateData cmd for replication: {e}");
                                 return Ok(vec![]);
                             }
                         }
                     }
+
+                    if data_not_present.is_empty() {
+                        debug!("No data needed to be replicated, we have it all.");
+                        return Ok(vec![]);
+                    }
+
+                    trace!("We are missing {:?} pieces of data", data_not_present.len());
 
                     let section_pk = self.section_key_by_name(&sender.name()).await;
                     let src_section_pk = self.network_knowledge().section_key().await;
@@ -755,6 +762,11 @@ impl Node {
                             chunked_data_address.collect_vec(),
                         ));
 
+                        debug!(
+                            "{:?} from : {:?} ",
+                            LogMarker::FetchingMissingReplicateData,
+                            dst
+                        );
                         wire_msgs.push(WireMsg::single_src(
                             our_info,
                             dst,
@@ -788,6 +800,10 @@ impl Node {
                         addresses.push(data_address_collection);
                     }
 
+                    debug!(
+                        "Data requested by a node for replication. {:?} batches formed",
+                        addresses.len()
+                    );
                     // Process each batch
                     for chunked_addresses in addresses {
                         let mut data_collection = vec![];

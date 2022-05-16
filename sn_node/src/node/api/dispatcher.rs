@@ -532,7 +532,7 @@ impl Dispatcher {
                         .await?,
                 )
             } else {
-                info!("Finished sending a batch of messages");
+                info!("Finished queing sending a batch of messages");
                 break;
             }
         }
