@@ -706,17 +706,35 @@ impl Node {
                     Ok(cmds)
                 };
             }
-            SystemMsg::NodeCmd(NodeCmd::SendReplicateDataAddress(data_addresses)) => {
-                info!("ReplicateData MsgId: {:?}", msg_id);
+            SystemMsg::NodeCmd(NodeCmd::EnsureReplicationOfDataAddress(data_addresses)) => {
+                info!("EnsureReplicationOfDataAddress MsgId: {:?}", msg_id);
 
                 return if self.is_elder().await {
-                    error!("Received unexpected message while Elder");
+                    error!(
+                        "Received unexpected EnsureReplicationOfDataAddress message while Elder"
+                    );
                     Ok(vec![])
                 } else {
                     // Collection of data addresses that we do not have
                     let mut data_not_present = vec![];
 
                     for data_address in data_addresses {
+                        let mut holders = BTreeSet::default();
+                        // first, check if we are actually responsible for this data
+                        if let Some(membership) = &*self.membership.read().await {
+                            let mut members = BTreeSet::default();
+                            for name in membership.current_section_members().keys() {
+                                let _prev = members.insert(*name);
+                            }
+                            holders = self.compute_holders(&data_address, &members);
+                        }
+
+                        // we're not a holder of this piece of data, so ignore it.
+                        if !holders.contains(&self.info.read().await.name()) {
+                            debug!("We're not a holder");
+                            continue;
+                        }
+
                         // TODO: Check if the data name falls within our Xor namespace
                         // Check if we already have the data
                         match self.data_storage.get_from_local_store(&data_address).await {
@@ -812,7 +830,11 @@ impl Node {
                                 data_collection.push(data);
                             }
                             Err(e) => {
-                                warn!("Error providing data for replication: {e}");
+                                // elders are asked in case they have the data from being an adult
+                                // (or perhaps from caching in the future)
+                                if !self.is_elder().await {
+                                    warn!("Error providing data for replication: {e}");
+                                }
                                 return Ok(vec![]);
                             }
                         }

@@ -149,7 +149,7 @@ impl Node {
     pub(crate) async fn reorganize_data(
         &self,
         new_adults: BTreeSet<XorName>,
-        lost_adults: BTreeSet<XorName>,
+        _lost_adults: BTreeSet<XorName>,
         remaining: BTreeSet<XorName>,
     ) -> Result<Vec<Cmd>, crate::node::Error> {
         let data = self.data_storage.clone();
@@ -159,7 +159,7 @@ impl Node {
         let mut data_for_replication = BTreeMap::new();
         for addr in keys.iter() {
             if let Some((data, holders)) = self
-                .get_replica_targets(addr, &new_adults, &lost_adults, &remaining)
+                .get_data_and_nodes_responsible(addr, &new_adults, &remaining)
                 .await
             {
                 let _prev = data_for_replication.insert(data.address(), (data, holders));
@@ -189,7 +189,9 @@ impl Node {
         for (target, data_addresses) in send_list.into_iter() {
             trace!("Sending replicated data list to: {:?}", target);
             cmds.push(Cmd::SignOutgoingSystemMsg {
-                msg: SystemMsg::NodeCmd(NodeCmd::SendReplicateDataAddress(data_addresses).clone()),
+                msg: SystemMsg::NodeCmd(
+                    NodeCmd::EnsureReplicationOfDataAddress(data_addresses).clone(),
+                ),
                 dst: DstLocation::Node {
                     name: target,
                     section_pk,
@@ -200,49 +202,50 @@ impl Node {
         Ok(cmds)
     }
 
-    // on adults
-    async fn get_replica_targets(
+    // on adults, find out who else is supposed to be responsible for any of the data,
+    // this can be used to send a message indicating all stored data we have that may be of interest
+    async fn get_data_and_nodes_responsible(
         &self,
         address: &DataAddress,
         new_adults: &BTreeSet<XorName>,
-        lost_adults: &BTreeSet<XorName>,
+        // lost_adults: &BTreeSet<XorName>,
         remaining: &BTreeSet<XorName>,
     ) -> Option<(ReplicatedData, BTreeSet<XorName>)> {
         let storage = self.data_storage.clone();
 
-        let old_adult_list = remaining.union(lost_adults).copied().collect();
+        // let old_adult_list = remaining.union(lost_adults).copied().collect();
         let new_adult_list = remaining.union(new_adults).copied().collect();
-        let new_holders = self.compute_holders(address, &new_adult_list);
+        // let new_holders = self.compute_holders(address, &new_adult_list);
 
-        debug!("New holders len: {:?}", new_holders.len());
-        let old_holders = self.compute_holders(address, &old_adult_list);
+        // debug!("New holders len: {:?}", new_holders.len());
+        // let old_holders = self.compute_holders(address, &old_adult_list);
 
-        let new_adult_is_holder = !new_holders.is_disjoint(new_adults);
-        let lost_old_holder = !old_holders.is_disjoint(lost_adults);
+        // let new_adult_is_holder = !new_holders.is_disjoint(new_adults);
+        // let lost_old_holder = !old_holders.is_disjoint(lost_adults);
 
-        if new_adult_is_holder || lost_old_holder {
-            info!("Replicating data at {:?}", address);
-            trace!(
-                "New Adult is Holder? {}, Lost Adult was holder? {}",
-                new_adult_is_holder,
-                lost_old_holder
-            );
-            let data = match storage.get_from_local_store(address).await {
-                Ok(data) => {
-                    info!("Data found for replication: {address:?}");
-                    Ok(data)
-                }
-                Err(error) => {
-                    warn!("Error finding {address:?} for replication: {error:?}");
-                    Err(error)
-                }
+        // if new_adult_is_holder || lost_old_holder {
+        info!("Informing nodes we have data at {:?}", address);
+        // trace!(
+        //     "New Adult is Holder? {}, Lost Adult was holder? {}",
+        //     new_adult_is_holder,
+        //     lost_old_holder
+        // );
+        let data = match storage.get_from_local_store(address).await {
+            Ok(data) => {
+                // info!("Data found for replication: {address:?}");
+                Ok(data)
             }
-            .ok()?;
-
-            Some((data, new_holders))
-        } else {
-            None
+            Err(error) => {
+                warn!("Error finding {address:?} for replication: {error:?}");
+                Err(error)
+            }
         }
+        .ok()?;
+
+        Some((data, new_adult_list))
+        // } else {
+        //     None
+        // }
     }
 }
 
