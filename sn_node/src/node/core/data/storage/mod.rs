@@ -154,11 +154,13 @@ impl Node {
     ) -> Result<Vec<Cmd>, crate::node::Error> {
         let data = self.data_storage.clone();
         let keys = data.keys().await?;
+
+        trace!("We have {:?} pieces of data stored locally", keys.len());
         let mut data_for_replication = BTreeMap::new();
         for addr in keys.iter() {
             if let Some((data, holders)) = self
-                .get_replica_targets(addr, &new_adults, &lost_adults, &remaining)
-                .await
+            .get_replica_targets(addr, &new_adults, &lost_adults, &remaining)
+            .await
             {
                 let _prev = data_for_replication.insert(data.address(), (data, holders));
             }
@@ -168,6 +170,8 @@ impl Node {
         let section_pk = self.network_knowledge.section_key().await;
         let mut send_list: BTreeMap<XorName, Vec<ReplicatedDataAddress>> = BTreeMap::new();
 
+
+        trace!("data_for_replication: {:?}", data_for_replication.len());
         for (data_address, (_data, targets)) in data_for_replication {
             for target in targets {
                 let entry = send_list.entry(target);
@@ -184,6 +188,7 @@ impl Node {
         }
 
         for (target, data_addresses) in send_list.into_iter() {
+            trace!("Sending replicated data list to: {:?}",target);
             cmds.push(Cmd::SignOutgoingSystemMsg {
                 msg: SystemMsg::NodeCmd(NodeCmd::SendReplicateDataAddress(data_addresses).clone()),
                 dst: DstLocation::Node {
