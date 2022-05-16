@@ -787,52 +787,48 @@ impl Node {
             SystemMsg::NodeCmd(NodeCmd::FetchReplicateData(data_addresses)) => {
                 let mut cmds = vec![];
                 info!("FetchReplicateData MsgId: {:?}", msg_id);
-                return if self.is_elder().await {
-                    error!("Received unexpected message while Elder");
-                    Ok(vec![])
-                } else {
-                    // Chunk the full list into REPLICATION_BATCH_SIZE addresses a batch
-                    let mut addresses = vec![];
-                    for chunked_data_address in
-                        &data_addresses.into_iter().chunks(REPLICATION_BATCH_SIZE)
-                    {
-                        let data_address_collection = chunked_data_address.collect_vec();
-                        addresses.push(data_address_collection);
-                    }
 
-                    debug!(
-                        "Data requested by a node for replication. {:?} batches formed",
-                        addresses.len()
-                    );
-                    // Process each batch
-                    for chunked_addresses in addresses {
-                        let mut data_collection = vec![];
-                        for data_address in chunked_addresses {
-                            match self.data_storage.get_for_replication(data_address).await {
-                                Ok(data) => {
-                                    info!("Providing {data_address:?} for replication");
+                // Chunk the full list into REPLICATION_BATCH_SIZE addresses a batch
+                let mut addresses = vec![];
+                for chunked_data_address in
+                    &data_addresses.into_iter().chunks(REPLICATION_BATCH_SIZE)
+                {
+                    let data_address_collection = chunked_data_address.collect_vec();
+                    addresses.push(data_address_collection);
+                }
 
-                                    data_collection.push(data);
-                                }
-                                Err(e) => {
-                                    warn!("Error providing data for replication: {e}");
-                                    return Ok(vec![]);
-                                }
+                debug!(
+                    "Data requested by a node for replication. {:?} batches formed",
+                    addresses.len()
+                );
+                // Process each batch
+                for chunked_addresses in addresses {
+                    let mut data_collection = vec![];
+                    for data_address in chunked_addresses {
+                        match self.data_storage.get_for_replication(data_address).await {
+                            Ok(data) => {
+                                info!("Providing {data_address:?} for replication");
+
+                                data_collection.push(data);
+                            }
+                            Err(e) => {
+                                warn!("Error providing data for replication: {e}");
+                                return Ok(vec![]);
                             }
                         }
-
-                        cmds.push(Cmd::SignOutgoingSystemMsg {
-                            msg: SystemMsg::NodeCmd(NodeCmd::ReplicateData(data_collection)),
-                            dst: sn_interface::messaging::DstLocation::Node {
-                                name: sender.name(),
-                                section_pk: self.section_key_by_name(&sender.name()).await,
-                            },
-                        });
                     }
 
-                    // Provide the requested data
-                    Ok(cmds)
-                };
+                    cmds.push(Cmd::SignOutgoingSystemMsg {
+                        msg: SystemMsg::NodeCmd(NodeCmd::ReplicateData(data_collection)),
+                        dst: sn_interface::messaging::DstLocation::Node {
+                            name: sender.name(),
+                            section_pk: self.section_key_by_name(&sender.name()).await,
+                        },
+                    });
+                }
+
+                // Provide the requested data
+                Ok(cmds)
             }
             SystemMsg::NodeCmd(node_cmd) => {
                 self.send_event(Event::MessageReceived {
