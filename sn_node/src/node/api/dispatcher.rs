@@ -196,23 +196,6 @@ impl Dispatcher {
                         error!("Error sending Propose Offline for dysfunctional nodes: {e:?}");
                     }
                 }
-
-                match dispatcher.node.notify_about_newly_suspect_nodes().await {
-                    Ok(suspect_cmds) => {
-                        for cmd in suspect_cmds {
-                            if let Err(e) = dispatcher
-                                .clone()
-                                .enqueue_and_handle_next_cmd_and_offshoots(cmd, None)
-                                .await
-                            {
-                                error!("Error processing suspect node cmds: {:?}", e);
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        error!("Error getting suspect nodes: {error}");
-                    }
-                };
             }
         });
     }

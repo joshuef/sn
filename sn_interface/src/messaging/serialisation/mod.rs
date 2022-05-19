@@ -12,15 +12,13 @@ mod wire_msg_header;
 use xor_name::XorName;
 
 // highest priority, since we must sort out membership first of all
-pub(crate) const DKG_MSG_PRIORITY: i32 = 10;
+pub(crate) const DKG_MSG_PRIORITY: i32 = 8;
 // very high prio, since we must have correct contact details to the network
-pub(crate) const ANTIENTROPY_MSG_PRIORITY: i32 = 8;
+pub(crate) const ANTIENTROPY_MSG_PRIORITY: i32 = 6;
 // high prio as recipient can't do anything until they've joined. Needs to be lower than DKG (or else no split)
-pub(crate) const JOIN_RESPONSE_PRIORITY: i32 = 6;
+pub(crate) const JOIN_RESPONSE_PRIORITY: i32 = 4;
 // our joining to the network
-pub(crate) const JOIN_RELOCATE_MSG_PRIORITY: i32 = 4;
-// reporting dysfunction is somewhat critical, so not super low
-pub(crate) const DYSFUNCTION_MSG_PRIORITY: i32 = 2;
+pub(crate) const JOIN_RELOCATE_MSG_PRIORITY: i32 = 2;
 #[cfg(feature = "back-pressure")]
 // reporting backpressure isn't time critical, so fairly low
 pub(crate) const BACKPRESSURE_MSG_PRIORITY: i32 = 0;
@@ -120,12 +118,6 @@ impl MsgType {
                     | SystemMsg::HandoverVote(_),
                 ..
             } => JOIN_RELOCATE_MSG_PRIORITY,
-
-            // Inter-node comms for dysfunction detection
-            MsgType::System {
-                msg: SystemMsg::NodeEvent(NodeEvent::SuspiciousNodesDetected(_)),
-                ..
-            } => DYSFUNCTION_MSG_PRIORITY,
 
             #[cfg(feature = "back-pressure")]
             // Inter-node comms for backpressure

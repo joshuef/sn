@@ -49,8 +49,8 @@ use crate::node::{
 use sn_interface::messaging::{
     data::OperationId,
     signature_aggregator::SignatureAggregator,
-    system::{DkgSessionId, NodeEvent, NodeState, SystemMsg},
-    AuthorityProof, DstLocation, SectionAuth, SectionAuthorityProvider,
+    system::{DkgSessionId, NodeState, SystemMsg},
+    AuthorityProof, SectionAuth, SectionAuthorityProvider,
 };
 use sn_interface::types::{log_markers::LogMarker, Cache, Peer};
 
@@ -87,10 +87,6 @@ const BACKOFF_CACHE_LIMIT: usize = 100;
 // based on liveness properties (e.g. the timeout should be dynamic based on the responsiveness of
 // the section).
 const DATA_QUERY_TIMEOUT: Duration = Duration::from_secs(15);
-
-/// How long to keep a cache of a given suspect node. Use to check if it's a newly suspicopus node
-/// and relevant flows should be triggered. (So a throttle on supect flows pehaps)
-const SUSPECT_NODE_RETENTION_DURATION: Duration = Duration::from_secs(60 * 25 /* 25 mins */);
 
 // This prevents pending query limit unbound growth
 pub(crate) const DATA_QUERY_LIMIT: usize = 100;
@@ -137,8 +133,6 @@ pub(crate) struct Node {
     capacity: Capacity,
     dysfunction_tracking: DysfunctionDetection,
     pending_data_queries: Arc<Cache<OperationId, Arc<DashSet<Peer>>>>,
-    /// Timed cache of suspect nodes and their score
-    known_suspect_nodes: Arc<Cache<XorName, usize>>,
     // Caches
     ae_backoff_cache: AeBackoffCache,
 }
@@ -233,9 +227,6 @@ impl Node {
             capacity: Capacity::default(),
             dysfunction_tracking: node_dysfunction_detector,
             pending_data_queries: Arc::new(Cache::with_expiry_duration(DATA_QUERY_TIMEOUT)),
-            known_suspect_nodes: Arc::new(Cache::with_expiry_duration(
-                SUSPECT_NODE_RETENTION_DURATION,
-            )),
             ae_backoff_cache: AeBackoffCache::default(),
             membership: Arc::new(RwLock::new(membership)),
         })
@@ -286,64 +277,6 @@ impl Node {
             .get_nodes_beyond_severity(DysfunctionSeverity::Dysfunctional)
             .await
             .map_err(Error::from)
-    }
-
-    /// returns names that are relatively dysfunctional
-    async fn get_suspicious_node_names(&self) -> Result<BTreeSet<XorName>> {
-        self.dysfunction_tracking
-            .get_nodes_beyond_severity(DysfunctionSeverity::Suspicious)
-            .await
-            .map_err(Error::from)
-    }
-
-    /// form Cmds about any newly suspicious nodes
-    pub(crate) async fn notify_about_newly_suspect_nodes(&self) -> Result<Vec<Cmd>> {
-        let mut cmds = vec![];
-
-        let all_suspect_nodes = self.get_suspicious_node_names().await?;
-
-        let known_suspect_nodes = self.known_suspect_nodes.get_items().await;
-
-        let newly_suspect_nodes: BTreeSet<_> = all_suspect_nodes
-            .iter()
-            .filter(|node| !known_suspect_nodes.contains_key(node))
-            .copied()
-            .collect();
-
-        if !newly_suspect_nodes.is_empty() {
-            warn!("New nodes have crossed preemptive replication threshold:  {newly_suspect_nodes:?} . Triggering preemptive data replication");
-
-            for sus in &all_suspect_nodes {
-                // 0 is set here as we actually don't need or want the score.
-                let _prev = self.known_suspect_nodes.set(*sus, 0, None).await;
-            }
-
-            let our_adults = self.network_knowledge.adults().await;
-            let valid_adults = our_adults
-                .iter()
-                .filter(|peer| !newly_suspect_nodes.contains(&peer.name()))
-                .cloned()
-                .collect::<Vec<Peer>>();
-
-            debug!(
-                "{:?}: {newly_suspect_nodes:?}",
-                LogMarker::SendSuspiciousNodesDetected
-            );
-
-            for adult in valid_adults {
-                cmds.push(Cmd::SignOutgoingSystemMsg {
-                    msg: SystemMsg::NodeEvent(NodeEvent::SuspiciousNodesDetected(
-                        newly_suspect_nodes.clone(),
-                    )),
-                    dst: DstLocation::Node {
-                        name: adult.name(),
-                        section_pk: *self.section_chain().await.last_key(),
-                    },
-                });
-            }
-        }
-
-        Ok(cmds)
     }
 
     /// Log a communication problem

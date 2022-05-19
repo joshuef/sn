@@ -653,14 +653,6 @@ impl Node {
                     Ok(vec![])
                 }
             }
-            SystemMsg::NodeEvent(NodeEvent::SuspiciousNodesDetected(suspects)) => {
-                info!(
-                    "Received probable suspects nodes {suspects:?} Starting preemptive data replication"
-                );
-                debug!("{}", LogMarker::DeviantsDetected);
-
-                return self.replicate_data_of_suspicious_nodes(suspects).await;
-            }
             SystemMsg::NodeCmd(NodeCmd::ReplicateData(data_collection)) => {
                 info!("ReplicateData MsgId: {:?}", msg_id);
                 return if self.is_elder().await {
@@ -1030,30 +1022,6 @@ impl Node {
             cmds.push(Cmd::SignOutgoingSystemMsg { msg, dst });
         }
         cmds
-    }
-
-    async fn replicate_data_of_suspicious_nodes(
-        &self,
-        suspects: BTreeSet<XorName>,
-    ) -> Result<Vec<Cmd>> {
-        debug!("Replicating data of suspect nodes : {suspects:?}");
-        let our_adults = self
-            .network_knowledge
-            .adults()
-            .await
-            .iter()
-            .filter_map(|peer| {
-                if suspects.contains(&peer.name()) {
-                    None
-                } else {
-                    Some(peer.name())
-                }
-            })
-            .collect::<BTreeSet<XorName>>();
-
-        self.reorganize_data(BTreeSet::new(), suspects, our_adults)
-            .await
-            .map_err(crate::node::Error::from)
     }
 
     // Convert the provided NodeMsgAuthority to be a `Section` message
