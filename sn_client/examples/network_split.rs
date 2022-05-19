@@ -105,6 +105,7 @@ pub async fn run_split() -> Result<()> {
     // Let's create an args array to pass to the network launcher tool
     let mut sn_launch_tool_args = vec![
         "sn_launch_tool",
+        "-yyyy", // RUST_LOG
         "--node-path",
         &arg_node_path,
         "--nodes-dir",

@@ -25,11 +25,13 @@ const REPLICATION_MSG_THROTTLE_DURATION: Duration = Duration::from_secs(5);
 impl Node {
     /// Given a set of known data, we can calculate what more from what we have a
     /// given node should be responsible for
+    #[instrument(skip(self, data_sender_has))]
     pub(crate) async fn get_missing_data_for_responsbile_node(
         &self,
         sender: Peer,
         data_sender_has: Vec<ReplicatedDataAddress>,
     ) -> Result<Vec<Cmd>> {
+        debug!("Getting missing data for node");
         // Collection of data addresses that we do not have
         let mut data_for_sender = vec![];
         let data_i_have = self.data_storage.keys().await?;
@@ -70,8 +72,14 @@ impl Node {
     /// Will send a list of currently known/owned data to relevant nodes.
     /// These nodes should send back anything missing (in batches).
     /// Relevant nodes should be all _prior_ neighbours + _new_ elders.
+    #[instrument(skip(self))]
     pub(crate) async fn ask_for_any_new_data(&self) -> Result<Vec<Cmd>> {
+        debug!("asking for any new data");
         let data_i_have = self.data_storage.keys().await?;
+        debug!(
+            "Asking for any data outwith of what this node has. known data count: {}",
+            data_i_have.len(),
+        );
         let membership_guard = self.membership.read().await;
         if let Some(membership) = &*membership_guard {
             let mut cmds = vec![];

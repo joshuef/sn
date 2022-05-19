@@ -124,7 +124,11 @@ impl Node {
                 .pending_data_queries
                 .set(op_id, waiting_peers.clone(), None)
                 .await;
-            trace!("Node {:?}, reported data not found ", sending_node_pk);
+            trace!(
+                "Node {:?}, reported data not found {:?}",
+                sending_node_pk,
+                op_id
+            );
             return Ok(cmds);
         }
 

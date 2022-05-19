@@ -512,13 +512,14 @@ impl Dispatcher {
         throttle_duration: Duration,
     ) -> Result<Vec<Cmd>> {
         let mut cmds = vec![];
-
+        debug!("Data batch waiting to be sent to {recipient}");
         let mut interval = tokio::time::interval(throttle_duration);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             let _instant = interval.tick().await;
             if let Some(data_batch) = data_batches.pop() {
+                debug!("Forming data batch msg to {recipient}");
                 // get info for the WireMsg
                 let section_pk = self.node.section_key_by_name(&recipient.name()).await;
                 let src_section_pk = self.node.network_knowledge().section_key().await;
