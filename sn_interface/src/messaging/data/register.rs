@@ -321,7 +321,7 @@ impl RegisterQuery {
         let mut output = [0; 32];
         hasher.update(bytes.as_bytes());
         hasher.finalize(&mut output);
-        Ok(output)
+        Ok(OperationId(output))
     }
 }
 

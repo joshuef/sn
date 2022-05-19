@@ -35,13 +35,31 @@ use crate::{
 };
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Debug, Display, Formatter};
 use std::{collections::BTreeSet, convert::TryFrom};
 use tiny_keccak::{Hasher, Sha3};
 use xor_name::XorName;
 
 /// Derivable Id of an operation. Query/Response should return the same id for simple tracking purposes.
 /// TODO: make uniquer per requester for some operations
-pub type OperationId = [u8; 32];
+#[derive(Deserialize, Serialize, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct OperationId(pub(crate) [u8; 32]);
+
+impl Display for OperationId {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        write!(
+            fmt,
+            "OpId-{:02x}{:02x}{:02x}..",
+            self.0[0], self.0[1], self.0[2]
+        )
+    }
+}
+
+impl Debug for OperationId {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(formatter, "{}", self)
+    }
+}
 
 /// Return operation Id of a chunk
 pub fn chunk_operation_id(address: &ChunkAddress) -> Result<OperationId> {
@@ -51,7 +69,7 @@ pub fn chunk_operation_id(address: &ChunkAddress) -> Result<OperationId> {
     hasher.update(bytes.as_bytes());
     hasher.finalize(&mut output);
 
-    Ok(output)
+    Ok(OperationId(output))
 }
 
 /// A message indicating that an error occurred as a node was handling a client's message.

@@ -3683,6 +3683,7 @@ dependencies = [
  "eyre",
  "proptest",
  "rand 0.8.5",
+ "sn_interface",
  "thiserror",
  "tokio",
  "tracing",

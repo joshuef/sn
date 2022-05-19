@@ -50,6 +50,7 @@ use xor_name::XorName;
 
 use crate::error::Result;
 use dashmap::DashMap;
+use sn_interface::messaging::data::OperationId;
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
@@ -60,10 +61,6 @@ pub use detection::{DysfunctionSeverity, IssueType};
 
 /// Some reproducible xorname derived from the operation. This is a permanent reference needed for logging all dysfunction.
 type NodeIdentifier = XorName;
-
-// re declaration here to not create circular dep w/ sn atm.
-// TODO: depend on types once that's extracted
-type OperationId = [u8; 32];
 
 pub(crate) type TimedTracker = Arc<DashMap<NodeIdentifier, Arc<RwLock<VecDeque<Instant>>>>>;
 

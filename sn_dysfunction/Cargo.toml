@@ -21,6 +21,7 @@ thiserror = "1.0.23"
 tokio = { version = "1.0.23", features = [ "sync" ] }
 tracing = "~0.1.26"
 xor_name = "4.0.1"
+sn_interface = { path = "../sn_interface", version = "^0.2.4" }
 
 [dev-dependencies]
 proptest = "~1.0.0"
