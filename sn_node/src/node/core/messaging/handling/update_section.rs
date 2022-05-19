@@ -36,6 +36,8 @@ impl Node {
         // Collection of data addresses that we do not have
         let mut data_for_sender = vec![];
         let data_i_have = self.data_storage.keys().await?;
+        let adults =  self.network_knowledge.adults().await;
+        let adults_names = adults.iter().map(|p2p_node| p2p_node.name());
 
         for data in data_i_have {
             if data_sender_has.contains(&data) {
@@ -43,7 +45,18 @@ impl Node {
             }
             // TODO: we should check if/what is relevant
             debug!("We have data the sender is missing");
-            data_for_sender.push(data);
+
+            let holder_adult_list: BTreeSet<_> = adults_names.clone()
+            .sorted_by(|lhs, rhs| data.name().cmp_distance(lhs, rhs))
+            .take(data_copy_count())
+            // .cloned()
+            .collect();
+
+            // TODO: Chunk this based on data names somehow
+            if holder_adult_list.contains(&sender.name()) {
+                data_for_sender.push(data);
+            }
+
         }
 
         let mut data_batches = vec![];
