@@ -16,8 +16,9 @@ use sn_interface::{
     },
     types::ReplicatedDataAddress,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, BTreeMap};
 use tokio::time::Duration;
+use sn_interface::data_copy_count;
 
 const REPLICATION_BATCH_SIZE: usize = 50;
 const REPLICATION_MSG_THROTTLE_DURATION: Duration = Duration::from_secs(5);
@@ -80,44 +81,44 @@ impl Node {
             "Asking for any data outwith of what this node has. known data count: {}",
             data_i_have.len(),
         );
-        let membership_guard = self.membership.read().await;
+        // let membership_guard = self.membership.read().await;
         // if let Some(membership) = &*membership_guard {
-
-            debug!("membership found");
             let mut cmds = vec![];
-            // let gen = membership.generation();
+        //     let gen = membership.generation();
 
             // TODO: should we refine this to more relevant nodes?
             // Here we use the previous membership state, as changes after a churn means we'll likely be missing out on data as those nodes are reorganising
-            // let mut target_members: BTreeSet<_> = membership
-            // .section_members(gen - 1)
-            // .map_err(Error::from)?
-            // .iter()
-            // .map(|(_, state)| state.peer())
-            // .collect();
+            let adults =  self.network_knowledge.adults().await;
+            let adults_names = adults.iter().map(|p2p_node| p2p_node.name());
 
-            let members = self.network_knowledge.section_members().await;
-            let target_members : BTreeSet<_>= members.iter()
-            .map(|state| state.peer())
-            .collect();
-            debug!("target members found from section membership{:?}", target_members.len());
+            let elders =  self.network_knowledge.elders().await;
+            // let target_member_names = BTreeSet::default();
 
-            debug!("current_elders {:?}", target_members.len());
-            // for elder in current_elders {
-            //     let _existed = target_members.insert(elder);
-            // }
+            let my_name = self.info.read().await.name();
 
-            debug!("all target members: {:?}", target_members.len());
+            let mut target_member_names = adults_names
+            .into_iter()
+            .sorted_by(|lhs, rhs| my_name.cmp_distance(lhs, rhs))
+            .filter(|peer| peer == &my_name)
+            .take(data_copy_count())
+            .collect::<BTreeSet<_>>();
+
+            // also send to our elders in case they are holding...
+            for elder in elders{
+                let _existed = target_member_names.insert(elder.name());
+            }
+
+
             let section_pk = self.network_knowledge.section_key().await;
 
-            for peer in target_members.into_iter() {
-                trace!("Sending our data list to: {:?}", peer);
+            for name in target_member_names {
+                trace!("Sending our data list to: {:?}", name);
                 cmds.push(Cmd::SignOutgoingSystemMsg {
                     msg: SystemMsg::NodeCmd(
                         NodeCmd::SendAnyMissingRelevantData(data_i_have.clone()).clone(),
                     ),
                     dst: DstLocation::Node {
-                        name: peer.name(),
+                        name: name,
                         section_pk,
                     },
                 })
