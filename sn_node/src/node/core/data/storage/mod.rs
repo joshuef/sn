@@ -132,14 +132,17 @@ impl Node {
     async fn get_data_and_nodes_responsible(
         &self,
         address: &DataAddress,
-        new_adults: &BTreeSet<XorName>,
+        // new_adults: &BTreeSet<XorName>,
         // lost_adults: &BTreeSet<XorName>,
-        remaining: &BTreeSet<XorName>,
-    ) -> Option<(ReplicatedData, BTreeSet<XorName>)> {
+        // remaining: &BTreeSet<XorName>,
+    ) -> Option<BTreeSet<XorName>> {
         let storage = self.data_storage.clone();
 
         // let old_adult_list = remaining.union(lost_adults).copied().collect();
-        let new_adult_list = remaining.union(new_adults).copied().collect();
+        // let new_adult_list = remaining.union(new_adults).copied().collect();
+
+        let adults = self.network_knowledge.adults().await;
+
         // let new_holders = self.compute_holders(address, &new_adult_list);
 
         // debug!("New holders len: {:?}", new_holders.len());
@@ -149,7 +152,7 @@ impl Node {
         // let lost_old_holder = !old_holders.is_disjoint(lost_adults);
 
         // if new_adult_is_holder || lost_old_holder {
-        info!("Informing nodes we have data at {:?}", address);
+        // info!("Informing nodes we have data at {:?}", address);
         // trace!(
         //     "New Adult is Holder? {}, Lost Adult was holder? {}",
         //     new_adult_is_holder,
