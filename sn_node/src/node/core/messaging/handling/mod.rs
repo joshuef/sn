@@ -44,12 +44,7 @@ use bls::PublicKey as BlsPublicKey;
 use bytes::Bytes;
 use itertools::Itertools;
 use sn_dysfunction::IssueType;
-use std::collections::BTreeSet;
-use tokio::time::Duration;
 use xor_name::XorName;
-
-const REPLICATION_BATCH_SIZE: usize = 50;
-const REPLICATION_MSG_THROTTLE_DURATION: Duration = Duration::from_secs(5);
 
 // Message handling
 impl Node {
@@ -698,150 +693,15 @@ impl Node {
                     Ok(cmds)
                 };
             }
-            SystemMsg::NodeCmd(NodeCmd::EnsureReplicationOfDataAddress(data_addresses)) => {
-                info!("EnsureReplicationOfDataAddress MsgId: {:?}", msg_id);
-
-                return if self.is_elder().await {
-                    error!(
-                        "Received unexpected EnsureReplicationOfDataAddress message while Elder"
-                    );
-                    Ok(vec![])
-                } else {
-                    // Collection of data addresses that we do not have
-                    let mut data_not_present = vec![];
-
-                    for data_address in data_addresses {
-                        let mut holders = BTreeSet::default();
-                        // first, check if we are actually responsible for this data
-                        if let Some(membership) = &*self.membership.read().await {
-                            let mut members = BTreeSet::default();
-                            for name in membership.current_section_members().keys() {
-                                let _prev = members.insert(*name);
-                            }
-                            holders = self.compute_holders(&data_address, &members);
-                        }
-
-                        // we're not a holder of this piece of data, so ignore it.
-                        if !holders.contains(&self.info.read().await.name()) {
-                            debug!("We're not a holder");
-                            continue;
-                        }
-
-                        // Check if we already have the data
-                        match self.data_storage.get_from_local_store(&data_address).await {
-                            Err(crate::dbs::Error::NoSuchData(_))
-                            | Err(crate::dbs::Error::ChunkNotFound(_)) => {
-                                trace!("to-be-replicated data is not present, storing that data now: {:?}", data_address);
-
-                                // We do not have the data which we are supposed to have since the new reorg
-                                data_not_present.push(data_address);
-                            }
-                            Ok(_) => {
-                                info!("We already have the data that was asked to be replicated");
-                            }
-                            Err(e) => {
-                                error!("Error retrieving current data, in order to calculate FetchReplicateData cmd for replication: {e}");
-                                return Ok(vec![]);
-                            }
-                        }
-                    }
-
-                    if data_not_present.is_empty() {
-                        debug!("No data needed to be replicated, we have it all.");
-                        return Ok(vec![]);
-                    }
-
-                    trace!("We are missing {:?} pieces of data", data_not_present.len());
-
-                    let section_pk = self.section_key_by_name(&sender.name()).await;
-                    let src_section_pk = self.network_knowledge().section_key().await;
-                    let our_info = &*self.info.read().await;
-                    let dst = sn_interface::messaging::DstLocation::Node {
-                        name: sender.name(),
-                        section_pk,
-                    };
-                    let mut wire_msgs = vec![];
-
-                    // Chunks the collection into REPLICATION_BATCH_SIZE addresses in a batch. This avoids memory
-                    // explosion in the network when the amount of data to be replicated is high
-                    for chunked_data_address in
-                        &data_not_present.into_iter().chunks(REPLICATION_BATCH_SIZE)
-                    {
-                        let system_msg = SystemMsg::NodeCmd(NodeCmd::FetchReplicateData(
-                            chunked_data_address.collect_vec(),
-                        ));
-
-                        debug!(
-                            "{:?} from : {:?} ",
-                            LogMarker::FetchingMissingReplicateData,
-                            dst
-                        );
-                        wire_msgs.push(WireMsg::single_src(
-                            our_info,
-                            dst,
-                            system_msg,
-                            src_section_pk,
-                        )?);
-                    }
-
-                    let cmd = Cmd::ThrottledSendBatchMsgs {
-                        throttle_duration: REPLICATION_MSG_THROTTLE_DURATION,
-                        recipients: vec![sender],
-                        wire_msgs,
-                    };
-
-                    Ok(vec![cmd])
-                };
-            }
-            SystemMsg::NodeCmd(NodeCmd::FetchReplicateData(data_addresses)) => {
-                let mut cmds = vec![];
-                info!("FetchReplicateData MsgId: {:?}", msg_id);
-
-                // Chunk the full list into REPLICATION_BATCH_SIZE addresses a batch
-                let mut addresses = vec![];
-                for chunked_data_address in
-                    &data_addresses.into_iter().chunks(REPLICATION_BATCH_SIZE)
-                {
-                    let data_address_collection = chunked_data_address.collect_vec();
-                    addresses.push(data_address_collection);
-                }
-
-                debug!(
-                    "Data requested by a node for replication. {:?} batches formed",
-                    addresses.len()
+            SystemMsg::NodeCmd(NodeCmd::SendAnyMissingRelevantData(known_data_addresses)) => {
+                info!(
+                    "{:?} MsgId: {:?}",
+                    LogMarker::RequestForAnyMissingData,
+                    msg_id
                 );
-                // Process each batch
-                for chunked_addresses in addresses {
-                    let mut data_collection = vec![];
-                    for data_address in chunked_addresses {
-                        match self.data_storage.get_for_replication(data_address).await {
-                            Ok(data) => {
-                                info!("Providing {data_address:?} for replication");
 
-                                data_collection.push(data);
-                            }
-                            Err(e) => {
-                                // elders are asked in case they have the data from being an adult
-                                // (or perhaps from caching in the future)
-                                if !self.is_elder().await {
-                                    warn!("Error providing data for replication: {e}");
-                                }
-                                return Ok(vec![]);
-                            }
-                        }
-                    }
-
-                    cmds.push(Cmd::SignOutgoingSystemMsg {
-                        msg: SystemMsg::NodeCmd(NodeCmd::ReplicateData(data_collection)),
-                        dst: sn_interface::messaging::DstLocation::Node {
-                            name: sender.name(),
-                            section_pk: self.section_key_by_name(&sender.name()).await,
-                        },
-                    });
-                }
-
-                // Provide the requested data
-                Ok(cmds)
+                self.get_missing_data_for_responsbile_node(sender, known_data_addresses)
+                    .await
             }
             SystemMsg::NodeCmd(node_cmd) => {
                 self.send_event(Event::MessageReceived {

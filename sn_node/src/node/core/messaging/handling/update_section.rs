@@ -7,19 +7,69 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{api::cmds::Cmd, core::Node, Error, Result};
-use sn_interface::messaging::{
-    system::{NodeCmd, SystemMsg},
-    DstLocation,
+use itertools::Itertools;
+use sn_interface::types::{log_markers::LogMarker, Peer};
+use sn_interface::{
+    messaging::{
+        system::{NodeCmd, SystemMsg},
+        DstLocation,
+    },
+    types::ReplicatedDataAddress,
 };
-use sn_interface::types::log_markers::LogMarker;
 use std::collections::BTreeSet;
-use xor_name::XorName;
+use tokio::time::Duration;
+
+const REPLICATION_BATCH_SIZE: usize = 50;
+const REPLICATION_MSG_THROTTLE_DURATION: Duration = Duration::from_secs(5);
 
 impl Node {
+    /// Given a set of known data, we can calculate what more from what we have a
+    /// given node should be responsible for
+    pub(crate) async fn get_missing_data_for_responsbile_node(
+        &self,
+        sender: Peer,
+        data_sender_has: Vec<ReplicatedDataAddress>,
+    ) -> Result<Vec<Cmd>> {
+        // Collection of data addresses that we do not have
+        let mut data_for_sender = vec![];
+        let data_i_have = self.data_storage.keys().await?;
+
+        for data in data_i_have {
+            if data_sender_has.contains(&data) {
+                continue;
+            }
+            // TODO: we should check if/what is relevant
+            debug!("We have data the sender is missing");
+            data_for_sender.push(data);
+        }
+
+        let mut data_batches = vec![];
+
+        // Chunks the collection into REPLICATION_BATCH_SIZE addresses in a batch. This avoids memory
+        // explosion in the network when the amount of data to be replicated is high
+        for chunked_data_address in &data_for_sender.into_iter().chunks(REPLICATION_BATCH_SIZE) {
+            let data_batch = chunked_data_address.collect_vec();
+            debug!(
+                "{:?} batch to: {:?} ",
+                LogMarker::SendingMissingReplicatedData,
+                sender
+            );
+            data_batches.push(data_batch);
+        }
+
+        let cmd = Cmd::ThrottledSendBatchData {
+            throttle_duration: REPLICATION_MSG_THROTTLE_DURATION,
+            recipient: sender,
+
+            data_batches,
+        };
+
+        Ok(vec![cmd])
+    }
+
     /// Will send a list of currently known/owned data to relevant nodes.
     /// These nodes should send back anything missing (in batches).
     /// Relevant nodes should be all _prior_ neighbours + _new_ elders.
-    #[allow(dead_code)]
     pub(crate) async fn ask_for_any_new_data(&self) -> Result<Vec<Cmd>> {
         let data_i_have = self.data_storage.keys().await?;
         let membership_guard = self.membership.read().await;
@@ -45,7 +95,7 @@ impl Node {
                 trace!("Sending replicated data list to: {:?}", peer);
                 cmds.push(Cmd::SignOutgoingSystemMsg {
                     msg: SystemMsg::NodeCmd(
-                        NodeCmd::EnsureReplicationOfDataAddress(data_i_have.clone()).clone(),
+                        NodeCmd::SendAnyMissingRelevantData(data_i_have.clone()).clone(),
                     ),
                     dst: DstLocation::Node {
                         name: peer.name(),
@@ -63,36 +113,15 @@ impl Node {
 
     /// Will reorganize data if we are an adult,
     /// and there were changes to adults (any added or removed).
-    pub(crate) async fn try_reorganize_data(
-        &self,
-        old_adults: BTreeSet<XorName>,
-    ) -> Result<Vec<Cmd>> {
-        // if self.is_elder().await {
-        //     // only adults carry out the ops in this method
-        //     return Ok(vec![]);
-        // }
-
-        let current_adults: BTreeSet<_> = self
-            .network_knowledge
-            .adults()
-            .await
-            .iter()
-            .map(|p| p.name())
-            .collect();
-        let added: BTreeSet<_> = current_adults.difference(&old_adults).copied().collect();
-        let removed: BTreeSet<_> = old_adults.difference(&current_adults).copied().collect();
-
-        if added.is_empty() && removed.is_empty() {
-            // no adults added or removed, so nothing to do
+    pub(crate) async fn try_reorganize_data(&self) -> Result<Vec<Cmd>> {
+        // as an elder we dont want to get any more data for our name
+        // (elders will eventually be caching data in general)
+        if self.is_elder().await {
             return Ok(vec![]);
         }
 
         trace!("{:?}", LogMarker::DataReorganisationUnderway);
-        // we are an adult, and there were changes to adults
-        // so we reorganise the data stored in this section..:
-        let remaining = old_adults.intersection(&current_adults).copied().collect();
-        self.reorganize_data(added, removed, remaining)
-            .await
-            .map_err(super::Error::from)
+
+        self.ask_for_any_new_data().await
     }
 }

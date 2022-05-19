@@ -25,9 +25,7 @@ use sn_interface::messaging::{
     system::{NodeCmd, NodeQuery, SystemMsg},
     AuthorityProof, DstLocation, EndUser, MsgId, ServiceAuth, WireMsg,
 };
-use sn_interface::types::{
-    log_markers::LogMarker, Peer, PublicKey, ReplicatedData, ReplicatedDataAddress,
-};
+use sn_interface::types::{log_markers::LogMarker, Peer, PublicKey, ReplicatedData};
 use std::{cmp::Ordering, collections::BTreeSet, sync::Arc};
 use tracing::info;
 use xor_name::XorName;
@@ -186,19 +184,6 @@ impl Node {
 
     pub(crate) async fn full_adults(&self) -> BTreeSet<XorName> {
         self.capacity.full_adults().await
-    }
-
-    pub(crate) fn compute_holders(
-        &self,
-        addr: &ReplicatedDataAddress,
-        adult_list: &BTreeSet<XorName>,
-    ) -> BTreeSet<XorName> {
-        adult_list
-            .iter()
-            .sorted_by(|lhs, rhs| addr.name().cmp_distance(lhs, rhs))
-            .take(data_copy_count())
-            .cloned()
-            .collect()
     }
 
     /// Used to fetch the list of holders for given data name. Includes full nodes

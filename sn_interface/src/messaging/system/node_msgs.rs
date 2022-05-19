@@ -46,9 +46,7 @@ pub enum NodeCmd {
     /// Tells an Adult to store a replica of the data
     ReplicateData(Vec<ReplicatedData>),
     /// Tells an Adult to fetch and replicate data from the sender
-    EnsureReplicationOfDataAddress(Vec<ReplicatedDataAddress>),
-    /// Fetch the given replicated data we are missing
-    FetchReplicateData(Vec<ReplicatedDataAddress>),
+    SendAnyMissingRelevantData(Vec<ReplicatedDataAddress>),
     /// Sent to all promoted nodes (also sibling if any) after
     /// a completed transition to a new constellation.
     ReceiveMetadata {

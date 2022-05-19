@@ -9,29 +9,17 @@
 mod chunks;
 mod registers;
 
-use crate::{
-    dbs::Result,
-    node::core::{Cmd, Node},
-    UsedSpace,
-};
+use crate::{dbs::Result, node::core::Node, UsedSpace};
 
 use sn_interface::messaging::{
     data::{DataQuery, RegisterStoreExport, StorageLevel},
-    system::{NodeCmd, NodeQueryResponse, SystemMsg},
-    DstLocation,
+    system::NodeQueryResponse,
 };
 use sn_interface::types::{register::User, ReplicatedData, ReplicatedDataAddress as DataAddress};
 
 pub(crate) use chunks::ChunkStorage;
 pub(crate) use registers::RegisterStorage;
-
-use sn_interface::types::ReplicatedDataAddress;
-use std::collections::btree_map::Entry;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::Path,
-    sync::Arc,
-};
+use std::{collections::BTreeSet, path::Path, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::info;
 use xor_name::XorName;
@@ -135,75 +123,12 @@ impl DataStorage {
             .map(DataAddress::Register);
         Ok(reg_keys.chain(chunk_keys).collect())
     }
-
-    pub(crate) async fn get_for_replication(
-        &self,
-        data_address: ReplicatedDataAddress,
-    ) -> Result<ReplicatedData> {
-        self.get_from_local_store(&data_address).await
-    }
 }
 
 impl Node {
-    #[allow(clippy::mutable_key_type)]
-    pub(crate) async fn reorganize_data(
-        &self,
-        new_adults: BTreeSet<XorName>,
-        _lost_adults: BTreeSet<XorName>,
-        remaining: BTreeSet<XorName>,
-    ) -> Result<Vec<Cmd>, crate::node::Error> {
-        let data = self.data_storage.clone();
-        let keys = data.keys().await?;
-
-        trace!("We have {:?} pieces of data stored locally", keys.len());
-        let mut data_for_replication = BTreeMap::new();
-        for addr in keys.iter() {
-            if let Some((data, holders)) = self
-                .get_data_and_nodes_responsible(addr, &new_adults, &remaining)
-                .await
-            {
-                let _prev = data_for_replication.insert(data.address(), (data, holders));
-            }
-        }
-
-        let mut cmds = vec![];
-        let section_pk = self.network_knowledge.section_key().await;
-        let mut send_list: BTreeMap<XorName, Vec<ReplicatedDataAddress>> = BTreeMap::new();
-
-        trace!("data_for_replication: {:?}", data_for_replication.len());
-        for (data_address, (_data, targets)) in data_for_replication {
-            for target in targets {
-                let entry = send_list.entry(target);
-                match entry {
-                    Entry::Occupied(mut present_entries) => {
-                        let addresses = present_entries.get_mut();
-                        addresses.push(data_address);
-                    }
-                    Entry::Vacant(e) => {
-                        let _ = e.insert(vec![data_address]);
-                    }
-                }
-            }
-        }
-
-        for (target, data_addresses) in send_list.into_iter() {
-            trace!("Sending replicated data list to: {:?}", target);
-            cmds.push(Cmd::SignOutgoingSystemMsg {
-                msg: SystemMsg::NodeCmd(
-                    NodeCmd::EnsureReplicationOfDataAddress(data_addresses).clone(),
-                ),
-                dst: DstLocation::Node {
-                    name: target,
-                    section_pk,
-                },
-            })
-        }
-
-        Ok(cmds)
-    }
-
     // on adults, find out who else is supposed to be responsible for any of the data,
     // this can be used to send a message indicating all stored data we have that may be of interest
+    #[allow(dead_code)]
     async fn get_data_and_nodes_responsible(
         &self,
         address: &DataAddress,
