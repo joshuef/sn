@@ -727,12 +727,11 @@ impl Node {
                             continue;
                         }
 
-                        // TODO: Check if the data name falls within our Xor namespace
                         // Check if we already have the data
                         match self.data_storage.get_from_local_store(&data_address).await {
                             Err(crate::dbs::Error::NoSuchData(_))
                             | Err(crate::dbs::Error::ChunkNotFound(_)) => {
-                                trace!("to-be-replicated data is not present: {:?}", data_address);
+                                trace!("to-be-replicated data is not present, storing that data now: {:?}", data_address);
 
                                 // We do not have the data which we are supposed to have since the new reorg
                                 data_not_present.push(data_address);

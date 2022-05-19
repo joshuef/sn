@@ -75,6 +75,8 @@ pub enum Error {
     InvalidSectionChain(#[from] SecuredLinkedListError),
     #[error("Messaging protocol error: {0}")]
     Messaging(#[from] sn_interface::messaging::Error),
+    #[error("Membership error: {0}")]
+    Membership(#[from] crate::node::membership::Error),
     #[error("Invalid payload")]
     InvalidPayload,
     #[error("The section is currently set to not allow taking any new node")]

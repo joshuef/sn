@@ -14,7 +14,7 @@ use sn_consensus::{
 };
 
 #[derive(Debug, Error)]
-pub(crate) enum Error {
+pub enum Error {
     #[error("Consensus error while processing vote {0}")]
     Consensus(#[from] sn_consensus::Error),
     #[error("We are behind the voter, caller should request anti-entropy")]

@@ -68,7 +68,9 @@ impl Node {
             operation_id
         );
 
-        let targets = self.get_adults_holding_data(address.name()).await;
+        let targets = self
+            .get_adults_holding_data_including_full(address.name())
+            .await;
 
         if targets.is_empty() {
             let error =
@@ -199,8 +201,8 @@ impl Node {
             .collect()
     }
 
-    // Used to fetch the list of holders for given data name.
-    async fn get_adults_holding_data(&self, target: &XorName) -> BTreeSet<XorName> {
+    /// Used to fetch the list of holders for given data name. Includes full nodes
+    async fn get_adults_holding_data_including_full(&self, target: &XorName) -> BTreeSet<XorName> {
         let full_adults = self.full_adults().await;
         // TODO: reuse our_adults_sorted_by_distance_to API when core is merged into upper layer
         let adults = self.network_knowledge().adults().await;
@@ -243,7 +245,7 @@ impl Node {
         candidates
     }
 
-    // Used to fetch the list of holders for given name of data.
+    /// Used to fetch the list of holders for given name of data. Excludes full nodes
     async fn get_adults_who_should_store_data(&self, target: XorName) -> BTreeSet<XorName> {
         let full_adults = self.full_adults().await;
         // TODO: reuse our_adults_sorted_by_distance_to API when core is merged into upper layer
