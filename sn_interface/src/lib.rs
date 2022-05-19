@@ -21,7 +21,8 @@ extern crate tracing;
 pub use network_knowledge::{elder_count, SectionAuthorityProvider};
 
 /// Number of copies of a chunk
-const DEFAULT_DATA_COPY_COUNT: usize = 4;
+/// Should be almost as much as elders, in case many are promoted at onces in one data space.
+const DEFAULT_DATA_COPY_COUNT: usize = 6;
 
 // const SN_ELDER_COUNT: &str = "SN_ELDER_COUNT";
 const SN_DATA_COPY_COUNT: &str = "SN_DATA_COPY_COUNT";
