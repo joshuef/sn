@@ -69,7 +69,7 @@ impl Node {
             let data_batch = chunked_data_address.collect_vec();
             debug!(
                 "{:?} batch to: {:?} ",
-                LogMarker::SendingMissingReplicatedData,
+                LogMarker::QueuingMissingReplicatedData,
                 sender
             );
             data_batches.push(data_batch);

@@ -52,7 +52,7 @@ pub enum LogMarker {
     // Data reorganisation
     RequestForAnyMissingData,
     DataReorganisationUnderway,
-    FetchingMissingReplicateData,
+    QueuingMissingReplicatedData,
     SendingMissingReplicatedData,
     // Register
     RegisterWrite,

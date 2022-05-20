@@ -519,7 +519,8 @@ impl Dispatcher {
         loop {
             let _instant = interval.tick().await;
             if let Some(data_batch) = data_batches.pop() {
-                debug!("Forming data batch msg to {recipient}");
+
+
                 // get info for the WireMsg
                 let section_pk = self.node.section_key_by_name(&recipient.name()).await;
                 let src_section_pk = self.node.network_knowledge().section_key().await;
@@ -545,9 +546,12 @@ impl Dispatcher {
 
                 let wire_msg = WireMsg::single_src(our_info, dst, system_msg, src_section_pk)?;
 
-                debug!("Queueing up data batch:  {:?}", wire_msg.msg_id());
-
-
+                debug!(
+                    "{:?} batch to: {:?} w/ {:?} ",
+                    LogMarker::SendingMissingReplicatedData,
+                    recipient,
+                    wire_msg.msg_id()
+                );
                 cmds.extend(self.send_msg(&[recipient], 1, wire_msg).await?)
             } else {
                 info!("Finished queing sending a batch of messages");
