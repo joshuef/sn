@@ -54,6 +54,8 @@ impl Node {
 
             // TODO: Chunk this based on data names somehow
             if holder_adult_list.contains(&sender.name()) {
+
+                debug!("our requester shouldn hold: {:?}", data);
                 data_for_sender.push(data);
             }
 
@@ -115,6 +117,8 @@ impl Node {
             .filter(|peer| peer == &my_name)
             .take(data_copy_count())
             .collect::<BTreeSet<_>>();
+
+            debug!("nearest neighbours for data req: {:?}", target_member_names);
 
             // also send to our elders in case they are holding...
             for elder in elders{

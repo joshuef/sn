@@ -530,6 +530,8 @@ impl Dispatcher {
                 };
 
                 let mut data_to_send = vec![];
+
+                // grab the data we want to be sending
                 for data_address in data_batch {
                     let data = self
                         .node
