@@ -34,9 +34,9 @@ const SAFE_NODE_EXECUTABLE: &str = "sn_node";
 const SAFE_NODE_EXECUTABLE: &str = "sn_node.exe";
 
 const NODES_DIR: &str = "local-test-network";
-const INTERVAL: &str = "10000";
+const INTERVAL: &str = "4000";
 const RUST_LOG: &str = "RUST_LOG";
-const ADDITIONAL_NODES_TO_SPLIT: u64 = 15;
+const ADDITIONAL_NODES_TO_SPLIT: u64 = 12;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -137,8 +137,8 @@ pub async fn run_split() -> Result<()> {
         .wrap_err("Error starting the testnet")?;
 
     // leave a longer interval with more nodes to allow for splits if using split amounts
-    let interval_duration = Duration::from_millis(*interval_as_int);
-    sleep(interval_duration).await;
+    // let interval_duration = Duration::from_millis(*interval_as_int);
+    // sleep(interval_duration).await;
     println!("Done sleeping....");
 
     let mut all_data_put = vec![];
@@ -167,10 +167,10 @@ pub async fn run_split() -> Result<()> {
         .and_then(|launch| launch.run())
         .wrap_err("Error adding nodes to the testnet")?;
 
-    // leave a longer interval with more nodes to allow for splits if using split amounts
-    let interval_duration = Duration::from_millis(*interval_as_int);
+    // // leave a longer interval with more nodes to allow for splits if using split amounts
+    // let interval_duration = Duration::from_millis(*interval_as_int);
 
-    sleep(interval_duration).await;
+    // sleep(interval_duration).await;
 
     // now we read the data
     let (genesis_key, bootstrap_nodes) =

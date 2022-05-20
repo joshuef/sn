@@ -36,6 +36,7 @@ impl ChunkStore {
     /// Used space of the dir is tracked
     pub(crate) fn new<P: AsRef<Path>>(root: P, used_space: UsedSpace) -> Result<Self> {
         let chunk_store_path = root.as_ref().join(CHUNK_DB_DIR);
+        // let mut file = tokio::fs::File::create_dir_all(chunk_store_path).await?;
 
         Ok(ChunkStore {
             bit_tree_depth: BIT_TREE_DEPTH,

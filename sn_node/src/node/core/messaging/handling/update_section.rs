@@ -81,26 +81,37 @@ impl Node {
             data_i_have.len(),
         );
         let membership_guard = self.membership.read().await;
-        if let Some(membership) = &*membership_guard {
+        // if let Some(membership) = &*membership_guard {
+
+            debug!("membership found");
             let mut cmds = vec![];
-            let gen = membership.generation();
+            // let gen = membership.generation();
 
             // TODO: should we refine this to more relevant nodes?
             // Here we use the previous membership state, as changes after a churn means we'll likely be missing out on data as those nodes are reorganising
-            let mut target_members: BTreeSet<_> = membership
-                .section_members(gen - 1)
-                .map_err(Error::from)?
-                .iter()
-                .map(|(_, state)| state.peer())
-                .collect();
-            let current_elders = self.network_knowledge.elders().await;
-            for elder in current_elders {
-                let _existed = target_members.insert(elder);
-            }
+            // let mut target_members: BTreeSet<_> = membership
+            // .section_members(gen - 1)
+            // .map_err(Error::from)?
+            // .iter()
+            // .map(|(_, state)| state.peer())
+            // .collect();
+
+            let members = self.network_knowledge.section_members().await;
+            let target_members : BTreeSet<_>= members.iter()
+            .map(|state| state.peer())
+            .collect();
+            debug!("target members found from section membership{:?}", target_members.len());
+
+            debug!("current_elders {:?}", target_members.len());
+            // for elder in current_elders {
+            //     let _existed = target_members.insert(elder);
+            // }
+
+            debug!("all target members: {:?}", target_members.len());
             let section_pk = self.network_knowledge.section_key().await;
 
             for peer in target_members.into_iter() {
-                trace!("Sending replicated data list to: {:?}", peer);
+                trace!("Sending our data list to: {:?}", peer);
                 cmds.push(Cmd::SignOutgoingSystemMsg {
                     msg: SystemMsg::NodeCmd(
                         NodeCmd::SendAnyMissingRelevantData(data_i_have.clone()).clone(),
@@ -113,10 +124,12 @@ impl Node {
             }
 
             Ok(cmds)
-        } else {
-            // nothing to do
-            Ok(vec![])
-        }
+        // } else {
+
+        //     debug!("NO MEMBERSHIPPPPPPPPP");
+        //     // nothing to do
+        //     Ok(vec![])
+        // }
     }
 
     /// Will reorganize data if we are an adult,

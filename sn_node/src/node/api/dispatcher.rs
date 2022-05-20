@@ -543,6 +543,9 @@ impl Dispatcher {
 
                 let wire_msg = WireMsg::single_src(our_info, dst, system_msg, src_section_pk)?;
 
+                debug!("Queueing up data batch:  {:?}", wire_msg.msg_id());
+
+
                 cmds.extend(self.send_msg(&[recipient], 1, wire_msg).await?)
             } else {
                 info!("Finished queing sending a batch of messages");
