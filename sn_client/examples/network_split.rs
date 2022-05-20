@@ -137,9 +137,9 @@ pub async fn run_split() -> Result<()> {
         .wrap_err("Error starting the testnet")?;
 
     // leave a longer interval with more nodes to allow for splits if using split amounts
-    // let interval_duration = Duration::from_millis(*interval_as_int);
+    let interval_duration = Duration::from_millis(*interval_as_int);
     // sleep(interval_duration).await;
-    println!("Done sleeping....");
+    // println!("Done sleeping....");
 
     let mut all_data_put = vec![];
 
