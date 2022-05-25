@@ -136,6 +136,9 @@ impl Node {
         let my_name = self.info.read().await.name();
 
         // find data targets that are not us.
+        // TODO: handle edge case Within an edge case that for a section of prefix(), if our_name is: 0011xxx , other nodes are 0101xxx, 0101xxx, 0101xxx, 0100xxx, 0100xxx .
+        // Then for a data of 0000xxx, the closest 3 nodes to the data will be 0011xxx, 0100xxx, 0100xxx .
+        // But the closest 3 nodes to us will be 0101xxx, 0101xxx, 0101xxx, which missed that data.
         let mut target_member_names = adults_names
             .into_iter()
             .sorted_by(|lhs, rhs| my_name.cmp_distance(lhs, rhs))
