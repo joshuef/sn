@@ -38,18 +38,24 @@ impl Node {
         let data_copies = data_copy_count();
 
         // how much of the held data should any one node be responsible for
-        let data_holder_is_directly_responsible_for = data_i_have.len().checked_div(data_copies) ;
+        let data_per_holder = data_i_have.len().checked_div(data_copies) ;
         // if we're responsible for any of it...
-        if let Some ( data_holder_is_directly_responsible_for ) = data_holder_is_directly_responsible_for {
-            debug!("{sender} is responsible for {data_holder_is_directly_responsible_for} of data");
+        if let Some ( data_per_holder ) = data_per_holder {
+            debug!("{sender} is responsible for {data_per_holder} of data");
 
-            let data_prio_1 = data_i_have
+            // let data_prio_1: Vec<_> =
+
+
+            data_i_have
                 .sorted_by(|lhs, rhs| sender.name().cmp_distance(lhs, rhs))
-                .chunk(data_holder_is_directly_responsible_for)
-                .collect();
+                .collect()
+                .chunks(data_per_holder)
 
-            debug!("len of direct data responsibility: {:?}", data_prio_1.len());
+            // debug!("len of direct data responsibility: {:?}", data_prio_1.len());
 
+        }
+        else {
+            vec![]
         }
 
 
