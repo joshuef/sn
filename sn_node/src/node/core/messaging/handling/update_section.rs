@@ -20,6 +20,42 @@ use sn_interface::{
 use std::collections::BTreeSet;
 
 impl Node {
+
+    /// Gets data we hold, that is relevant to a specific sender, it returns a Vec of Vecs,
+    /// each inner vec holding ReplicatedDatAddresses of lessening proximity to the holder
+    /// This assumes that the requester has asked us a valid question...
+    async fn get_data_for_holder( &self, sender: Peer ) -> Vec<Vec<ReplicatedDataAddress>>> {
+        // TODO: can we cache this data stored per churn event?
+        let data_i_have = self.data_storage.keys().await?;
+        trace!("Our data got");
+
+        // You sort by xorname for all data keys
+        // you take adults known / replica count's worth of names.
+        // those are then prioritised into batches...
+
+
+        // let known_adults = self.network_knowledge.adults().await.len();
+        let data_copies = data_copy_count();
+
+        // how much of the held data should any one node be responsible for
+        let data_holder_is_directly_responsible_for = data_i_have.len().checked_div(data_copies) ;
+        // if we're responsible for any of it...
+        if let Some ( data_holder_is_directly_responsible_for ) = data_holder_is_directly_responsible_for {
+            debug!("{sender} is responsible for {data_holder_is_directly_responsible_for} of data");
+
+            let data_prio_1 = data_i_have
+                .sorted_by(|lhs, rhs| sender.name().cmp_distance(lhs, rhs))
+                .chunk(data_holder_is_directly_responsible_for)
+                .collect();
+
+            debug!("len of direct data responsibility: {:?}", data_prio_1.len());
+
+        }
+
+
+    }
+
+
     /// Given a set of known data, we can calculate what more from what we have a
     /// given node should be responsible for
     #[instrument(skip(self, data_sender_has))]
@@ -31,12 +67,10 @@ impl Node {
         trace!("Getting missing data for node");
         // Collection of data addresses that we do not have
 
-        // TODO: can we cache this data stored per churn event?
-        let data_i_have = self.data_storage.keys().await?;
-        trace!("Our data got");
+        let data_i_have = get_data_for_holder(sender);
 
         if data_i_have.is_empty() {
-            trace!("We have no data");
+            trace!("We have no data for sender");
             return Ok(vec![]);
         }
 
