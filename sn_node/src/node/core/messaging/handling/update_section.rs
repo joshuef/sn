@@ -123,7 +123,7 @@ impl Node {
                 // sender node eg.
                 let greed_level = 0;
                 let should_hold_data = self
-                    .check_if_node_should_hold_data_in_section(&sender.name(), &data, 0)
+                    .check_if_node_should_hold_data_in_section(&sender.name(), &data, greed_level)
                     .await;
 
                 if should_hold_data {
@@ -145,6 +145,7 @@ impl Node {
             cmds.push(Cmd::EnqueueDataForReplication {
                 recipient: sender,
                 data_batch: data_for_sender,
+                closeness: i
             });
         }
 

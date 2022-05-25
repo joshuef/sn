@@ -26,14 +26,17 @@ use tracing::Instrument;
 // A command/subcommand id e.g. "963111461", "963111461.0"
 pub(crate) type CmdId = String;
 
+type DataToReplicateQueue =  Arc<DashMap<ReplicatedDataAddress, Arc<RwLock<BTreeSet<Peer>>>>>;
 // Cmd Dispatcher.
 pub(crate) struct Dispatcher {
     pub(crate) node: Node,
     /// queue up all batch data to be replicated (as a result of churn events atm)
     // TODO: This can probably be reworked into the general per peer msg queue, but as
     // we need to pull data first before we form the WireMsg, we won't do that just now
-    pub(crate) pending_data_to_replicate_to_peers:
-        Arc<DashMap<ReplicatedDataAddress, Arc<RwLock<BTreeSet<Peer>>>>>,
+    pub(crate) high_prio_data_to_replicate: DataToReplicateQueue,
+    pub(crate) mid_prio_data_to_replicate: DataToReplicateQueue,
+    pub(crate) low_prio_data_to_replicate: DataToReplicateQueue,
+    pub(crate) no_prio_data_to_replicate: DataToReplicateQueue,
     cancel_timer_tx: watch::Sender<bool>,
     cancel_timer_rx: watch::Receiver<bool>,
 }
@@ -52,7 +55,10 @@ impl Dispatcher {
             node,
             cancel_timer_tx,
             cancel_timer_rx,
-            pending_data_to_replicate_to_peers: Arc::new(DashMap::new()),
+            high_prio_data_to_replicate: Arc::new(DashMap::new()),
+            mid_prio_data_to_replicate: Arc::new(DashMap::new()),
+            low_prio_data_to_replicate: Arc::new(DashMap::new()),
+            no_prio_data_to_replicate: Arc::new(DashMap::new()),
         }
     }
 
@@ -246,11 +252,18 @@ impl Dispatcher {
                 // throttle_duration,
                 recipient,
                 data_batch,
+                closeness
             } => {
                 // we should queue this
+                let queue = match closeness {
+                    0 => self.high_prio_data_to_replicate,
+                    1 => self.mid_prio_data_to_replicate,
+                    2 => self.low_prio_data_to_replicate,
+                    _ => self.no_prio_data_to_replicate,
+                };
 
                 for data in data_batch {
-                    if let Some(data_entry) = self.pending_data_to_replicate_to_peers.get_mut(&data)
+                    if let Some(data_entry) = queue.get_mut(&data)
                     {
                         let peer_set = data_entry.value();
                         debug!("data already queued, adding peer");
@@ -259,8 +272,7 @@ impl Dispatcher {
                         // let queue = DashSet::new();
                         let mut peer_set = BTreeSet::new();
                         let _existed = peer_set.insert(recipient);
-                        let _existed = self
-                            .pending_data_to_replicate_to_peers
+                        let _existed = queue
                             .insert(data, Arc::new(RwLock::new(peer_set)));
                     }
                 }

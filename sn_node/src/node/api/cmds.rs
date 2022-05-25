@@ -76,6 +76,8 @@ pub(crate) enum Cmd {
         recipient: Peer,
         /// Batches of ReplicatedDataAddress to be sent together
         data_batch: Vec<ReplicatedDataAddress>,
+        /// How close is the data to the requester's name. 0 indicates it is the closest, and therefore highest prio data
+        closeness: usize
     },
     /// Performs serialisation and signing for sending of NodeMsg.
     /// This cmd only send this to other nodes
