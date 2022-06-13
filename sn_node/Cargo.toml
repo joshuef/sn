@@ -95,7 +95,7 @@ features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip
 
 [dependencies.tokio]
 version = "1.17.0"
-features = ["fs", "io-util", "macros", "rt", "rt-multi-thread", "sync"]
+features = ["fs", "io-util", "macros", "rt", "sync"]
 
 [dev-dependencies]
 criterion = { version = "~0.3", features = ["async_tokio"] }
