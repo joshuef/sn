@@ -33,7 +33,7 @@ pub(crate) struct Dispatcher {
     // TODO: This can probably be reworked into the general per peer msg queue, but as
     // we need to pull data first before we form the WireMsg, we won't do that just now
     pub(crate) pending_data_to_replicate_to_peers:
-        Arc<DashMap<ReplicatedDataAddress, Arc<RwLock<BTreeSet<Peer>>>>>,
+        DashMap<ReplicatedDataAddress, Arc<RwLock<BTreeSet<Peer>>>>,
     cancel_timer_tx: watch::Sender<bool>,
     cancel_timer_rx: watch::Receiver<bool>,
 }
@@ -52,7 +52,7 @@ impl Dispatcher {
             node,
             cancel_timer_tx,
             cancel_timer_rx,
-            pending_data_to_replicate_to_peers: Arc::new(DashMap::new()),
+            pending_data_to_replicate_to_peers: DashMap::new(),
         }
     }
 
