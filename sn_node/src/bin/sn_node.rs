@@ -74,7 +74,7 @@ fn main() -> Result<()> {
     // This is our node runtime thread. Do all operations within here!
     // We need this runtime, vs tokio::main so we can easily cancel it and all spawned tasks
     let handle = std::thread::Builder::new()
-        .name("sn_node".to_string())
+        .name("sn_nodeeee".to_string())
         // stack size on windows was too small at times, so we increase it here
         .stack_size(16 * 1024 * 1024)
         .spawn(move || {
@@ -111,7 +111,7 @@ fn create_runtime_and_node() -> Result<()> {
     // start a new runtime for a node.
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
-        .thread_name("sn_node")
+        .thread_name("safe_node")
         .thread_stack_size(16 * 1024 * 1024)
         .build()?;
 
@@ -125,7 +125,8 @@ fn create_runtime_and_node() -> Result<()> {
                 info!("Node has finished running, no runtime errors were reported");
             }
             Err(error) => {
-                warn!("Node instance finished with an error: {error:?}");
+                warn!("Node instance finished with an error. Restarting node... {error:?}");
+                Err(error)
             }
         };
 
@@ -334,7 +335,7 @@ async fn run_node(config: Config) -> Result<()> {
     let log = format!("The network is not accepting nodes right now. Retrying after {BOOTSTRAP_RETRY_TIME_SEC} seconds");
 
     let bootstrap_retry_duration = Duration::from_secs(BOOTSTRAP_RETRY_TIME_SEC);
-    let (node, mut event_stream) = loop {
+    let (node, mut event_stream, incoming_msgs) = loop {
         match NodeApi::new(&config, bootstrap_retry_duration).await {
             Ok(result) => break result,
             Err(NodeError::CannotConnectEndpoint(qp2p::EndpointError::Upnp(error))) => {
@@ -424,6 +425,10 @@ async fn run_node(config: Config) -> Result<()> {
             return Err(NodeError::ChaoticStartupCrash).map_err(ErrReport::msg);
         }
     }
+
+    // run the node background tasks
+    // this should not return
+    node.start_processing(incoming_msgs).await;
 
     // This just keeps the node going as long as routing goes
     while let Some(event) = event_stream.next().await {

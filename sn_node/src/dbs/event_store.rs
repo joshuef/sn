@@ -25,6 +25,7 @@ where
 {
     /// Create a new event store
     pub(crate) fn new(id: &XorName, db: Db) -> Result<Self> {
+        debug!("Creating new event store for {id}");
         let tree = match db.open_tree(id) {
             Ok(x) => x,
             Err(error) => {

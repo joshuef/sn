@@ -36,6 +36,11 @@ use sn_interface::network_knowledge::{NodeInfo, SectionAuthorityProvider, MIN_AD
 use sn_interface::types::{keys::ed25519, log_markers::LogMarker, PublicKey as TypesPublicKey};
 
 use ed25519_dalek::PublicKey;
+use futures::{
+    channel::mpsc::channel,
+    stream::{FuturesUnordered, StreamExt},
+    Future,
+};
 use itertools::Itertools;
 use rand_07::rngs::OsRng;
 use secured_linked_list::SecuredLinkedList;
@@ -46,7 +51,10 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{sync::mpsc, task};
+use tokio::{
+    sync::mpsc::{self, Receiver},
+    task,
+};
 use xor_name::{Prefix, XorName};
 
 /// Interface for sending and receiving messages to and from other nodes, in the role of a full
@@ -69,7 +77,12 @@ impl NodeApi {
     ////////////////////////////////////////////////////////////////////////////
 
     /// Initialize a new node.
-    pub async fn new(config: &Config, joining_timeout: Duration) -> Result<(Self, EventStream)> {
+    pub async fn new(
+        config: &Config,
+        joining_timeout: Duration,
+    ) -> Result<(Self, EventStream, Receiver<MsgEvent>)> {
+        debug!("CONFIG IS FIRST??? {:?}", config.is_first());
+
         let root_dir_buf = config.root_dir()?;
         let root_dir = root_dir_buf.as_path();
         tokio::fs::create_dir_all(root_dir).await?;
@@ -86,7 +99,7 @@ impl NodeApi {
 
         let used_space = UsedSpace::new(config.max_capacity());
 
-        let (api, network_events) = tokio::time::timeout(
+        let (api, network_events, incoming_msgs) = tokio::time::timeout(
             joining_timeout,
             Self::start_node(config, used_space, root_dir),
         )
@@ -115,7 +128,7 @@ impl NodeApi {
 
         run_system_logger(LogCtx::new(api.dispatcher.clone()), config.resource_logs).await;
 
-        Ok((api, network_events))
+        Ok((api, network_events, incoming_msgs))
     }
 
     // Private helper to create a new node using the given config and bootstraps it to the network.
@@ -127,7 +140,7 @@ impl NodeApi {
         config: &Config,
         used_space: UsedSpace,
         root_storage_dir: &Path,
-    ) -> Result<(Self, EventStream)> {
+    ) -> Result<(Self, EventStream, Receiver<MsgEvent>)> {
         let (event_tx, event_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
         let (connection_event_tx, mut connection_event_rx) = mpsc::channel(1);
 
@@ -253,36 +266,13 @@ impl NodeApi {
 
             node
         };
-
         let dispatcher = Arc::new(Dispatcher::new(node));
-        let event_stream = EventStream::new(event_rx);
-
-        // Start listening to incoming connections.
-        let _handle = task::spawn(handle_connection_events(
-            dispatcher.clone(),
-            connection_event_rx,
-        ));
-
-        dispatcher.clone().start_network_probing().await;
-        dispatcher.clone().start_section_probing().await;
-        dispatcher
-            .clone()
-            .check_for_dysfunction_periodically()
-            .await;
-        dispatcher.clone().start_sending_any_data_batches().await;
-
-        #[cfg(feature = "back-pressure")]
-        dispatcher
-            .clone()
-            .report_backpressure_to_our_section_periodically()
-            .await;
-
-        dispatcher.clone().start_cleaning_peer_links().await;
-        dispatcher.clone().write_prefixmap_to_disk().await;
 
         let api = Self { dispatcher };
 
-        Ok((api, event_stream))
+        let event_stream = EventStream::new(event_rx);
+
+        Ok((api, event_stream, connection_event_rx))
     }
 
     /// Returns the current age of this node.
@@ -379,13 +369,55 @@ impl NodeApi {
     pub async fn public_key_set(&self) -> Result<bls::PublicKeySet> {
         self.dispatcher.node.public_key_set().await
     }
+
+    /// Run all background tasks.
+    /// This function will not return as long as the node is running
+    pub async fn start_processing(&self, event_stream: Receiver<MsgEvent>) -> Result<()> {
+        // let node = self.
+        // let dispatcher = Arc::new(Dispatcher::new(node));
+        // let event_stream = EventStream::new(event_rx);
+        use futures::future::BoxFuture;
+        let mut background_tasks: Vec<BoxFuture<_>> = vec![];
+        // Start listening to incoming connections.
+        // let _handle = task::spawn(
+        background_tasks.push(Box::pin(handle_connection_events(
+            self.dispatcher.clone(),
+            event_stream,
+        )));
+        // );
+
+        background_tasks.push(Box::pin(self.dispatcher.clone().start_network_probing()));
+        background_tasks.push(Box::pin(self.dispatcher.clone().start_section_probing()));
+        background_tasks.push(Box::pin(
+            self.dispatcher.clone().check_for_dysfunction_periodically(),
+        ));
+        background_tasks.push(Box::pin(
+            self.dispatcher.clone().start_sending_any_data_batches(),
+        ));
+
+        #[cfg(feature = "back-pressure")]
+        background_tasks.push(Box::pin(
+            self.dispatcher
+                .clone()
+                .report_backpressure_to_our_section_periodically(),
+        ));
+
+        background_tasks.push(Box::pin(
+            self.dispatcher.clone().start_cleaning_peer_links(),
+        ));
+        self.dispatcher.clone().write_prefixmap_to_disk().await;
+
+        // now we can await all background tasks
+        futures::future::join_all(background_tasks).await;
+        Ok(())
+    }
 }
 
 // Listen for incoming connection events and handle them.
 async fn handle_connection_events(
     dispatcher: Arc<Dispatcher>,
-    mut incoming_conns: mpsc::Receiver<MsgEvent>,
-) {
+    mut incoming_conns: Receiver<MsgEvent>,
+) -> Result<()> {
     while let Some(event) = incoming_conns.recv().await {
         match event {
             MsgEvent::Received {
@@ -426,4 +458,6 @@ async fn handle_connection_events(
     }
 
     error!("Fatal error, the stream for incoming connections has been unexpectedly closed. No new connections or messages can be received from the network from here on.");
+
+    Ok(())
 }

@@ -13,6 +13,7 @@ use crate::node::{
     messages::WireMsgUtils,
     Result,
 };
+use async_recursion::async_recursion;
 use dashmap::DashMap;
 use sn_interface::types::{log_markers::LogMarker, Peer};
 use sn_interface::{
@@ -22,7 +23,6 @@ use sn_interface::{
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use tokio::{sync::watch, sync::RwLock, time};
 use tracing::Instrument;
-use async_recursion::async_recursion;
 
 // A command/subcommand id e.g. "963111461", "963111461.0"
 pub(crate) type CmdId = String;
@@ -64,9 +64,9 @@ impl Dispatcher {
         cmd_id: Option<CmdId>,
     ) -> Result<()> {
         // let _ = tokio::spawn(async {
-            let cmd_id: CmdId = cmd_id.unwrap_or_else(|| rand::random::<u32>().to_string());
+        let cmd_id: CmdId = cmd_id.unwrap_or_else(|| rand::random::<u32>().to_string());
 
-            self.handle_cmd_and_offshoots(cmd, Some(cmd_id)).await?;
+        self.handle_cmd_and_offshoots(cmd, Some(cmd_id)).await?;
         // });
         Ok(())
     }
@@ -75,7 +75,7 @@ impl Dispatcher {
     /// produced during its handling. Trace logs will include the provided cmd id,
     /// and any sub-cmds produced will have it as a common root cmd id.
     /// If a cmd id string is not provided a random one will be generated.
-    #[async_recursion(?Send)]
+    #[async_recursion]
     pub(super) async fn handle_cmd_and_offshoots(
         self: Arc<Self>,
         cmd: Cmd,
@@ -85,18 +85,21 @@ impl Dispatcher {
         let cmd_id_clone = cmd_id.clone();
         let cmd_display = cmd.to_string();
         // let _task = tokio::spawn(async move {
-            match self.process_cmd(cmd, &cmd_id).await {
-                Ok(cmds) => {
-                    for (sub_cmd_count, cmd) in cmds.into_iter().enumerate() {
-                        let sub_cmd_id = format!("{}.{}", &cmd_id, sub_cmd_count);
-                        // Error here is only related to queueing, and so a dropped cmd will be logged
-                        let _result = self.clone().enqueue_and_handle_next_cmd_and_offshoots(cmd, Some(sub_cmd_id)).await;
-                    }
-                }
-                Err(err) => {
-                    error!("Failed to handle cmd {:?} with error {:?}", cmd_id, err);
+        match self.process_cmd(cmd, &cmd_id).await {
+            Ok(cmds) => {
+                for (sub_cmd_count, cmd) in cmds.into_iter().enumerate() {
+                    let sub_cmd_id = format!("{}.{}", &cmd_id, sub_cmd_count);
+                    // Error here is only related to queueing, and so a dropped cmd will be logged
+                    let _result = self
+                        .clone()
+                        .enqueue_and_handle_next_cmd_and_offshoots(cmd, Some(sub_cmd_id))
+                        .await;
                 }
             }
+            Err(err) => {
+                error!("Failed to handle cmd {:?} with error {:?}", cmd_id, err);
+            }
+        }
         // });
 
         trace!(

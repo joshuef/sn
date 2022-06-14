@@ -66,6 +66,7 @@ impl RegisterStorage {
     /// Create new RegisterStorage
     pub(crate) fn new(path: &Path, used_space: UsedSpace) -> Result<Self> {
         let create_path = |name: &str| path.join("db").join(name);
+        debug!("Making reg storaggeeee");
         let create_db = |db_dir| {
             sled::Config::default()
                 .path(&db_dir)
@@ -73,13 +74,18 @@ impl RegisterStorage {
                 .open()
                 .map_err(Error::from)
         };
+        debug!("sled initttt");
 
-        Ok(Self {
+        let res = Ok(Self {
             used_space,
             cache: Cache::new(CACHE_SIZE),
             key_db: create_db(&create_path(KEY_DB_NAME))?,
             reg_db: create_db(&create_path(REG_DB_NAME))?,
-        })
+        });
+
+        debug!("donnnne");
+
+        res
     }
 
     /// --- Node Synching ---

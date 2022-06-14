@@ -591,7 +591,7 @@ impl Drop for Comm {
 }
 
 #[derive(Debug)]
-pub(crate) enum MsgEvent {
+pub enum MsgEvent {
     Received {
         sender: Peer,
         wire_msg: WireMsg,
