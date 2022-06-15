@@ -126,7 +126,6 @@ fn create_runtime_and_node() -> Result<()> {
             }
             Err(error) => {
                 warn!("Node instance finished with an error. Restarting node... {error:?}");
-                Err(error)
             }
         };
 
