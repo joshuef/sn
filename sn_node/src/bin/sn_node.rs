@@ -55,7 +55,7 @@ use tracing_subscriber::filter::EnvFilter;
 
 #[cfg(not(feature = "tokio-console"))]
 const MODULE_NAME: &str = "sn_node";
-const BOOTSTRAP_RETRY_TIME_SEC: u64 = 30;
+const BOOTSTRAP_RETRY_TIME_SEC: u64 = 15;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
