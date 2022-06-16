@@ -263,6 +263,7 @@ impl NodeApi {
             connection_event_rx,
         ));
 
+        dispatcher.clone().check_for_missed_votes().await;
         dispatcher.clone().start_network_probing().await;
         dispatcher.clone().start_section_probing().await;
         dispatcher
