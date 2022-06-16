@@ -175,7 +175,7 @@ impl Membership {
 
     /// Return the current generation vote we have made
     pub(crate) fn get_our_latest_vote(&self) -> Option<&SignedVote<NodeState>> {
-        let current_consensus = self.consensus;
+        let current_consensus = &self.consensus;
         let (id, _) = current_consensus.secret_key;
 
         current_consensus.votes.get(&id)
