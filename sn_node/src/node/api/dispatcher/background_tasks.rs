@@ -22,6 +22,7 @@ use tokio::time::MissedTickBehavior;
 use super::Dispatcher;
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(30);
+const MISSING_VOTE_INTERVAL: Duration = Duration::from_secs(30);
 #[cfg(feature = "back-pressure")]
 const BACKPRESSURE_INTERVAL: Duration = Duration::from_secs(60);
 const SECTION_PROBE_INTERVAL: Duration = Duration::from_secs(300);
@@ -58,6 +59,44 @@ impl Dispatcher {
                     }
                 }
             }
+        });
+    }
+
+    /// Checks the interval since last vote received during a generation
+    pub(crate) async fn check_for_missed_votes(self: Arc<Self>) {
+        info!("Starting to check for missed votes");
+        let _handle = tokio::spawn(async move {
+            let dispatcher = self.clone();
+            let mut interval = tokio::time::interval(MISSING_VOTE_INTERVAL);
+            interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+            let mut prev_vote = *dispatcher.node.last_membership_vote.read().await;
+
+            loop {
+                let instant = interval.tick().await;
+
+                let last_recorded_vote_time = *dispatcher.node.last_membership_vote.read().await;
+                // we want to resend the prev vote
+                if last_recorded_vote_time == prev_vote {
+                    let cmds = self.node.resend_our_last_vote_to_elders().await?;
+
+                    info!("Resending vote msg");
+
+                    for cmd in cmds {
+                        if let Err(e) = dispatcher
+                            .clone()
+                            .enqueue_and_handle_next_cmd_and_offshoots(cmd, None)
+                            .await
+                        {
+                            error!("Error resending a vote msg to the network: {:?}", e);
+                        }
+                    }
+                }
+
+                prev_vote = last_recorded_vote_time;
+            }
+
+            Result::<()>::Ok(())
         });
     }
 

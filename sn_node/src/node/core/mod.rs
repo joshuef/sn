@@ -64,7 +64,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     path::PathBuf,
     sync::Arc,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use tokio::sync::{mpsc, RwLock};
 use uluru::LRUCache;
@@ -123,6 +123,8 @@ pub(crate) struct Node {
     relocate_state: Arc<RwLock<Option<Box<JoiningAsRelocated>>>>,
     // ======================== Elder only ========================
     pub(crate) membership: Arc<RwLock<Option<Membership>>>,
+    // last membership vote timestamp
+    pub(crate) last_membership_vote: Arc<RwLock<SystemTime>>,
     // Section handover consensus state (Some for Elders, None for others)
     pub(crate) handover_voting: Arc<RwLock<Option<Handover>>>,
     joins_allowed: Arc<RwLock<bool>>,
@@ -225,6 +227,7 @@ impl Node {
             pending_data_queries: Arc::new(Cache::with_expiry_duration(DATA_QUERY_TIMEOUT)),
             ae_backoff_cache: AeBackoffCache::default(),
             membership: Arc::new(RwLock::new(membership)),
+            last_membership_vote: Arc::new(RwLock::new(SystemTime::now())),
         })
     }
 

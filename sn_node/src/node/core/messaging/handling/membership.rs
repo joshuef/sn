@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use std::collections::BTreeSet;
+use std::time::SystemTime;
 use std::vec;
 
 use sn_consensus::{Generation, SignedVote, VoteResponse};
@@ -47,6 +48,23 @@ impl Node {
         }
     }
 
+    /// Get our latest vote if any at this generation, and get cmds to resend to all elders
+    /// (which should in turn trigger them to resend their votes)
+    pub(crate) async fn resend_our_last_vote_to_elders(&self) -> Result<Vec<Cmd>> {
+        let membership = *self.membership.read().await.clone();
+
+        if let Some(membership) = membership {
+            if let Some(prev_vote) = membership.get_our_latest_vote() {
+                let cmds = self
+                    .send_msg_to_our_elders(SystemMsg::MembershipVotes(vec![prev_vote.clone()]))
+                    .await?;
+                return Ok(vec![cmds]);
+            }
+        }
+
+        Ok(vec![])
+    }
+
     pub(crate) async fn handle_membership_votes(
         &self,
         peer: Peer,
@@ -59,6 +77,12 @@ impl Node {
         let prefix = self.network_knowledge.prefix().await;
 
         let mut cmds = vec![];
+
+        // TODO: do we want to clear this when we get a decision?
+        // to avoid sending out votes every X s
+        // record the last vote seen time, so we can determine if/when membership stalls
+        let mut time = self.last_membership_vote.write().await;
+        *time = SystemTime::now();
 
         for signed_vote in signed_votes {
             if let Some(membership) = self.membership.write().await.as_mut() {

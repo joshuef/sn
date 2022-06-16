@@ -173,6 +173,14 @@ impl Membership {
         let _ = self.bootstrap_members.insert(state);
     }
 
+    /// Return the current generation vote we have made
+    pub(crate) fn get_our_latest_vote(&self) -> Option<&SignedVote<NodeState>> {
+        let current_consensus = self.consensus;
+        let (id, _) = current_consensus.secret_key;
+
+        current_consensus.votes.get(&id)
+    }
+
     fn consensus_at_gen(&self, gen: Generation) -> Result<&Consensus<NodeState>> {
         if gen == self.gen + 1 {
             Ok(&self.consensus)
