@@ -16,13 +16,12 @@ use bytes::Bytes;
 use custom_debug::Debug;
 use priority_queue::PriorityQueue;
 use std::{
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    cell::RefCell,
+    rc::Rc,
+    sync::atomic::{AtomicUsize, Ordering},
     time::Duration,
 };
-use tokio::{sync::RwLock, time::Instant};
+use tokio::time::Instant;
 
 type Priority = i32;
 
@@ -33,22 +32,22 @@ const SLEEP_TIME: Duration = Duration::from_millis(200);
 #[derive(Clone)]
 pub(crate) struct PeerSession {
     link: Link,
-    msg_queue: Arc<RwLock<PriorityQueue<SendJob, Priority>>>,
+    msg_queue: Rc<RefCell<PriorityQueue<SendJob, Priority>>>,
     sent: MsgThroughput,
     attempted: MsgThroughput,
-    peer_desired_rate: Arc<RwLock<f64>>, // msgs per s
-    disconnnected: Arc<RwLock<bool>>,
+    peer_desired_rate: Rc<RefCell<f64>>, // msgs per s
+    disconnnected: Rc<RefCell<bool>>,
 }
 
 impl PeerSession {
     pub(crate) fn new(link: Link) -> Self {
         let session = Self {
             link,
-            msg_queue: Arc::new(RwLock::new(PriorityQueue::new())),
+            msg_queue: Rc::new(RefCell::new(PriorityQueue::new())),
             sent: MsgThroughput::default(),
             attempted: MsgThroughput::default(),
-            peer_desired_rate: Arc::new(RwLock::new(DEFAULT_DESIRED_RATE)),
-            disconnnected: Arc::new(RwLock::new(false)),
+            peer_desired_rate: Rc::new(RefCell::new(DEFAULT_DESIRED_RATE)),
+            disconnnected: Rc::new(RefCell::new(false)),
         };
 
         let session_clone = session.clone();
@@ -110,28 +109,28 @@ impl PeerSession {
             retries: 3,
             reporter,
         };
-        let _ = self.msg_queue.write().await.push(job, msg_priority);
+        let _ = self.msg_queue.borrow_mut().push(job, msg_priority);
 
         Ok(watcher)
     }
 
     #[cfg(feature = "back-pressure")]
     pub(crate) async fn update_send_rate(&self, peer_desired_rate: f64) {
-        *self.peer_desired_rate.write().await = peer_desired_rate;
+        *self.peer_desired_rate.borrow_mut() = peer_desired_rate;
     }
 
     // consume self
     // NB that clones could still exist, however they would be in the disconnected state
     // if only accessing via session map (as intended)
     pub(crate) async fn disconnect(self) {
-        *self.disconnnected.write().await = true;
-        self.msg_queue.write().await.clear();
+        *self.disconnnected.borrow_mut() = true;
+        self.msg_queue.borrow_mut().clear();
         self.link.disconnect().await;
     }
 
     // could be accessed via a clone
     async fn disconnected(&self) -> bool {
-        *self.disconnnected.read().await
+        *self.disconnnected.borrow()
     }
 
     #[instrument(skip_all)]
@@ -141,28 +140,28 @@ impl PeerSession {
                 break;
             }
 
-            let expected_rate = { *self.peer_desired_rate.read().await };
+            let expected_rate = { *self.peer_desired_rate.borrow() };
             let actual_rate = self.attempted.value();
             if actual_rate > expected_rate {
                 let diff = actual_rate - expected_rate;
                 let diff_ms = Duration::from_millis((diff * 1000_f64) as u64);
                 tokio::time::sleep(diff_ms).await;
                 continue;
-            } else if self.msg_queue.read().await.is_empty() {
+            } else if self.msg_queue.borrow().is_empty() {
                 tokio::time::sleep(SLEEP_TIME).await;
                 continue;
             }
 
             #[cfg(test)]
             {
-                let queue = self.msg_queue.read().await;
+                let queue = self.msg_queue.borrow();
                 debug!("Peer {} queue length: {}", self.link.peer(), queue.len());
                 for (job, priority) in queue.iter() {
                     debug!("Prio: {}, Job: {:?}", priority, job);
                 }
             }
 
-            let queue_res = { self.msg_queue.write().await.pop() };
+            let queue_res = { self.msg_queue.borrow_mut().pop() };
             if let Some((mut job, prio)) = queue_res {
                 if job.retries >= MAX_RETRIES {
                     // break this loop, report error to other nodes
@@ -185,7 +184,7 @@ impl PeerSession {
                         job.reporter
                             .send(SendStatus::TransientError(format!("{:?}", err)));
 
-                        let _ = self.msg_queue.write().await.push(job, prio);
+                        let _ = self.msg_queue.borrow_mut().push(job, prio);
                     }
                 } else {
                     job.reporter.send(SendStatus::Sent);
@@ -200,14 +199,14 @@ impl PeerSession {
 
 #[derive(Clone, Debug)]
 struct MsgThroughput {
-    msgs: Arc<AtomicUsize>,
+    msgs: Rc<AtomicUsize>,
     since: Instant,
 }
 
 impl Default for MsgThroughput {
     fn default() -> Self {
         Self {
-            msgs: Arc::new(AtomicUsize::new(0)),
+            msgs: Rc::new(AtomicUsize::new(0)),
             since: Instant::now(),
         }
     }
