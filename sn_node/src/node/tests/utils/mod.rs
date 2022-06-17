@@ -162,7 +162,7 @@ pub async fn verify_invariants_for_node(node: &Routing, elder_size: usize) -> Re
         );
     }
 
-    if !node.is_elder().await {
+    if !node.is_elder() {
         return Ok(());
     }
 

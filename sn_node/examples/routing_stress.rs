@@ -283,9 +283,9 @@ impl Network {
     async fn handle_event(&mut self, event: Event) -> Result<()> {
         match event {
             Event::JoinSuccess { id, node } => {
-                let name = node.name().await;
-                let age = node.age().await;
-                let prefix = node.our_prefix().await;
+                let name = node.name();
+                let age = node.age();
+                let prefix = node.our_prefix();
 
                 let _prev = self.nodes.insert(
                     id,
@@ -356,8 +356,8 @@ impl Network {
                         ..
                     }) = self.nodes.get_mut(&id)
                     {
-                        *name = node.name().await;
-                        *age = node.age().await;
+                        *name = node.name();
+                        *age = node.age();
                         *is_relocating = false;
                         self.stats.relocation_successes += 1;
                     }
@@ -412,7 +412,7 @@ impl Network {
             .sorted_by(|(_, lhs_age), (_, rhs_age)| lhs_age.cmp(rhs_age).reverse())
             .take(COUNT)
         {
-            let _prev = nodes.insert(node.our_connection_info().await);
+            let _prev = nodes.insert(node.our_connection_info());
         }
 
         nodes
@@ -435,7 +435,7 @@ impl Network {
                 .or_insert_with(|| prefix.substituted_in(xor_name::rand::random()));
 
             let nodes_section = node
-                .matching_section(&node.name().await)
+                .matching_section(&node.name())
                 .await
                 .context("No pk found for our node's section")?;
 
@@ -455,7 +455,7 @@ impl Network {
     }
 
     async fn try_send_probe(&self, node: &NodeApi, dst: XorName) -> Result<bool> {
-        let public_key_set = if let Ok(public_key_set) = node.public_key_set().await {
+        let public_key_set = if let Ok(public_key_set) = node.public_key_set() {
             public_key_set
         } else {
             // The node doesn't have BLS keys. Skip.
@@ -478,13 +478,11 @@ impl Network {
             section_pk: public_key_set.public_key(),
         };
 
-        let wire_msg = node.sign_single_src_msg(node_msg, dst_location).await?;
+        let wire_msg = node.sign_single_src_msg(node_msg, dst_location)?;
 
         match node.send_msg_to_nodes(wire_msg).await {
             Ok(()) => Ok(true),
-            Err(error) => {
-                Err(error).context(format!("failed to send probe by {}", node.name().await))
-            }
+            Err(error) => Err(error).context(format!("failed to send probe by {}", node.name())),
         }
     }
 

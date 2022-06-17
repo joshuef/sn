@@ -33,7 +33,7 @@ impl Node {
     ) -> Result<Vec<Cmd>> {
         debug!("{:?} {:?}", LogMarker::ProposalAgreed, proposal);
         match proposal {
-            Proposal::Offline(node_state) => self.handle_offline_agreement(node_state, sig).await,
+            Proposal::Offline(node_state) => self.handle_offline_agreement(node_state, sig),
             Proposal::SectionInfo { sap, generation } => {
                 self.handle_section_info_agreement(sap, sig, generation)
                     .await
@@ -43,7 +43,7 @@ impl Node {
                 Ok(vec![])
             }
             Proposal::JoinsAllowed(joins_allowed) => {
-                *self.joins_allowed.write().await = joins_allowed;
+                *self.joins_allowed.borrow_mut() = joins_allowed;
                 Ok(vec![])
             }
         }
@@ -59,7 +59,6 @@ impl Node {
         if let Some(old_info) = self
             .network_knowledge
             .is_either_member_or_archived(&new_info.name())
-            .await
         {
             // This node is rejoin with same name.
             if old_info.state() != MembershipState::Left {
@@ -77,7 +76,7 @@ impl Node {
             if new_age >= MIN_ADULT_AGE {
                 // TODO: consider handling the relocation inside the bootstrap phase, to avoid
                 // having to send this `NodeApproval`.
-                cmds.extend(self.send_node_approval(old_info.clone()).await);
+                cmds.extend(self.send_node_approval(old_info.clone()));
 
                 cmds.extend(
                     self.relocate_rejoining_peer(old_info.value, new_age)
@@ -93,7 +92,7 @@ impl Node {
             sig,
         };
 
-        if !self.network_knowledge.update_member(new_info.clone()).await {
+        if !self.network_knowledge.update_member(new_info.clone()) {
             info!("ignore Online: {} at {}", new_info.name(), new_info.addr());
             return Ok(vec![]);
         }
@@ -113,23 +112,20 @@ impl Node {
         self.log_section_stats().await;
 
         // Do not disable node joins in first section.
-        let our_prefix = self.network_knowledge.prefix().await;
+        let our_prefix = self.network_knowledge.prefix();
         if !our_prefix.is_empty() {
             // ..otherwise, switch off joins_allowed on a node joining.
             // TODO: fix racing issues here? https://github.com/maidsafe/safe_network/issues/890
-            *self.joins_allowed.write().await = false;
+            *self.joins_allowed.borrow_mut() = false;
         }
 
         let churn_id = ChurnId(new_info.sig.signature.to_bytes().to_vec());
         let excluded_from_relocation = vec![new_info.name()].into_iter().collect();
 
         // first things first, inform the node it can join us
-        cmds.extend(self.send_node_approval(new_info).await);
+        cmds.extend(self.send_node_approval(new_info));
 
-        cmds.extend(
-            self.relocate_peers(churn_id, excluded_from_relocation)
-                .await?,
-        );
+        cmds.extend(self.relocate_peers(churn_id, excluded_from_relocation)?);
 
         let result = self
             .promote_and_demote_elders_except(&BTreeSet::default())
@@ -150,18 +146,14 @@ impl Node {
     }
 
     #[instrument(skip(self))]
-    async fn handle_offline_agreement(
-        &self,
-        node_state: NodeState,
-        sig: KeyedSig,
-    ) -> Result<Vec<Cmd>> {
+    fn handle_offline_agreement(&self, node_state: NodeState, sig: KeyedSig) -> Result<Vec<Cmd>> {
         info!(
             "Agreement - proposing membership change with node offline: {} at {}",
             node_state.name(),
             node_state.addr()
         );
 
-        self.propose_membership_change(node_state.to_msg()).await
+        self.propose_membership_change(node_state.to_msg())
     }
 
     #[instrument(skip(self), level = "trace")]
@@ -172,10 +164,10 @@ impl Node {
         generation: Generation,
     ) -> Result<Vec<Cmd>> {
         // check if section matches our prefix
-        let equal_prefix = section_auth.prefix() == self.network_knowledge.prefix().await;
+        let equal_prefix = section_auth.prefix() == self.network_knowledge.prefix();
         let is_extension_prefix = section_auth
             .prefix()
-            .is_extension_of(&self.network_knowledge.prefix().await);
+            .is_extension_of(&self.network_knowledge.prefix());
         if !equal_prefix && !is_extension_prefix {
             // Other section. We shouln't be receiving or updating a SAP for
             // a remote section here, that is done with a AE msg response.
@@ -215,18 +207,16 @@ impl Node {
                 signed_section_auth.prefix()
             );
             return self
-                .propose_handover_consensus(SapCandidate::ElderHandover(signed_section_auth))
-                .await;
+                .propose_handover_consensus(SapCandidate::ElderHandover(signed_section_auth));
         }
 
         // manage pending split SAP candidates
         // NB TODO temporary while we wait for Membership generations and possibly double DKG
         let chosen_candidates = self
             .split_barrier
-            .write()
-            .await
+            .borrow_mut()
             .process(
-                &self.network_knowledge.prefix().await,
+                &self.network_knowledge.prefix(),
                 signed_section_auth.clone(),
                 sig.clone(),
                 generation,
@@ -244,7 +234,6 @@ impl Node {
                 sap1.to_owned(),
                 sap2.to_owned(),
             ))
-            .await
         } else {
             debug!("Waiting for more split handover candidates");
             Ok(vec![])
@@ -259,14 +248,14 @@ impl Node {
     ) -> Result<Vec<Cmd>> {
         trace!("{}", LogMarker::HandlingNewEldersAgreement);
         let snapshot = self.state_snapshot().await;
-        let old_chain = self.section_chain().await.clone();
+        let old_chain = self.section_chain().clone();
 
         let prefix = signed_section_auth.prefix();
         trace!("{}: for {:?}", LogMarker::NewSignedSap, prefix);
 
         info!("New SAP agreed for:{}", *signed_section_auth);
 
-        let our_name = self.info.read().await.name();
+        let our_name = self.info.borrow().name();
 
         // Let's update our network knowledge, including our
         // section SAP and chain if the new SAP's prefix matches our name
@@ -282,17 +271,13 @@ impl Node {
                 err
             ),
             Ok(()) => {
-                match self
-                    .network_knowledge
-                    .update_knowledge_if_valid(
-                        signed_section_auth.clone(),
-                        &proof_chain,
-                        None,
-                        &our_name,
-                        &self.section_keys_provider,
-                    )
-                    .await
-                {
+                match self.network_knowledge.update_knowledge_if_valid(
+                    signed_section_auth.clone(),
+                    &proof_chain,
+                    None,
+                    &our_name,
+                    &self.section_keys_provider,
+                ) {
                     Err(err) => error!(
                         "Error updating our network knowledge for {:?}: {:?}",
                         prefix, err

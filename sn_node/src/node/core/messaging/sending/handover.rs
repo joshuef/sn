@@ -19,18 +19,18 @@ use tracing::warn;
 
 impl Node {
     /// Make a handover consensus proposal vote for a sap candidate
-    pub(crate) async fn propose_handover_consensus(
+    pub(crate) fn propose_handover_consensus(
         &self,
         sap_candidates: SapCandidate,
     ) -> Result<Vec<Cmd>> {
-        let mut wlock = self.handover_voting.write().await;
+        let mut wlock = self.handover_voting.borrow_mut();
         match &*wlock {
             Some(handover_voting_state) => {
                 let mut vs = handover_voting_state.clone();
                 let vote = vs.propose(sap_candidates)?;
                 *wlock = Some(vs);
                 debug!("{}: {:?}", LogMarker::HandoverConsensusTrigger, &vote);
-                Ok(self.broadcast_handover_vote_msg(vote).await)
+                Ok(self.broadcast_handover_vote_msg(vote))
             }
             None => {
                 warn!("Failed to make handover consensus proposal because node is not an Elder");
@@ -40,14 +40,14 @@ impl Node {
     }
 
     /// Broadcast handover Vote message to Elders
-    pub(crate) async fn broadcast_handover_vote_msg(
+    pub(crate) fn broadcast_handover_vote_msg(
         &self,
         signed_vote: SignedVote<SapCandidate>,
     ) -> Vec<Cmd> {
         // Deliver each SignedVote to all current Elders
         trace!("Broadcasting Vote msg: {:?}", signed_vote);
         let node_msg = SystemMsg::HandoverVotes(vec![signed_vote]);
-        match self.send_msg_to_our_elders(node_msg).await {
+        match self.send_msg_to_our_elders(node_msg) {
             Ok(cmd) => vec![cmd],
             Err(err) => {
                 error!("Failed to send SystemMsg::Handover message: {:?}", err);
@@ -59,24 +59,21 @@ impl Node {
     /// Broadcast the decision of the terminated handover consensus by proposing the NewElders SAP
     /// for signature by the current elders
     #[instrument(skip(self), level = "trace")]
-    pub(crate) async fn broadcast_handover_decision(
-        &self,
-        candidates_sap: SapCandidate,
-    ) -> Vec<Cmd> {
+    pub(crate) fn broadcast_handover_decision(&self, candidates_sap: SapCandidate) -> Vec<Cmd> {
         match candidates_sap {
             SapCandidate::ElderHandover(sap) => {
                 // NB TODO make sure this error has to be swallowed
-                self.propose_new_elders(sap).await.unwrap_or_else(|e| {
+                self.propose_new_elders(sap).unwrap_or_else(|e| {
                     error!("Failed to propose new elders: {}", e);
                     vec![]
                 })
             }
             SapCandidate::SectionSplit(sap1, sap2) => {
-                let mut prop1 = self.propose_new_elders(sap1).await.unwrap_or_else(|e| {
+                let mut prop1 = self.propose_new_elders(sap1).unwrap_or_else(|e| {
                     error!("Failed to propose new elders: {}", e);
                     vec![]
                 });
-                let mut prop2 = self.propose_new_elders(sap2).await.unwrap_or_else(|e| {
+                let mut prop2 = self.propose_new_elders(sap2).unwrap_or_else(|e| {
                     error!("Failed to propose new elders: {}", e);
                     vec![]
                 });
@@ -88,12 +85,9 @@ impl Node {
 
     /// Helper function to propose a NewElders list to sign from a SAP
     /// Send the `NewElders` proposal to all of the to-be-Elders so it's aggregated by them.
-    async fn propose_new_elders(
-        &self,
-        sap: SectionAuth<SectionAuthorityProvider>,
-    ) -> Result<Vec<Cmd>> {
+    fn propose_new_elders(&self, sap: SectionAuth<SectionAuthorityProvider>) -> Result<Vec<Cmd>> {
         let proposal_recipients = sap.elders_vec();
         let proposal = Proposal::NewElders(sap);
-        self.send_proposal(proposal_recipients, proposal).await
+        self.send_proposal(proposal_recipients, proposal)
     }
 }

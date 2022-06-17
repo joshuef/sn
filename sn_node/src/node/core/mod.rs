@@ -61,12 +61,13 @@ use dashmap::DashSet;
 use itertools::Itertools;
 use resource_proof::ResourceProof;
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap},
     path::PathBuf,
-    sync::Arc,
+    rc::Rc,
     time::Duration,
 };
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use uluru::LRUCache;
 use xor_name::{Prefix, XorName};
 
@@ -98,12 +99,12 @@ pub(crate) struct DkgSessionInfo {
 
 // Store up to 100 in use backoffs
 pub(crate) type AeBackoffCache =
-    Arc<RwLock<LRUCache<(Peer, ExponentialBackoff), BACKOFF_CACHE_LIMIT>>>;
+    Rc<RefCell<LRUCache<(Peer, ExponentialBackoff), BACKOFF_CACHE_LIMIT>>>;
 
 // Core state + logic of a node.
 pub(crate) struct Node {
     pub(super) event_tx: mpsc::Sender<Event>,
-    pub(crate) info: Arc<RwLock<NodeInfo>>,
+    pub(crate) info: Rc<RefCell<NodeInfo>>,
 
     pub(crate) comm: Comm,
 
@@ -117,19 +118,19 @@ pub(crate) struct Node {
     message_aggregator: SignatureAggregator,
     proposal_aggregator: SignatureAggregator,
     // DKG/Split/Churn modules
-    split_barrier: Arc<RwLock<SplitBarrier>>,
-    dkg_sessions: Arc<RwLock<HashMap<Digest256, DkgSessionInfo>>>,
+    split_barrier: Rc<RefCell<SplitBarrier>>,
+    dkg_sessions: Rc<RefCell<HashMap<Digest256, DkgSessionInfo>>>,
     dkg_voter: DkgVoter,
-    relocate_state: Arc<RwLock<Option<Box<JoiningAsRelocated>>>>,
+    relocate_state: Rc<RefCell<Option<Box<JoiningAsRelocated>>>>,
     // ======================== Elder only ========================
-    pub(crate) membership: Arc<RwLock<Option<Membership>>>,
+    pub(crate) membership: Rc<RefCell<Option<Membership>>>,
     // Section handover consensus state (Some for Elders, None for others)
-    pub(crate) handover_voting: Arc<RwLock<Option<Handover>>>,
-    joins_allowed: Arc<RwLock<bool>>,
+    pub(crate) handover_voting: Rc<RefCell<Option<Handover>>>,
+    joins_allowed: Rc<RefCell<bool>>,
     // Trackers
     capacity: Capacity,
     dysfunction_tracking: DysfunctionDetection,
-    pending_data_queries: Arc<Cache<OperationId, Arc<DashSet<Peer>>>>,
+    pending_data_queries: Rc<Cache<OperationId, Rc<DashSet<Peer>>>>,
     // Caches
     ae_backoff_cache: AeBackoffCache,
 }
@@ -137,7 +138,7 @@ pub(crate) struct Node {
 impl Node {
     // Creates `Core` for a regular node.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn new(
+    pub(crate) fn new(
         comm: Comm,
         mut info: NodeInfo,
         network_knowledge: NetworkKnowledge,
@@ -149,14 +150,12 @@ impl Node {
         let membership = if let Some(key) = section_key_share.clone() {
             let n_elders = network_knowledge
                 .section_signed_authority_provider()
-                .await
                 .elder_count();
 
             // TODO: the bootstrap members should come from handover
             let bootstrap_members = BTreeSet::from_iter(
                 network_knowledge
                     .section_signed_members()
-                    .await
                     .into_iter()
                     .map(|section_auth| section_auth.value.to_msg()),
             );
@@ -171,18 +170,17 @@ impl Node {
             None
         };
 
-        let section_keys_provider = SectionKeysProvider::new(section_key_share.clone()).await;
+        let section_keys_provider = SectionKeysProvider::new(section_key_share.clone());
 
         // make sure the Node has the correct local addr as Comm
         info.addr = comm.our_connection_info();
 
-        let data_storage = DataStorage::new(&root_storage_dir, used_space.clone())?;
+        let data_storage = DataStorage::new(&root_storage_dir, used_space)?;
 
         info!("Creating DysfunctionDetection checks");
         let node_dysfunction_detector = DysfunctionDetection::new(
             network_knowledge
                 .adults()
-                .await
                 .iter()
                 .map(|peer| peer.name())
                 .collect::<Vec<XorName>>(),
@@ -196,7 +194,7 @@ impl Node {
         let handover = if let Some(key) = section_key_share {
             let secret_key = (key.index as u8, key.secret_key_share);
             let elders = key.public_key_set;
-            let n_elders = network_knowledge.elders().await.len();
+            let n_elders = network_knowledge.elders().len();
 
             let handover_data = Handover::from(secret_key, elders, n_elders);
             Some(handover_data)
@@ -206,25 +204,25 @@ impl Node {
 
         Ok(Self {
             comm,
-            info: Arc::new(RwLock::new(info)),
+            info: Rc::new(RefCell::new(info)),
             network_knowledge,
             section_keys_provider,
-            dkg_sessions: Arc::new(RwLock::new(HashMap::default())),
+            dkg_sessions: Rc::new(RefCell::new(HashMap::default())),
             proposal_aggregator: SignatureAggregator::default(),
-            split_barrier: Arc::new(RwLock::new(SplitBarrier::new())),
+            split_barrier: Rc::new(RefCell::new(SplitBarrier::new())),
             message_aggregator: SignatureAggregator::default(),
             dkg_voter: DkgVoter::default(),
-            relocate_state: Arc::new(RwLock::new(None)),
+            relocate_state: Rc::new(RefCell::new(None)),
             event_tx,
-            handover_voting: Arc::new(RwLock::new(handover)),
-            joins_allowed: Arc::new(RwLock::new(true)),
+            handover_voting: Rc::new(RefCell::new(handover)),
+            joins_allowed: Rc::new(RefCell::new(true)),
             resource_proof: ResourceProof::new(RESOURCE_PROOF_DATA_SIZE, RESOURCE_PROOF_DIFFICULTY),
             data_storage,
             capacity: Capacity::default(),
             dysfunction_tracking: node_dysfunction_detector,
-            pending_data_queries: Arc::new(Cache::with_expiry_duration(DATA_QUERY_TIMEOUT)),
+            pending_data_queries: Rc::new(Cache::with_expiry_duration(DATA_QUERY_TIMEOUT)),
             ae_backoff_cache: AeBackoffCache::default(),
-            membership: Arc::new(RwLock::new(membership)),
+            membership: Rc::new(RefCell::new(membership)),
         })
     }
 
@@ -232,12 +230,12 @@ impl Node {
     // Miscellaneous
     ////////////////////////////////////////////////////////////////////////////
 
-    pub(crate) async fn generate_probe_msg(&self) -> Result<Cmd> {
+    pub(crate) fn generate_probe_msg(&self) -> Result<Cmd> {
         // Generate a random address not belonging to our Prefix
         let mut dst = xor_name::rand::random();
 
         // We don't probe ourselves
-        while self.network_knowledge.prefix().await.matches(&dst) {
+        while self.network_knowledge.prefix().matches(&dst) {
             dst = xor_name::rand::random();
         }
 
@@ -255,11 +253,10 @@ impl Node {
         );
 
         self.send_direct_msg_to_nodes(recipients, message, dst_name, section_key)
-            .await
     }
 
     pub(crate) async fn generate_section_probe_msg(&self) -> Result<Cmd> {
-        let our_section = self.network_knowledge.authority_provider().await;
+        let our_section = self.network_knowledge.authority_provider();
 
         let message = SystemMsg::AntiEntropyProbe;
         let section_key = our_section.section_key();
@@ -273,12 +270,11 @@ impl Node {
         );
 
         self.send_direct_msg_to_nodes(recipients, message, dst_name, section_key)
-            .await
     }
 
     /// Removes any PeerLinks not from our section elders
     pub(crate) async fn cleanup_non_elder_peers(&self) -> Result<()> {
-        let elders = self.network_knowledge.elders().await;
+        let elders = self.network_knowledge.elders();
         self.comm
             .cleanup_peers(elders, self.dysfunction_tracking.clone())
             .await
@@ -341,10 +337,10 @@ impl Node {
 
     pub(super) async fn state_snapshot(&self) -> StateSnapshot {
         StateSnapshot {
-            is_elder: self.is_elder().await,
-            section_key: self.network_knowledge.section_key().await,
-            prefix: self.network_knowledge.prefix().await,
-            elders: self.network_knowledge().authority_provider().await.names(),
+            is_elder: self.is_elder(),
+            section_key: self.network_knowledge.section_key(),
+            prefix: self.network_knowledge.prefix(),
+            elders: self.network_knowledge().authority_provider().names(),
         }
     }
 
@@ -355,13 +351,13 @@ impl Node {
         &self,
         excluded_names: &BTreeSet<XorName>,
     ) -> Result<Vec<DkgSessionId>> {
-        let sap = self.network_knowledge.authority_provider().await;
-        let chain_len = self.network_knowledge.chain_len().await;
+        let sap = self.network_knowledge.authority_provider();
+        let chain_len = self.network_knowledge.chain_len();
 
         // get current gen and members
         let current_gen;
         let members: BTreeMap<XorName, NodeState> =
-            if let Some(m) = self.membership.read().await.as_ref() {
+            if let Some(m) = self.membership.borrow().as_ref() {
                 current_gen = m.generation();
                 m.current_section_members()
                     .iter()
@@ -400,7 +396,7 @@ impl Node {
 
         // Candidates for elders out of all the nodes in the section, even out of the
         // relocating nodes if there would not be enough instead.
-        let sap = self.network_knowledge.authority_provider().await;
+        let sap = self.network_knowledge.authority_provider();
         let elder_candidates = elder_candidates(
             members
                 .values()
@@ -437,7 +433,7 @@ impl Node {
             trace!("section_peers {:?}", members);
             vec![]
         } else {
-            let chain_len = self.network_knowledge.chain_len().await;
+            let chain_len = self.network_knowledge.chain_len();
             let session_id = DkgSessionId {
                 prefix: sap.prefix(),
                 elders: BTreeMap::from_iter(
@@ -463,10 +459,9 @@ impl Node {
     async fn initialize_membership(&self, sap: SectionAuthorityProvider) -> Result<()> {
         let key = self
             .section_keys_provider
-            .key_share(&self.network_knowledge.section_key().await)
-            .await?;
+            .key_share(&self.network_knowledge.section_key())?;
 
-        let mut membership = self.membership.write().await;
+        let mut membership = self.membership.borrow_mut();
 
         *membership = Some(Membership::from(
             (key.index as u8, key.secret_key_share),
@@ -481,19 +476,14 @@ impl Node {
     async fn initialize_handover(&self) -> Result<()> {
         let key = self
             .section_keys_provider
-            .key_share(&self.network_knowledge.section_key().await)
-            .await?;
-        let n_elders = self
-            .network_knowledge
-            .authority_provider()
-            .await
-            .elder_count();
+            .key_share(&self.network_knowledge.section_key())?;
+        let n_elders = self.network_knowledge.authority_provider().elder_count();
 
         // reset split barrier for
-        let mut split_barrier = self.split_barrier.write().await;
+        let mut split_barrier = self.split_barrier.borrow_mut();
         *split_barrier = SplitBarrier::new();
 
-        let mut handover_voting = self.handover_voting.write().await;
+        let mut handover_voting = self.handover_voting.borrow_mut();
         *handover_voting = Some(Handover::from(
             (key.index as u8, key.secret_key_share),
             key.public_key_set,
@@ -507,7 +497,6 @@ impl Node {
         let sap = self
             .network_knowledge
             .section_signed_authority_provider()
-            .await
             .value
             .to_msg();
         self.initialize_membership(sap).await?;
@@ -525,7 +514,7 @@ impl Node {
 
         if new.section_key != old.section_key {
             if new.is_elder {
-                let sap = self.network_knowledge.authority_provider().await;
+                let sap = self.network_knowledge.authority_provider();
                 info!(
                     "Section updated: prefix: ({:b}), key: {:?}, elders: {}",
                     new.prefix,
@@ -542,7 +531,6 @@ impl Node {
                 let we_have_our_key_share_for_new_section_key = self
                     .section_keys_provider
                     .key_share(&new.section_key)
-                    .await
                     .is_ok();
 
                 if we_have_our_key_share_for_new_section_key {
@@ -561,17 +549,16 @@ impl Node {
 
                     // Whenever there is an elders change, casting a round of joins_allowed
                     // proposals to sync.
-                    cmds.extend(
-                        self.propose(Proposal::JoinsAllowed(*self.joins_allowed.read().await))
-                            .await?,
-                    );
+                    let joins_allowed = { *self.joins_allowed.borrow() };
+
+                    cmds.extend(self.propose(Proposal::JoinsAllowed(joins_allowed))?);
                 }
 
                 self.print_network_stats().await;
                 self.log_section_stats().await;
             } else {
                 // if not elder
-                let mut handover_voting = self.handover_voting.write().await;
+                let mut handover_voting = self.handover_voting.borrow_mut();
                 *handover_voting = None;
             }
 
@@ -579,7 +566,7 @@ impl Node {
                 cmds.extend(self.send_ae_update_to_our_section().await);
             }
 
-            let current: BTreeSet<_> = self.network_knowledge.authority_provider().await.names();
+            let current: BTreeSet<_> = self.network_knowledge.authority_provider().names();
             let added = current.difference(&old.elders).copied().collect();
             let removed = old.elders.difference(&current).copied().collect();
             let remaining = old.elders.intersection(&current).copied().collect();
@@ -597,7 +584,7 @@ impl Node {
                 NodeElderChange::Promoted
             } else if old.is_elder && !new.is_elder {
                 info!("{}", LogMarker::DemotedFromElder);
-                self.section_keys_provider.wipe().await;
+                self.section_keys_provider.wipe();
                 NodeElderChange::Demoted
             } else {
                 NodeElderChange::None
@@ -617,7 +604,6 @@ impl Node {
                 self.liveness_retain_only(
                     self.network_knowledge
                         .adults()
-                        .await
                         .iter()
                         .map(|peer| peer.name())
                         .collect(),
@@ -631,11 +617,8 @@ impl Node {
             } else {
                 cmds.extend(
                     self.send_metadata_updates_to_nodes(
-                        self.network_knowledge
-                            .authority_provider()
-                            .await
-                            .elders_vec(),
-                        &self.network_knowledge.prefix().await,
+                        self.network_knowledge.authority_provider().elders_vec(),
+                        &self.network_knowledge.prefix(),
                         new.section_key,
                     )
                     .await?,
@@ -651,12 +634,11 @@ impl Node {
                 self.send_metadata_updates_to_nodes(
                     self.network_knowledge
                         .authority_provider()
-                        .await
                         .elders()
                         .filter(|peer| !old.elders.contains(&peer.name()))
                         .cloned()
                         .collect(),
-                    &self.network_knowledge.prefix().await,
+                    &self.network_knowledge.prefix(),
                     new.section_key,
                 )
                 .await?,
@@ -668,24 +650,18 @@ impl Node {
         Ok(cmds)
     }
 
-    pub(super) async fn section_key_by_name(&self, name: &XorName) -> bls::PublicKey {
-        if self.network_knowledge.prefix().await.matches(name) {
-            self.network_knowledge.section_key().await
+    pub(super) fn section_key_by_name(&self, name: &XorName) -> bls::PublicKey {
+        if self.network_knowledge.prefix().matches(name) {
+            self.network_knowledge.section_key()
         } else if let Ok(sap) = self.network_knowledge.section_by_name(name) {
             sap.section_key()
-        } else if self
-            .network_knowledge
-            .prefix()
-            .await
-            .sibling()
-            .matches(name)
-        {
+        } else if self.network_knowledge.prefix().sibling().matches(name) {
             // For sibling with unknown key, use the previous key in our chain under the assumption
             // that it's the last key before the split and therefore the last key of theirs we know.
             // In case this assumption is not correct (because we already progressed more than one
             // key since the split) then this key would be unknown to them and they would send
             // us back their whole section chain. However, this situation should be rare.
-            *self.network_knowledge.section_chain().await.prev_key()
+            *self.network_knowledge.section_chain().prev_key()
         } else {
             *self.network_knowledge.genesis_key()
         }
@@ -694,22 +670,18 @@ impl Node {
     pub(super) async fn print_network_stats(&self) {
         self.network_knowledge
             .prefix_map()
-            .network_stats(&self.network_knowledge.authority_provider().await)
+            .network_stats(&self.network_knowledge.authority_provider())
             .print();
     }
 
     pub(super) async fn log_section_stats(&self) {
-        if let Some(m) = self.membership.read().await.as_ref() {
-            let adults = self.network_knowledge.adults().await.len();
+        if let Some(m) = self.membership.borrow().as_ref() {
+            let adults = self.network_knowledge.adults().len();
 
-            let elders = self
-                .network_knowledge
-                .authority_provider()
-                .await
-                .elder_count();
+            let elders = self.network_knowledge.authority_provider().elder_count();
 
             let membership_adults = m.current_section_members().len() - elders;
-            let prefix = self.network_knowledge.prefix().await;
+            let prefix = self.network_knowledge.prefix();
 
             debug!("{prefix:?}: {elders} Elders, {adults}~{membership_adults} Adults.");
         } else {

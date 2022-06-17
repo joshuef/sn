@@ -21,38 +21,32 @@ use sn_interface::{
 
 impl Node {
     /// Send proposal to all our elders.
-    pub(crate) async fn propose(&self, proposal: Proposal) -> Result<Vec<Cmd>> {
-        let elders = self
-            .network_knowledge
-            .authority_provider()
-            .await
-            .elders_vec();
-        self.send_proposal(elders, proposal).await
+    pub(crate) fn propose(&self, proposal: Proposal) -> Result<Vec<Cmd>> {
+        let elders = self.network_knowledge.authority_provider().elders_vec();
+        self.send_proposal(elders, proposal)
     }
 
     /// Send `proposal` to `recipients`.
-    pub(crate) async fn send_proposal(
+    pub(crate) fn send_proposal(
         &self,
         recipients: Vec<Peer>,
         proposal: Proposal,
     ) -> Result<Vec<Cmd>> {
-        let section_key = self.network_knowledge.section_key().await;
+        let section_key = self.network_knowledge.section_key();
 
         let key_share = self
             .section_keys_provider
             .key_share(&section_key)
-            .await
             .map_err(|err| {
                 trace!("Can't propose {:?}: {:?}", proposal, err);
                 err
             })?;
 
         self.send_proposal_with(recipients, proposal, &key_share)
-            .await
     }
 
     /// Send `proposal` to `recipients` signing it with the provided key share.
-    pub(crate) async fn send_proposal_with(
+    pub(crate) fn send_proposal_with(
         &self,
         recipients: Vec<Peer>,
         proposal: Proposal,
@@ -78,11 +72,11 @@ impl Node {
         };
         // Name of the section_pk may not matches the section prefix.
         // Carry out a substitution to prevent the dst_location becomes other section.
-        let section_key = self.network_knowledge.section_key().await;
+        let section_key = self.network_knowledge.section_key();
         let wire_msg = WireMsg::single_src(
-            &self.info.read().await.clone(),
+            &self.info.borrow().clone(),
             DstLocation::Section {
-                name: self.network_knowledge.prefix().await.name(),
+                name: self.network_knowledge.prefix().name(),
                 section_pk: section_key,
             },
             node_msg,
@@ -92,21 +86,18 @@ impl Node {
         let msg_id = wire_msg.msg_id();
 
         let mut cmds = vec![];
-        let our_name = self.info.read().await.name();
+        let our_name = self.info.borrow().name();
         // handle ourselves if we should
         for peer in recipients.clone() {
             if peer.name() == our_name {
-                cmds.extend(
-                    super::super::handle_proposal(
-                        msg_id,
-                        proposal.clone(),
-                        sig_share.clone(),
-                        peer,
-                        &self.network_knowledge,
-                        &self.proposal_aggregator,
-                    )
-                    .await?,
-                )
+                cmds.extend(super::super::handle_proposal(
+                    msg_id,
+                    proposal.clone(),
+                    sig_share.clone(),
+                    peer,
+                    &self.network_knowledge,
+                    &self.proposal_aggregator,
+                )?)
             }
         }
 
@@ -119,8 +110,7 @@ impl Node {
         cmds.extend(
             self.send_messages_to_all_nodes_or_directly_handle_for_accumulation(
                 recipients, wire_msg,
-            )
-            .await?,
+            )?,
         );
 
         Ok(cmds)

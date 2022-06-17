@@ -88,7 +88,7 @@ impl JoiningAsRelocated {
     // - `Redirect`: repeat join request with the new set of addresses.
     // - `Approval`: returns the `Section` to use by this node, completing the relocation.
     // - `NodeNotReachable`: returns an error, completing the relocation attempt.
-    pub(crate) async fn handle_join_response(
+    pub(crate) fn handle_join_response(
         &mut self,
         join_response: JoinAsRelocatedResponse,
         sender: SocketAddr,

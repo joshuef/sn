@@ -234,23 +234,21 @@ impl NetworkKnowledge {
     }
 
     /// update all section info for our new section
-    pub async fn relocated_to(&self, new_network_nowledge: Self) -> Result<()> {
+    pub fn relocated_to(&self, new_network_nowledge: Self) -> Result<()> {
         debug!("Node was relocated to {:?}", new_network_nowledge);
 
-        let chain_to_update_to = new_network_nowledge.section_chain().await;
+        let chain_to_update_to = new_network_nowledge.section_chain();
         *self.chain.borrow_mut() = chain_to_update_to;
 
         *self.signed_sap.borrow_mut() = new_network_nowledge.signed_sap();
 
-        let _updated = self
-            .merge_members(new_network_nowledge.section_signed_members().await)
-            .await?;
+        let _updated = self.merge_members(new_network_nowledge.section_signed_members())?;
 
         Ok(())
     }
 
     /// Creates `NetworkKnowledge` for the first node in the network
-    pub async fn first_node(
+    pub fn first_node(
         peer: Peer,
         genesis_sk_set: bls::SecretKeySet,
     ) -> Result<(NetworkKnowledge, SectionKeyShare)> {
@@ -292,7 +290,7 @@ impl NetworkKnowledge {
     /// If we already have the signed SAP and section chain for the provided key and prefix
     /// we make them the current SAP and section chain, and if so, this returns 'true'.
     /// Note this function assumes we already have the key share for the provided section key.
-    pub async fn try_update_current_sap(&self, section_key: BlsPublicKey, prefix: &Prefix) -> bool {
+    pub fn try_update_current_sap(&self, section_key: BlsPublicKey, prefix: &Prefix) -> bool {
         // Let's try to find the signed SAP corresponding to the provided prefix and section key
         match self.prefix_map.get_signed(prefix) {
             Some(signed_sap) if signed_sap.value.section_key() == section_key => {
@@ -307,12 +305,10 @@ impl NetworkKnowledge {
                         // Remove any peer which doesn't belong to our new section's prefix
                         self.section_peers.retain(prefix);
                         // Prune list of archived members
-                        self.section_peers
-                            .prune_members_archive(&section_chain)
-                            .await;
+                        self.section_peers.prune_members_archive(&section_chain);
 
                         // Let's then update our current SAP and section chain
-                        let our_prev_prefix = self.prefix().await;
+                        let our_prev_prefix = self.prefix();
                         *self.signed_sap.borrow_mut() = signed_sap.clone();
                         *self.chain.borrow_mut() = section_chain;
 
@@ -378,7 +374,7 @@ impl NetworkKnowledge {
     /// with the provided proof chain.
     /// If the 'update_sap' flag is set to 'true', the provided SAP and chain will be
     /// set as our current.
-    pub async fn update_knowledge_if_valid(
+    pub fn update_knowledge_if_valid(
         &self,
         signed_sap: SectionAuth<SectionAuthorityProvider>,
         proof_chain: &SecuredLinkedList,
@@ -393,7 +389,7 @@ impl NetworkKnowledge {
         match self.prefix_map.verify_with_chain_and_update(
             signed_sap.clone(),
             proof_chain,
-            &self.section_chain().await,
+            &self.section_chain(),
         ) {
             Ok(true) => {
                 there_was_an_update = true;
@@ -412,7 +408,7 @@ impl NetworkKnowledge {
                 let mut we_have_a_share_of_this_key = false;
 
                 // lets find out if we should be an elder after the change
-                let we_are_an_adult = !self.is_elder(our_name).await;
+                let we_are_an_adult = !self.is_elder(our_name);
 
                 // check we should not be _becoming_ an elder
                 let we_should_become_an_elder = if we_are_an_adult {
@@ -424,7 +420,6 @@ impl NetworkKnowledge {
                 if !we_are_an_adult || we_should_become_an_elder {
                     we_have_a_share_of_this_key = section_keys_provider
                         .key_share(&signed_sap.section_key())
-                        .await
                         .is_ok();
                 }
 
@@ -454,7 +449,7 @@ impl NetworkKnowledge {
                 // the key share for the new SAP, making this node unable to sign section messages
                 // and possibly being kicked out of the group of Elders.
                 if switch_to_new_sap && provided_sap.prefix().matches(our_name) {
-                    let our_prev_prefix = self.prefix().await;
+                    let our_prev_prefix = self.prefix();
                     // Remove any peer which doesn't belong to our new section's prefix
                     self.section_peers.retain(&provided_sap.prefix());
                     info!(
@@ -470,12 +465,10 @@ impl NetworkKnowledge {
                         .get_proof_chain(&self.genesis_key, &provided_sap.section_key())?;
 
                     // Prune list of archived members
-                    self.section_peers
-                        .prune_members_archive(&section_chain)
-                        .await;
+                    self.section_peers.prune_members_archive(&section_chain);
 
                     // Switch to new SAP and chain.
-                    *self.signed_sap.borrow_mut() = signed_sap.clone();
+                    *self.signed_sap.borrow_mut() = signed_sap;
                     *self.chain.borrow_mut() = section_chain;
                 }
             }
@@ -500,8 +493,8 @@ impl NetworkKnowledge {
                 .map(|member| member.into_authed_state())
                 .collect();
 
-            if self.merge_members(peers).await? {
-                let prefix = self.prefix().await;
+            if self.merge_members(peers)? {
+                let prefix = self.prefix();
                 info!(
                     "Updated our section's members ({:?}): {:?}",
                     prefix, self.section_peers
@@ -528,13 +521,13 @@ impl NetworkKnowledge {
 
     // Get SectionAuthorityProvider of a known section with the given prefix,
     // along with its section chain.
-    pub async fn get_closest_or_opposite_signed_sap(
+    pub fn get_closest_or_opposite_signed_sap(
         &self,
         name: &XorName,
     ) -> Option<(SectionAuth<SectionAuthorityProvider>, SecuredLinkedList)> {
         let closest_sap = self
             .prefix_map
-            .closest_or_opposite(name, Some(&self.prefix().await));
+            .closest_or_opposite(name, Some(&self.prefix()));
 
         if let Some(signed_sap) = closest_sap {
             if let Ok(proof_chain) = self
@@ -555,9 +548,9 @@ impl NetworkKnowledge {
     }
 
     // Try to merge this `NetworkKnowledge` members with `peers`.
-    pub async fn merge_members(&self, peers: BTreeSet<SectionAuth<NodeState>>) -> Result<bool> {
+    pub fn merge_members(&self, peers: BTreeSet<SectionAuth<NodeState>>) -> Result<bool> {
         let mut there_was_an_update = false;
-        let chain = self.section_chain().await;
+        let chain = self.section_chain();
 
         for node_state in peers.iter() {
             trace!(
@@ -579,20 +572,21 @@ impl NetworkKnowledge {
         // drop the borrow
         drop(chain);
 
-        self.section_peers.retain(&self.prefix().await);
+        self.section_peers.retain(&self.prefix());
 
         Ok(there_was_an_update)
     }
 
     /// Update the member. Returns whether it actually updated it.
-    pub async fn update_member(&self, node_state: SectionAuth<NodeState>) -> bool {
+    pub fn update_member(&self, node_state: SectionAuth<NodeState>) -> bool {
         let node_name = node_state.name();
         trace!(
             "Updating section member state, name: {:?}, new state: {:?}",
             node_name,
             node_state.state()
         );
-        let the_chain = self.section_chain().await;
+
+        let the_chain = self.section_chain();
         // let's check the node state is properly signed by one of the keys in our chain
         if !node_state.verify(&the_chain) {
             error!(
@@ -612,15 +606,12 @@ impl NetworkKnowledge {
     }
 
     /// Return a copy of our section chain
-    pub async fn section_chain(&self) -> SecuredLinkedList {
+    pub fn section_chain(&self) -> SecuredLinkedList {
         self.chain.borrow().clone()
     }
 
     /// Generate a proof chain from the provided key to our current section key
-    pub async fn get_proof_chain_to_current(
-        &self,
-        from_key: &BlsPublicKey,
-    ) -> Result<SecuredLinkedList> {
+    pub fn get_proof_chain_to_current(&self, from_key: &BlsPublicKey) -> Result<SecuredLinkedList> {
         let our_section_key = self.signed_sap.borrow().section_key();
         let proof_chain = self
             .chain
@@ -631,48 +622,48 @@ impl NetworkKnowledge {
     }
 
     /// Return current section key
-    pub async fn section_key(&self) -> bls::PublicKey {
+    pub fn section_key(&self) -> bls::PublicKey {
         self.signed_sap.borrow().section_key()
     }
 
     /// Return current section chain length
-    pub async fn chain_len(&self) -> u64 {
+    pub fn chain_len(&self) -> u64 {
         self.chain.borrow().main_branch_len() as u64
     }
 
     /// Return weather current section chain has the provided key
-    pub async fn has_chain_key(&self, key: &bls::PublicKey) -> bool {
+    pub fn has_chain_key(&self, key: &bls::PublicKey) -> bool {
         self.chain.borrow().has_key(key)
     }
 
     /// Return a copy of current SAP
-    pub async fn authority_provider(&self) -> SectionAuthorityProvider {
+    pub fn authority_provider(&self) -> SectionAuthorityProvider {
         self.signed_sap.borrow().value.clone()
     }
 
     /// Return a copy of current SAP with corresponding section authority
-    pub async fn section_signed_authority_provider(&self) -> SectionAuth<SectionAuthorityProvider> {
+    pub fn section_signed_authority_provider(&self) -> SectionAuth<SectionAuthorityProvider> {
         self.signed_sap.borrow().clone()
     }
 
     /// Prefix of our section.
-    pub async fn prefix(&self) -> Prefix {
+    pub fn prefix(&self) -> Prefix {
         self.signed_sap.borrow().prefix()
     }
 
     /// Returns the elders of our section
-    pub async fn elders(&self) -> Vec<Peer> {
-        self.authority_provider().await.elders_vec()
+    pub fn elders(&self) -> Vec<Peer> {
+        self.authority_provider().elders_vec()
     }
 
     /// Return whether the name provided belongs to an Elder, by checking if
     /// it is one of the current section's SAP member,
-    pub async fn is_elder(&self, name: &XorName) -> bool {
+    pub fn is_elder(&self, name: &XorName) -> bool {
         self.signed_sap.borrow().contains_elder(name)
     }
 
     /// Returns members that are joined.
-    pub async fn section_members(&self) -> BTreeSet<NodeState> {
+    pub fn section_members(&self) -> BTreeSet<NodeState> {
         self.section_peers
             .members()
             .into_iter()
@@ -681,20 +672,20 @@ impl NetworkKnowledge {
     }
 
     /// Returns current list of section signed members.
-    pub async fn section_signed_members(&self) -> BTreeSet<SectionAuth<NodeState>> {
+    pub fn section_signed_members(&self) -> BTreeSet<SectionAuth<NodeState>> {
         self.section_peers.members()
     }
 
     /// Returns current section size, i.e. number of peers in the section.
-    pub async fn section_size(&self) -> usize {
+    pub fn section_size(&self) -> usize {
         self.section_peers.num_of_members()
     }
 
     /// Returns live adults from our section.
-    pub async fn adults(&self) -> Vec<Peer> {
+    pub fn adults(&self) -> Vec<Peer> {
         let mut live_adults = vec![];
         for node_state in self.section_peers.members() {
-            if !self.is_elder(&node_state.name()).await {
+            if !self.is_elder(&node_state.name()) {
                 live_adults.push(*node_state.peer())
             }
         }
@@ -702,25 +693,22 @@ impl NetworkKnowledge {
     }
 
     /// Get info for the member with the given name.
-    pub async fn get_section_member(&self, name: &XorName) -> Option<NodeState> {
+    pub fn get_section_member(&self, name: &XorName) -> Option<NodeState> {
         self.section_peers.get(name)
     }
 
     /// Get info for the member with the given name either from current members list,
     /// or from the archive of left/relocated members
-    pub async fn is_either_member_or_archived(
-        &self,
-        name: &XorName,
-    ) -> Option<SectionAuth<NodeState>> {
+    pub fn is_either_member_or_archived(&self, name: &XorName) -> Option<SectionAuth<NodeState>> {
         self.section_peers.is_either_member_or_archived(name)
     }
 
     /// Get info for the member with the given name.
-    pub async fn is_section_member(&self, name: &XorName) -> bool {
+    pub fn is_section_member(&self, name: &XorName) -> bool {
         self.section_peers.is_member(name)
     }
 
-    pub async fn find_member_by_addr(&self, addr: &SocketAddr) -> Option<Peer> {
+    pub fn find_member_by_addr(&self, addr: &SocketAddr) -> Option<Peer> {
         self.section_peers
             .members()
             .into_iter()

@@ -372,10 +372,10 @@ async fn run_node(config: Config) -> Result<()> {
         sleep(bootstrap_retry_duration).await;
     };
 
-    let our_conn_info = node.our_connection_info().await;
+    let our_conn_info = node.our_connection_info();
 
     if config.is_first() {
-        let genesis_key = node.genesis_key().await;
+        let genesis_key = node.genesis_key();
         set_connection_info(genesis_key, our_conn_info)
             .await
             .unwrap_or_else(|err| {

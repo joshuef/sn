@@ -16,7 +16,7 @@ use xor_name::XorName;
 
 impl Node {
     pub(crate) async fn handle_peer_lost(&self, addr: &SocketAddr) -> Result<Vec<Cmd>> {
-        let name = if let Some(peer) = self.network_knowledge.find_member_by_addr(addr).await {
+        let name = if let Some(peer) = self.network_knowledge.find_member_by_addr(addr) {
             debug!("Lost known peer {}", peer);
             peer.name()
         } else {
@@ -24,7 +24,7 @@ impl Node {
             return Ok(vec![]);
         };
 
-        if self.is_not_elder().await {
+        if self.is_not_elder() {
             // Adults cannot complain about connectivity.
             return Ok(vec![]);
         }
@@ -34,28 +34,21 @@ impl Node {
         Ok(cmds)
     }
 
-    pub(crate) async fn cast_offline_proposals(
-        &self,
-        names: &BTreeSet<XorName>,
-    ) -> Result<Vec<Cmd>> {
+    pub(crate) fn cast_offline_proposals(&self, names: &BTreeSet<XorName>) -> Result<Vec<Cmd>> {
         // Don't send the `Offline` proposal to the peer being lost as that send would fail,
         // triggering a chain of further `Offline` proposals.
         let elders: Vec<_> = self
             .network_knowledge
             .authority_provider()
-            .await
             .elders()
             .filter(|peer| !names.contains(&peer.name()))
             .cloned()
             .collect();
         let mut result: Vec<Cmd> = Vec::new();
         for name in names.iter() {
-            if let Some(info) = self.network_knowledge.get_section_member(name).await {
+            if let Some(info) = self.network_knowledge.get_section_member(name) {
                 let info = info.leave()?;
-                if let Ok(cmds) = self
-                    .send_proposal(elders.clone(), Proposal::Offline(info))
-                    .await
-                {
+                if let Ok(cmds) = self.send_proposal(elders.clone(), Proposal::Offline(info)) {
                     result.extend(cmds);
                 }
             }

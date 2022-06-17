@@ -62,7 +62,7 @@ impl Node {
         &self,
         client_msg: &ServiceMsg,
     ) -> Result<(AuthKind, Bytes)> {
-        let keypair = self.info.read().await.keypair.clone();
+        let keypair = self.info.borrow().keypair.clone();
         let payload = WireMsg::serialize_msg_payload(client_msg)?;
         let signature = keypair.sign(&payload);
 

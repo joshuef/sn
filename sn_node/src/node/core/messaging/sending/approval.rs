@@ -16,9 +16,9 @@ use sn_interface::{
 
 impl Node {
     // Send `NodeApproval` to a joining node which makes it a section member
-    pub(crate) async fn send_node_approval(&self, node_state: SectionAuth<NodeState>) -> Vec<Cmd> {
+    pub(crate) fn send_node_approval(&self, node_state: SectionAuth<NodeState>) -> Vec<Cmd> {
         let peer = *node_state.peer();
-        let prefix = self.network_knowledge.prefix().await;
+        let prefix = self.network_knowledge.prefix();
         info!("Our section with {:?} has approved peer {}.", prefix, peer,);
 
         let node_msg = SystemMsg::JoinResponse(Box::new(JoinResponse::Approval {
@@ -26,15 +26,14 @@ impl Node {
             section_auth: self
                 .network_knowledge
                 .section_signed_authority_provider()
-                .await
                 .into_authed_msg(),
             node_state: node_state.into_authed_msg(),
-            section_chain: self.network_knowledge.section_chain().await,
+            section_chain: self.network_knowledge.section_chain(),
         }));
 
-        let dst_section_pk = self.network_knowledge.section_key().await;
+        let dst_section_pk = self.network_knowledge.section_key();
         trace!("{}", LogMarker::SendNodeApproval);
-        match self.send_direct_msg(peer, node_msg, dst_section_pk).await {
+        match self.send_direct_msg(peer, node_msg, dst_section_pk) {
             Ok(cmd) => vec![cmd],
             Err(err) => {
                 error!("Failed to send join approval to node {}: {:?}", peer, err);

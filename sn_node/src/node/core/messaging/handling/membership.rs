@@ -22,16 +22,13 @@ use std::{collections::BTreeSet, vec};
 
 // Message handling
 impl Node {
-    pub(crate) async fn propose_membership_change(
-        &self,
-        node_state: NodeState,
-    ) -> Result<Vec<Cmd>> {
+    pub(crate) fn propose_membership_change(&self, node_state: NodeState) -> Result<Vec<Cmd>> {
         info!(
             "Proposing membership change: {} - {:?}",
             node_state.name, node_state.state
         );
-        let prefix = self.network_knowledge.prefix().await;
-        if let Some(membership) = self.membership.write().await.as_mut() {
+        let prefix = self.network_knowledge.prefix();
+        if let Some(ref mut membership) = *self.membership.borrow_mut() {
             let membership_vote = match membership.propose(node_state, &prefix) {
                 Ok(vote) => vote,
                 Err(e) => {
@@ -40,9 +37,8 @@ impl Node {
                 }
             };
 
-            let cmds = self
-                .send_msg_to_our_elders(SystemMsg::MembershipVotes(vec![membership_vote]))
-                .await?;
+            let cmds =
+                self.send_msg_to_our_elders(SystemMsg::MembershipVotes(vec![membership_vote]))?;
             Ok(vec![cmds])
         } else {
             error!("Membership - Failed to propose membership change, no membership instance");
@@ -50,7 +46,7 @@ impl Node {
         }
     }
 
-    pub(crate) async fn handle_membership_votes(
+    pub(crate) fn handle_membership_votes(
         &self,
         peer: Peer,
         signed_votes: Vec<SignedVote<NodeState>>,
@@ -59,35 +55,45 @@ impl Node {
             "{:?} {signed_votes:?} from {peer}",
             LogMarker::MembershipVotesBeingHandled
         );
-        let prefix = self.network_knowledge.prefix().await;
+        let prefix = self.network_knowledge.prefix();
 
         let mut cmds = vec![];
 
         for signed_vote in signed_votes {
-            if let Some(membership) = self.membership.write().await.as_mut() {
-                match membership.handle_signed_vote(signed_vote, &prefix) {
+            let membership_res = if let Some(ref mut membership) = *self.membership.borrow_mut() {
+                let result = membership.handle_signed_vote(signed_vote, &prefix);
+                let generation = membership.generation();
+
+                Some((result, generation))
+            } else {
+                None
+            };
+
+            if let Some((result, generation)) = membership_res {
+                match result {
                     Ok(VoteResponse::Broadcast(response_vote)) => {
-                        cmds.push(
-                            self.send_msg_to_our_elders(SystemMsg::MembershipVotes(vec![
-                                response_vote,
-                            ]))
-                            .await?,
-                        );
+                        cmds.push(self.send_msg_to_our_elders(SystemMsg::MembershipVotes(
+                            vec![response_vote],
+                        ))?);
                     }
                     Ok(VoteResponse::WaitingForMoreVotes) => {
                         //do nothing
                     }
                     Err(membership::Error::RequestAntiEntropy) => {
                         debug!("Membership - We are behind the voter, requesting AE");
+
                         // We hit an error while processing this vote, perhaps we are missing information.
                         // We'll send a membership AE request to see if they can help us catch up.
-                        let sap = self.network_knowledge.authority_provider().await;
+                        let sap = self.network_knowledge.authority_provider();
                         let dst_section_pk = sap.section_key();
                         let section_name = prefix.name();
-                        let msg = SystemMsg::MembershipAE(membership.generation());
-                        let cmd = self
-                            .send_direct_msg_to_nodes(vec![peer], msg, section_name, dst_section_pk)
-                            .await?;
+                        let msg = SystemMsg::MembershipAE(generation);
+                        let cmd = self.send_direct_msg_to_nodes(
+                            vec![peer],
+                            msg,
+                            section_name,
+                            dst_section_pk,
+                        )?;
 
                         debug!("{:?}", LogMarker::MembershipSendingAeUpdateRequest);
                         cmds.push(cmd);
@@ -100,7 +106,12 @@ impl Node {
                         break;
                     }
                 };
+            }
 
+            // }
+
+            let option_membership = &*self.membership.borrow();
+            if let Some(membership) = option_membership {
                 // TODO: We should be able to detect when a *new* decision is made
                 //       As it stands, we will reprocess each decision for any new vote
                 //       we receive, it should be safe to do as `HandleNewNodeOnline`
@@ -139,7 +150,7 @@ impl Node {
         Ok(cmds)
     }
 
-    pub(crate) async fn handle_membership_anti_entropy(
+    pub(crate) fn handle_membership_anti_entropy(
         &self,
         peer: Peer,
         gen: Generation,
@@ -151,17 +162,14 @@ impl Node {
             peer
         );
 
-        let cmds = if let Some(membership) = self.membership.read().await.as_ref() {
+        let cmds = if let Some(membership) = self.membership.borrow().as_ref() {
             match membership.anti_entropy(gen) {
                 Ok(catchup_votes) => {
-                    vec![
-                        self.send_direct_msg(
-                            peer,
-                            SystemMsg::MembershipVotes(catchup_votes),
-                            self.network_knowledge.section_key().await,
-                        )
-                        .await?,
-                    ]
+                    vec![self.send_direct_msg(
+                        peer,
+                        SystemMsg::MembershipVotes(catchup_votes),
+                        self.network_knowledge.section_key(),
+                    )?]
                 }
                 Err(e) => {
                     error!("Membership - Error while processing anti-entropy {:?}", e);

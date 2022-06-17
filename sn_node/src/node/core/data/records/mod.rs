@@ -30,7 +30,7 @@ use sn_interface::{
 
 use dashmap::DashSet;
 use itertools::Itertools;
-use std::{cmp::Ordering, collections::BTreeSet, sync::Arc};
+use std::{cmp::Ordering, collections::BTreeSet, rc::Rc};
 use tracing::info;
 use xor_name::XorName;
 
@@ -38,7 +38,7 @@ impl Node {
     // Locate ideal holders for this data, line up wiremsgs for those to instruct them to store the data
     pub(crate) async fn replicate_data(&self, data: ReplicatedData) -> Result<Vec<Cmd>> {
         trace!("{:?}: {:?}", LogMarker::DataStoreReceivedAtElder, data);
-        if self.is_elder().await {
+        if self.is_elder() {
             let targets = self.get_adults_who_should_store_data(data.name()).await;
 
             info!(
@@ -75,8 +75,7 @@ impl Node {
             .await;
 
         if targets.is_empty() {
-            let error =
-                convert_to_error_msg(Error::NoAdults(self.network_knowledge().prefix().await));
+            let error = convert_to_error_msg(Error::NoAdults(self.network_knowledge().prefix()));
 
             debug!("No targets found for {msg_id:?}");
             return self
@@ -93,7 +92,7 @@ impl Node {
         } else {
             let peers = DashSet::new();
             let _false_as_fresh = peers.insert(origin);
-            Arc::new(peers)
+            Rc::new(peers)
         };
 
         // drop if we exceed
@@ -197,7 +196,7 @@ impl Node {
     async fn get_adults_holding_data_including_full(&self, target: &XorName) -> BTreeSet<XorName> {
         let full_adults = self.full_adults().await;
         // TODO: reuse our_adults_sorted_by_distance_to API when core is merged into upper layer
-        let adults = self.network_knowledge().adults().await;
+        let adults = self.network_knowledge().adults();
 
         let adults_names = adults.iter().map(|p2p_node| p2p_node.name());
 
@@ -241,7 +240,7 @@ impl Node {
     async fn get_adults_who_should_store_data(&self, target: XorName) -> BTreeSet<XorName> {
         let full_adults = self.full_adults().await;
         // TODO: reuse our_adults_sorted_by_distance_to API when core is merged into upper layer
-        let adults = self.network_knowledge().adults().await;
+        let adults = self.network_knowledge().adults();
 
         trace!("Total adults known about: {:?}", adults.len());
 
@@ -274,8 +273,8 @@ impl Node {
     ) -> Result<Vec<Cmd>> {
         // we create a dummy/random dst location,
         // we will set it correctly for each msg and target
-        let section_pk = self.network_knowledge().section_key().await;
-        let our_name = self.info.read().await.name();
+        let section_pk = self.network_knowledge().section_key();
+        let our_name = self.info.borrow().name();
         let dummy_dst_location = DstLocation::Node {
             name: our_name,
             section_pk,
@@ -283,7 +282,7 @@ impl Node {
 
         // separate this into form_wire_msg based on agg
         let wire_msg = WireMsg::single_src(
-            &self.info.read().await.clone(),
+            &self.info.borrow().clone(),
             dummy_dst_location,
             msg,
             section_pk,
@@ -294,7 +293,7 @@ impl Node {
         for target in targets {
             debug!("Sending {:?} to {:?}", wire_msg, target);
             let mut wire_msg = wire_msg.clone();
-            let dst_section_pk = self.section_key_by_name(&target).await;
+            let dst_section_pk = self.section_key_by_name(&target);
             wire_msg.set_dst_section_pk(dst_section_pk);
             wire_msg.set_dst_xorname(target);
 

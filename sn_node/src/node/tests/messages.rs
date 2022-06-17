@@ -51,7 +51,7 @@ async fn test_messages_client_node() -> Result<()> {
 
     let node_addr = node.our_connection_info();
     let section_prefix = node.our_prefix().await;
-    let section_key = *node.section_chain().await.last_key();
+    let section_key = *node.section_chain().last_key();
 
     let client = QuicP2p::<XorName>::with_config(Some(config), &[node_addr], false)?;
     let (client_endpoint, _, mut incoming_messages, _) = client.new_endpoint().await?;

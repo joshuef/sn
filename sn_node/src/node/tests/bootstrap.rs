@@ -34,7 +34,7 @@ async fn test_genesis_node() -> Result<()> {
 
     assert_next_event!(event_stream, Event::EldersChanged { .. });
 
-    assert!(node.is_elder().await);
+    assert!(node.is_elder());
 
     assert_eq!(node.name().await[XOR_NAME_LEN - 1], 255);
 
@@ -127,7 +127,7 @@ async fn test_startup_elders() -> Result<()> {
     let mut nodes = create_connected_nodes(elder_count()).await?;
 
     future::join_all(nodes.iter_mut().map(|(node, stream)| async move {
-        if node.is_elder().await {
+        if node.is_elder() {
             return;
         }
 

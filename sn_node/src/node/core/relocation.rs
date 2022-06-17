@@ -37,7 +37,7 @@ impl Display for ChurnId {
 }
 
 /// Find all nodes to relocate after a churn event and generate the relocation details for them.
-pub(super) async fn find_nodes_to_relocate(
+pub(super) fn find_nodes_to_relocate(
     network_knowledge: &NetworkKnowledge,
     churn_id: &ChurnId,
     excluded: BTreeSet<XorName>,
@@ -45,7 +45,7 @@ pub(super) async fn find_nodes_to_relocate(
     // Find the peers that pass the relocation check and take only the oldest ones to avoid
     // relocating too many nodes at the same time.
     // Capped by criteria that cannot relocate too many node at once.
-    let joined_nodes = network_knowledge.section_members().await;
+    let joined_nodes = network_knowledge.section_members();
 
     if joined_nodes.len() < recommended_section_size() {
         return vec![];
@@ -240,7 +240,7 @@ mod tests {
             let info = NodeState::joined(*peer, None);
             let info = section_signed(sk, info)?;
 
-            let res = futures::executor::block_on(network_knowledge.update_member(info));
+            let res = network_knowledge.update_member(info);
             assert!(res);
         }
 
@@ -251,11 +251,8 @@ mod tests {
                 .to_vec(),
         );
 
-        let relocations = futures::executor::block_on(find_nodes_to_relocate(
-            &network_knowledge,
-            &churn_id,
-            BTreeSet::default(),
-        ));
+        let relocations =
+            find_nodes_to_relocate(&network_knowledge, &churn_id, BTreeSet::default());
 
         let relocations: Vec<_> = relocations
             .into_iter()

@@ -199,12 +199,12 @@ async fn start_node(
         .await
         .expect("Failed to instantiate a Node");
 
-    let contact_info = node.our_connection_info().await;
+    let contact_info = node.our_connection_info();
 
     info!(
         "Node #{} connected - name: {}, contact: {}",
         index,
-        node.name().await,
+        node.name(),
         contact_info
     );
 
@@ -270,7 +270,7 @@ async fn handle_event(index: usize, node: &mut NodeApi, event: Event) -> bool {
             index, previous_name
         ),
         Event::Relocated { previous_name, .. } => {
-            let new_name = node.name().await;
+            let new_name = node.name();
             info!(
                 "Node #{} relocated - old name: {}, new name: {}",
                 index, previous_name, new_name,

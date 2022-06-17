@@ -43,8 +43,8 @@ impl Dispatcher {
 
                 // Send a probe message if we are an elder
                 let node = &dispatcher.node;
-                if node.is_elder().await && !node.network_knowledge().prefix().await.is_empty() {
-                    match node.generate_probe_msg().await {
+                if node.is_elder() && !node.network_knowledge().prefix().is_empty() {
+                    match node.generate_probe_msg() {
                         Ok(cmd) => {
                             info!("Sending probe msg");
                             if let Err(e) = dispatcher
@@ -74,7 +74,7 @@ impl Dispatcher {
 
                 // Send a probe message to an elder
                 let node = &dispatcher.node;
-                if !node.network_knowledge().prefix().await.is_empty() {
+                if !node.network_knowledge().prefix().is_empty() {
                     match node.generate_section_probe_msg().await {
                         Ok(cmd) => {
                             info!("Sending section probe msg");
@@ -148,8 +148,8 @@ impl Dispatcher {
                         self.pending_data_to_replicate_to_peers.remove(&address)
                     {
                         // get info for the WireMsg
-                        let src_section_pk = self.node.network_knowledge().section_key().await;
-                        let our_info = &*self.node.info.read().await;
+                        let src_section_pk = self.node.network_knowledge().section_key();
+                        let our_info = &*self.node.info.borrow();
 
                         let mut recipients = vec![];
 
@@ -265,14 +265,14 @@ impl Dispatcher {
                 let _ = interval.tick().await;
 
                 let members = dispatcher.node.network_knowledge().section_members().await;
-                let section_pk = dispatcher.node.network_knowledge().section_key().await;
+                let section_pk = dispatcher.node.network_knowledge().section_key();
 
                 if let Some(load_report) = dispatcher.node.comm.tolerated_msgs_per_s().await {
                     trace!("New BackPressure report to disseminate: {:?}", load_report);
 
                     // TODO: use comms to send report to anyone connected? (can we ID end users there?)
                     for member in members {
-                        let our_name = dispatcher.node.info.read().await.name();
+                        let our_name = dispatcher.node.info.borrow().name();
                         let peer = member.peer();
 
                         if peer.name() == our_name {
@@ -280,7 +280,7 @@ impl Dispatcher {
                         }
 
                         let wire_msg = match WireMsg::single_src(
-                            &*dispatcher.node.info.read().await,
+                            &*dispatcher.node.info.borrow(),
                             DstLocation::Node {
                                 name: peer.name(),
                                 section_pk,

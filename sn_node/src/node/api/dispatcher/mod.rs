@@ -126,13 +126,13 @@ impl Dispatcher {
         let span = {
             let node = &self.node;
 
-            let prefix = node.network_knowledge().prefix().await;
-            let is_elder = node.is_elder().await;
-            let section_key = node.network_knowledge().section_key().await;
-            let age = node.info.read().await.age();
+            let prefix = node.network_knowledge().prefix();
+            let is_elder = node.is_elder();
+            let section_key = node.network_knowledge().section_key();
+            let age = node.info.borrow().age();
             trace_span!(
                 "process_cmd",
-                name = %node.info.read().await.name(),
+                name = %node.info.borrow().name(),
                 prefix = format_args!("({:b})", prefix),
                 age,
                 elder = is_elder,
@@ -189,9 +189,9 @@ impl Dispatcher {
                 Ok(vec![])
             }
             Cmd::SignOutgoingSystemMsg { msg, dst } => {
-                let src_section_pk = self.node.network_knowledge().section_key().await;
+                let src_section_pk = self.node.network_knowledge().section_key();
                 let wire_msg =
-                    WireMsg::single_src(&*self.node.info.read().await, dst, msg, src_section_pk)?;
+                    WireMsg::single_src(&*self.node.info.borrow(), dst, msg, src_section_pk)?;
 
                 let mut cmds = vec![];
                 cmds.extend(self.node.send_msg_to_nodes(wire_msg).await?);
@@ -285,19 +285,12 @@ impl Dispatcher {
                 .await
                 .into_iter()
                 .collect()),
-            Cmd::ProposeOffline(names) => self.node.cast_offline_proposals(&names).await,
-            Cmd::StartConnectivityTest(name) => Ok(vec![
-                self.node
-                    .send_msg_to_our_elders(SystemMsg::StartConnectivityTest(name))
-                    .await?,
-            ]),
+            Cmd::ProposeOffline(names) => self.node.cast_offline_proposals(&names),
+            Cmd::StartConnectivityTest(name) => Ok(vec![self
+                .node
+                .send_msg_to_our_elders(SystemMsg::StartConnectivityTest(name))?]),
             Cmd::TestConnectivity(name) => {
-                if let Some(member_info) = self
-                    .node
-                    .network_knowledge()
-                    .get_section_member(&name)
-                    .await
-                {
+                if let Some(member_info) = self.node.network_knowledge().get_section_member(&name) {
                     if self
                         .node
                         .comm

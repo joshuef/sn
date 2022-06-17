@@ -57,7 +57,7 @@ impl Default for DkgVoter {
 
 impl DkgVoter {
     // Starts a new DKG session.
-    pub(crate) async fn start(
+    pub(crate) fn start(
         &self,
         node: &NodeInfo,
         session_id: DkgSessionId,
@@ -158,7 +158,7 @@ impl DkgVoter {
     }
 
     // Handle a received DkgMessage.
-    pub(crate) async fn process_msg(
+    pub(crate) fn process_msg(
         &self,
         sender: Peer,
         node: &NodeInfo,
@@ -219,7 +219,7 @@ impl DkgVoter {
         }
     }
 
-    pub(crate) async fn handle_dkg_history(
+    pub(crate) fn handle_dkg_history(
         &self,
         node: &NodeInfo,
         session_id: &DkgSessionId,

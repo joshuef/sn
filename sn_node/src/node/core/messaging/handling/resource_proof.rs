@@ -35,8 +35,7 @@ impl Node {
 
         if self
             .info
-            .read()
-            .await
+            .borrow()
             .keypair
             .public
             .verify(&serialized, &response.nonce_signature)
@@ -49,7 +48,7 @@ impl Node {
             .validate_all(&response.nonce, &response.data, response.solution)
     }
 
-    pub(crate) async fn send_resource_proof_challenge(&self, peer: Peer) -> Result<Cmd> {
+    pub(crate) fn send_resource_proof_challenge(&self, peer: Peer) -> Result<Cmd> {
         let nonce: [u8; 32] = rand::random();
         let serialized =
             bincode::serialize(&(peer.name(), &nonce)).map_err(|_| Error::InvalidMessage)?;
@@ -57,11 +56,10 @@ impl Node {
             data_size: RESOURCE_PROOF_DATA_SIZE,
             difficulty: RESOURCE_PROOF_DIFFICULTY,
             nonce,
-            nonce_signature: ed25519::sign(&serialized, &self.info.read().await.keypair),
+            nonce_signature: ed25519::sign(&serialized, &self.info.borrow().keypair),
         }));
 
         trace!("{}", LogMarker::SendResourceProofChallenge);
-        self.send_direct_msg(peer, response, self.network_knowledge.section_key().await)
-            .await
+        self.send_direct_msg(peer, response, self.network_knowledge.section_key())
     }
 }

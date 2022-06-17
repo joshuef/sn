@@ -41,7 +41,7 @@ impl Node {
             return Ok(vec![]);
         }
 
-        let adults = self.network_knowledge.adults().await;
+        let adults = self.network_knowledge.adults();
         let adults_names = adults.iter().map(|p2p_node| p2p_node.name());
 
         let mut data_for_sender = vec![];
@@ -90,11 +90,11 @@ impl Node {
         let data_i_have = self.data_storage.keys().await?;
         let mut cmds = vec![];
 
-        let adults = self.network_knowledge.adults().await;
+        let adults = self.network_knowledge.adults();
         let adults_names = adults.iter().map(|p2p_node| p2p_node.name()).collect_vec();
 
-        let elders = self.network_knowledge.elders().await;
-        let my_name = self.info.read().await.name();
+        let elders = self.network_knowledge.elders();
+        let my_name = self.info.borrow().name();
 
         // find data targets that are not us.
         let mut target_member_names = adults_names
@@ -115,7 +115,7 @@ impl Node {
             let _existed = target_member_names.insert(elder.name());
         }
 
-        let section_pk = self.network_knowledge.section_key().await;
+        let section_pk = self.network_knowledge.section_key();
 
         for name in target_member_names {
             trace!("Sending our data list to: {:?}", name);
@@ -135,7 +135,7 @@ impl Node {
     pub(crate) async fn try_reorganize_data(&self) -> Result<Vec<Cmd>> {
         // as an elder we dont want to get any more data for our name
         // (elders will eventually be caching data in general)
-        if self.is_elder().await {
+        if self.is_elder() {
             return Ok(vec![]);
         }
 

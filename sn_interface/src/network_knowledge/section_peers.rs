@@ -125,7 +125,7 @@ impl SectionPeers {
 
     // Remove any member which Left, or was Relocated, more
     // than ELDER_CHURN_EVENTS_TO_PRUNE_ARCHIVE section keys ago.
-    pub(super) async fn prune_members_archive(&self, section_chain: &SecuredLinkedList) {
+    pub(super) fn prune_members_archive(&self, section_chain: &SecuredLinkedList) {
         let last_section_keys = section_chain.truncate(ELDER_CHURN_EVENTS_TO_PRUNE_ARCHIVE);
         self.archive
             .retain(|_, node_state| last_section_keys.has_key(&node_state.sig.public_key))

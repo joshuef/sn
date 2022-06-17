@@ -37,7 +37,6 @@ impl Node {
         if !self
             .network_knowledge
             .update_member(signed_node_state.clone())
-            .await
         {
             info!(
                 "{}: {} at {}",
@@ -59,23 +58,20 @@ impl Node {
         // we then need to send the Relocate msg to the peer attaching the signed NodeState
         // containing the relocation details.
         if node_state.is_relocated() {
-            cmds.push(
-                self.send_relocate(*node_state.peer(), signed_node_state)
-                    .await?,
-            );
+            cmds.push(self.send_relocate(*node_state.peer(), signed_node_state)?);
         }
 
         let churn_id = ChurnId(signature.to_bytes().to_vec());
-        cmds.extend(self.relocate_peers(churn_id, BTreeSet::default()).await?);
+        cmds.extend(self.relocate_peers(churn_id, BTreeSet::default())?);
 
         let result = self
             .promote_and_demote_elders_except(&BTreeSet::default())
             .await?;
         if result.is_empty() {
             // Send AE-Update to Adults of our section
-            let our_adults = self.network_knowledge.adults().await;
-            let our_prefix = self.network_knowledge.prefix().await;
-            let our_section_pk = self.network_knowledge.section_key().await;
+            let our_adults = self.network_knowledge.adults();
+            let our_prefix = self.network_knowledge.prefix();
+            let our_section_pk = self.network_knowledge.section_key();
             cmds.extend(
                 self.send_ae_update_to_nodes(our_adults, &our_prefix, our_section_pk)
                     .await,
@@ -87,13 +83,12 @@ impl Node {
         self.liveness_retain_only(
             self.network_knowledge
                 .adults()
-                .await
                 .iter()
                 .map(|peer| peer.name())
                 .collect(),
         )
         .await?;
-        *self.joins_allowed.write().await = true;
+        *self.joins_allowed.borrow_mut() = true;
 
         Ok(cmds)
     }

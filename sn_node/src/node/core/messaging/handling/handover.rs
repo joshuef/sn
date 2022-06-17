@@ -28,7 +28,7 @@ use xor_name::{Prefix, XorName};
 impl Node {
     /// helper to handle a handover vote
     #[instrument(skip(self), level = "trace")]
-    async fn handle_vote(
+    fn handle_vote(
         &self,
         handover_state: &mut Handover,
         signed_vote: SignedVote<SapCandidate>,
@@ -40,7 +40,7 @@ impl Node {
                     ">>> Handover Vote msg successfully handled, broadcasting our vote: {:?}",
                     signed_vote
                 );
-                Ok(self.broadcast_handover_vote_msg(signed_vote).await)
+                Ok(self.broadcast_handover_vote_msg(signed_vote))
             }
             Ok(VoteResponse::WaitingForMoreVotes) => {
                 trace!(
@@ -88,7 +88,7 @@ impl Node {
     }
 
     async fn get_members_at_gen(&self, gen: Generation) -> Result<BTreeMap<XorName, NodeState>> {
-        if let Some(m) = self.membership.read().await.as_ref() {
+        if let Some(m) = &*self.membership.borrow() {
             Ok(m.section_members(gen)?)
         } else {
             error!("Missing membership instance when checking handover SAP candidates");
@@ -166,7 +166,7 @@ impl Node {
     }
 
     async fn check_sap_candidate_prefix(&self, sap_candidate: &SapCandidate) -> Result<()> {
-        let section_prefix = self.network_knowledge.prefix().await;
+        let section_prefix = self.network_knowledge.prefix();
         match sap_candidate {
             SapCandidate::ElderHandover(single_sap) => {
                 // single handover, must be same prefix
@@ -237,33 +237,27 @@ impl Node {
     ) -> Result<Vec<Cmd>> {
         self.check_signed_vote_saps(&signed_vote).await?;
 
-        let mut wlock = self.handover_voting.write().await;
-        match &*wlock {
-            Some(handover_state) => {
-                let mut state = handover_state.clone();
-                let mut cmds = self.handle_vote(&mut state, signed_vote, peer).await?;
+        if let Some(ref mut handover_state) = *self.handover_voting.borrow_mut() {
+            let mut cmds = self.handle_vote(handover_state, signed_vote, peer)?;
 
-                // check for unsuccessful termination
-                state.handle_empty_set_decision();
+            // check for unsuccessful termination
+            handover_state.handle_empty_set_decision();
 
-                // check for successful termination
-                if let Some(candidates_sap) = state.consensus_value() {
-                    debug!(
-                        "{}: {:?}",
-                        LogMarker::HandoverConsensusTermination,
-                        candidates_sap
-                    );
+            // check for successful termination
+            if let Some(candidates_sap) = handover_state.consensus_value() {
+                debug!(
+                    "{}: {:?}",
+                    LogMarker::HandoverConsensusTermination,
+                    candidates_sap
+                );
 
-                    let bcast_cmds = self.broadcast_handover_decision(candidates_sap).await;
-                    cmds.extend(bcast_cmds);
-                }
-                *wlock = Some(state);
-                Ok(cmds)
+                let bcast_cmds = self.broadcast_handover_decision(candidates_sap);
+                cmds.extend(bcast_cmds);
             }
-            None => {
-                trace!("Non-elder node unexpectedly received handover Vote msg, ignoring...");
-                Ok(vec![])
-            }
+            Ok(cmds)
+        } else {
+            trace!("Non-elder node unexpectedly received handover Vote msg, ignoring...");
+            Ok(vec![])
         }
     }
 
@@ -284,13 +278,16 @@ impl Node {
                 Err(Error::RequestHandoverAntiEntropy(gen)) => {
                     // We hit an error while processing this vote, perhaps we are missing information.
                     // We'll send a handover AE request to see if they can help us catch up.
-                    let sap = self.network_knowledge.authority_provider().await;
+                    let sap = self.network_knowledge.authority_provider();
                     let dst_section_pk = sap.section_key();
-                    let section_name = self.network_knowledge.prefix().await.name();
+                    let section_name = self.network_knowledge.prefix().name();
                     let msg = SystemMsg::HandoverAE(gen);
-                    let cmd = self
-                        .send_direct_msg_to_nodes(vec![peer], msg, section_name, dst_section_pk)
-                        .await?;
+                    let cmd = self.send_direct_msg_to_nodes(
+                        vec![peer],
+                        msg,
+                        section_name,
+                        dst_section_pk,
+                    )?;
 
                     debug!("{:?}", LogMarker::HandoverSendingAeUpdateRequest);
                     cmds.push(cmd);
@@ -319,17 +316,14 @@ impl Node {
             peer,
         );
 
-        let cmds = if let Some(handover) = self.handover_voting.read().await.as_ref() {
+        let cmds = if let Some(handover) = &*self.handover_voting.borrow() {
             match handover.anti_entropy(gen) {
                 Ok(catchup_votes) => {
-                    vec![
-                        self.send_direct_msg(
-                            peer,
-                            SystemMsg::HandoverVotes(catchup_votes),
-                            self.network_knowledge.section_key().await,
-                        )
-                        .await?,
-                    ]
+                    vec![self.send_direct_msg(
+                        peer,
+                        SystemMsg::HandoverVotes(catchup_votes),
+                        self.network_knowledge.section_key(),
+                    )?]
                 }
                 Err(e) => {
                     error!("Handover - Error while processing anti-entropy {:?}", e);

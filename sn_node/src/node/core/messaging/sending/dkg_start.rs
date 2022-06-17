@@ -34,7 +34,7 @@ impl Node {
 
         let prefix = session_id.prefix;
         let node_msg = SystemMsg::DkgStart(session_id);
-        let section_pk = self.network_knowledge.section_key().await;
+        let section_pk = self.network_knowledge.section_key();
         self.send_msg_for_dst_accumulation(
             prefix.name(),
             DstLocation::Section {
@@ -44,22 +44,20 @@ impl Node {
             node_msg,
             recipients,
         )
-        .await
     }
 
-    async fn send_msg_for_dst_accumulation(
+    fn send_msg_for_dst_accumulation(
         &self,
         src: XorName,
         dst: DstLocation,
         node_msg: SystemMsg,
         recipients: Vec<Peer>,
     ) -> Result<Vec<Cmd>> {
-        let section_key = self.network_knowledge.section_key().await;
+        let section_key = self.network_knowledge.section_key();
 
         let key_share = self
             .section_keys_provider
             .key_share(&section_key)
-            .await
             .map_err(|err| {
                 trace!(
                     "Can't create message {:?} for accumulation at dst {:?}: {:?}",
@@ -79,6 +77,5 @@ impl Node {
         );
 
         self.send_messages_to_all_nodes_or_directly_handle_for_accumulation(recipients, wire_msg)
-            .await
     }
 }

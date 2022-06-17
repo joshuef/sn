@@ -23,11 +23,10 @@ use xor_name::Prefix;
 impl Node {
     /// Send `AntiEntropyUpdate` message to all nodes in our own section.
     pub(crate) async fn send_ae_update_to_our_section(&self) -> Vec<Cmd> {
-        let our_name = self.info.read().await.name();
+        let our_name = self.info.borrow().name();
         let nodes: Vec<_> = self
             .network_knowledge
             .section_members()
-            .await
             .into_iter()
             .filter(|info| info.name() != our_name)
             .map(|info| *info.peer())
@@ -39,9 +38,9 @@ impl Node {
         }
 
         // The previous PK which is likely what adults know
-        let previous_pk = *self.section_chain().await.prev_key();
+        let previous_pk = *self.section_chain().prev_key();
 
-        let our_prefix = self.network_knowledge.prefix().await;
+        let our_prefix = self.network_knowledge.prefix();
 
         self.send_ae_update_to_nodes(nodes, &our_prefix, previous_pk)
             .await
@@ -62,11 +61,13 @@ impl Node {
             }
         };
 
-        let our_section_key = self.network_knowledge.section_key().await;
-        match self
-            .send_direct_msg_to_nodes(recipients.clone(), node_msg, prefix.name(), our_section_key)
-            .await
-        {
+        let our_section_key = self.network_knowledge.section_key();
+        match self.send_direct_msg_to_nodes(
+            recipients.clone(),
+            node_msg,
+            prefix.name(),
+            our_section_key,
+        ) {
             Ok(cmd) => vec![cmd],
             Err(err) => {
                 error!(
@@ -88,15 +89,12 @@ impl Node {
         let metadata = self.get_metadata_of(prefix).await;
         let data_update_msg = SystemMsg::NodeCmd(NodeCmd::ReceiveMetadata { metadata });
 
-        match self
-            .send_direct_msg_to_nodes(
-                recipients.clone(),
-                data_update_msg,
-                prefix.name(),
-                section_pk,
-            )
-            .await
-        {
+        match self.send_direct_msg_to_nodes(
+            recipients.clone(),
+            data_update_msg,
+            prefix.name(),
+            section_pk,
+        ) {
             Ok(cmd) => Ok(vec![cmd]),
             Err(err) => {
                 error!(
@@ -115,7 +113,7 @@ impl Node {
         our_prev_state: &StateSnapshot,
     ) -> Result<Vec<Cmd>> {
         debug!("{}", LogMarker::AeSendUpdateToSiblings);
-        let sibling_prefix = self.network_knowledge.prefix().await.sibling();
+        let sibling_prefix = self.network_knowledge.prefix().sibling();
         if let Some(sibling_sap) = self
             .network_knowledge
             .prefix_map()
@@ -165,26 +163,21 @@ impl Node {
     // Private helper to generate AntiEntropyUpdate message to update
     // a peer abot our SAP, with proof_chain and members list.
     async fn generate_ae_update_msg(&self, dst_section_key: BlsPublicKey) -> Result<SystemMsg> {
-        let signed_sap = self
-            .network_knowledge
-            .section_signed_authority_provider()
-            .await;
+        let signed_sap = self.network_knowledge.section_signed_authority_provider();
 
         let proof_chain = if let Ok(chain) = self
             .network_knowledge
             .get_proof_chain_to_current(&dst_section_key)
-            .await
         {
             chain
         } else {
             // error getting chain from key, so let's send the whole chain from genesis
-            self.network_knowledge.section_chain().await
+            self.network_knowledge.section_chain()
         };
 
         let members = self
             .network_knowledge
             .section_signed_members()
-            .await
             .iter()
             .map(|state| state.clone().into_authed_msg())
             .collect();

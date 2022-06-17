@@ -28,31 +28,25 @@ use xor_name::XorName;
 
 // Relocation
 impl Node {
-    pub(crate) async fn relocate_peers(
+    pub(crate) fn relocate_peers(
         &self,
         churn_id: ChurnId,
         excluded: BTreeSet<XorName>,
     ) -> Result<Vec<Cmd>> {
         // Do not carry out relocations in the first section
         // TODO: consider avoiding relocations in first 16 sections instead.
-        if self.network_knowledge.prefix().await.is_empty() {
+        if self.network_knowledge.prefix().is_empty() {
             return Ok(vec![]);
         }
 
         // Do not carry out relocation when there is not enough elder nodes.
-        if self
-            .network_knowledge
-            .authority_provider()
-            .await
-            .elder_count()
-            < elder_count()
-        {
+        if self.network_knowledge.authority_provider().elder_count() < elder_count() {
             return Ok(vec![]);
         }
 
         let mut cmds = vec![];
         for (node_state, relocate_details) in
-            find_nodes_to_relocate(&self.network_knowledge, &churn_id, excluded).await
+            find_nodes_to_relocate(&self.network_knowledge, &churn_id, excluded)
         {
             debug!(
                 "Relocating {:?} to {} (on churn of {})",
@@ -61,10 +55,7 @@ impl Node {
                 churn_id
             );
 
-            cmds.extend(
-                self.propose(Proposal::Offline(node_state.relocate(relocate_details)))
-                    .await?,
-            );
+            cmds.extend(self.propose(Proposal::Offline(node_state.relocate(relocate_details)))?);
         }
 
         Ok(cmds)
@@ -87,7 +78,6 @@ impl Node {
         );
 
         self.propose(Proposal::Offline(node_state.relocate(relocate_details)))
-            .await
     }
 
     pub(crate) async fn handle_relocate(
@@ -109,7 +99,7 @@ impl Node {
                 return Ok(None);
             };
 
-        let node = self.info.read().await.clone();
+        let node = self.info.borrow().clone();
         if dst_xorname != node.name() {
             // This `Relocate` message is not for us - it's most likely a duplicate of a previous
             // message that we already handled.
@@ -121,18 +111,16 @@ impl Node {
             dst_xorname
         );
 
-        match *self.relocate_state.read().await {
-            Some(_) => {
-                trace!("Ignore Relocate - relocation already in progress");
-                return Ok(None);
-            }
-            None => {
-                trace!("{}", LogMarker::RelocateStart);
-                self.send_event(Event::RelocationStarted {
-                    previous_name: node.name(),
-                })
-                .await;
-            }
+        let we_have_relocate_state = { self.relocate_state.borrow().is_some() };
+        if we_have_relocate_state {
+            trace!("Ignore Relocate - relocation already in progress");
+            return Ok(None);
+        } else {
+            trace!("{}", LogMarker::RelocateStart);
+            self.send_event(Event::RelocationStarted {
+                previous_name: node.name(),
+            })
+            .await;
         }
 
         // Create a new instance of JoiningAsRelocated to start the relocation
@@ -143,10 +131,7 @@ impl Node {
         {
             sap.addresses()
         } else {
-            self.network_knowledge
-                .authority_provider()
-                .await
-                .addresses()
+            self.network_knowledge.authority_provider().addresses()
         };
         let (joining_as_relocated, cmd) = JoiningAsRelocated::start(
             node,
@@ -158,7 +143,7 @@ impl Node {
             new_age,
         )?;
 
-        *self.relocate_state.write().await = Some(Box::new(joining_as_relocated));
+        *self.relocate_state.borrow_mut() = Some(Box::new(joining_as_relocated));
 
         Ok(Some(cmd))
     }

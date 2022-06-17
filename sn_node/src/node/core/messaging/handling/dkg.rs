@@ -31,12 +31,12 @@ use xor_name::XorName;
 
 impl Node {
     pub(crate) async fn handle_dkg_start(&self, session_id: DkgSessionId) -> Result<Vec<Cmd>> {
-        let current_generation = self.network_knowledge.chain_len().await;
+        let current_generation = self.network_knowledge.chain_len();
         if session_id.section_chain_len < current_generation {
             trace!("Skipping DkgStart for older generation: {:?}", &session_id);
             return Ok(vec![]);
         }
-        let section_auth = self.network_knowledge().authority_provider().await;
+        let section_auth = self.network_knowledge().authority_provider();
 
         let mut peers = vec![];
         for session_peer in session_id.elder_peers() {
@@ -49,7 +49,6 @@ impl Node {
             } else if let Some(peer) = self
                 .network_knowledge()
                 .find_member_by_addr(&session_peer.addr())
-                .await
             {
                 peer
             } else {
@@ -61,19 +60,15 @@ impl Node {
 
         trace!("Received DkgStart for {:?}", session_id);
         self.dkg_sessions
-            .write()
-            .await
+            .borrow_mut()
             .retain(|_, existing_session_info| {
                 existing_session_info.session_id.section_chain_len >= session_id.section_chain_len
             });
-        let cmds = self
-            .dkg_voter
-            .start(
-                &self.info.read().await.clone(),
-                session_id,
-                self.network_knowledge().section_key().await,
-            )
-            .await?;
+        let cmds = self.dkg_voter.start(
+            &self.info.borrow().clone(),
+            session_id,
+            self.network_knowledge().section_key(),
+        )?;
         Ok(cmds)
     }
 
@@ -90,19 +85,17 @@ impl Node {
             sender
         );
 
-        if session_id.prefix.bit_count() < self.network_knowledge.prefix().await.bit_count() {
+        if session_id.prefix.bit_count() < self.network_knowledge.prefix().bit_count() {
             return Err(Error::InvalidDkgPrefix);
         }
 
-        self.dkg_voter
-            .process_msg(
-                sender,
-                &self.info.read().await.clone(),
-                &session_id,
-                message,
-                self.network_knowledge().section_key().await,
-            )
-            .await
+        self.dkg_voter.process_msg(
+            sender,
+            &self.info.borrow().clone(),
+            &session_id,
+            message,
+            self.network_knowledge().section_key(),
+        )
     }
 
     pub(crate) async fn handle_dkg_not_ready(
@@ -119,7 +112,7 @@ impl Node {
             session_id,
         };
         let wire_msg = WireMsg::single_src(
-            &self.info.read().await.clone(),
+            &self.info.borrow().clone(),
             DstLocation::Node {
                 name: sender.name(),
                 section_pk,
@@ -141,8 +134,8 @@ impl Node {
         message: DkgMessage,
         sender: Peer,
     ) -> Result<Vec<Cmd>> {
-        let section_key = self.network_knowledge().section_key().await;
-        let current_generation = self.network_knowledge.chain_len().await;
+        let section_key = self.network_knowledge().section_key();
+        let current_generation = self.network_knowledge.chain_len();
         if session_id.section_chain_len < current_generation {
             trace!(
                 "Ignoring DkgRetry for expired DKG session: {:?}",
@@ -150,28 +143,21 @@ impl Node {
             );
             return Ok(vec![]);
         }
-        let mut cmds = self
-            .dkg_voter
-            .handle_dkg_history(
-                &self.info.read().await.clone(),
-                session_id,
-                message_history,
-                sender.name(),
-                section_key,
-            )
-            .await?;
+        let mut cmds = self.dkg_voter.handle_dkg_history(
+            &self.info.borrow().clone(),
+            session_id,
+            message_history,
+            sender.name(),
+            section_key,
+        )?;
 
-        cmds.extend(
-            self.dkg_voter
-                .process_msg(
-                    sender,
-                    &self.info.read().await.clone(),
-                    session_id,
-                    message,
-                    section_key,
-                )
-                .await?,
-        );
+        cmds.extend(self.dkg_voter.process_msg(
+            sender,
+            &self.info.borrow().clone(),
+            session_id,
+            message,
+            section_key,
+        )?);
         Ok(cmds)
     }
 
@@ -195,11 +181,11 @@ impl Node {
         sender: &XorName,
         failure_set: &DkgFailureSigSet,
     ) -> Result<Vec<Cmd>> {
-        if !self.network_knowledge.is_section_member(sender).await {
+        if !self.network_knowledge.is_section_member(sender) {
             return Err(Error::InvalidSrcLocation);
         }
 
-        let generation = self.network_knowledge.chain_len().await;
+        let generation = self.network_knowledge.chain_len();
 
         let dkg_session = if let Some(dkg_session) = self
             .promote_and_demote_elders(&BTreeSet::new())
@@ -222,10 +208,7 @@ impl Node {
                 failure_set.failed_participants,
                 generation, dkg_session
             );
-            cmds.extend(
-                self.cast_offline_proposals(&failure_set.failed_participants)
-                    .await?,
-            );
+            cmds.extend(self.cast_offline_proposals(&failure_set.failed_participants)?);
         }
 
         trace!(
@@ -255,7 +238,7 @@ impl Node {
 
         // Add our new keyshare to our cache, we will then use
         // it to sign any msg that needs section agreement.
-        self.section_keys_provider.insert(key_share.clone()).await;
+        self.section_keys_provider.insert(key_share.clone());
 
         let snapshot = self.state_snapshot().await;
 
@@ -265,20 +248,14 @@ impl Node {
         if self
             .network_knowledge
             .try_update_current_sap(key_share_pk, &sap.prefix())
-            .await
         {
             self.update_self_for_new_node_state(snapshot).await
         } else {
             // This proposal is sent to the current set of elders to be aggregated
             // and section signed.
             let proposal = Proposal::SectionInfo { sap, generation };
-            let recipients: Vec<_> = self
-                .network_knowledge
-                .authority_provider()
-                .await
-                .elders_vec();
+            let recipients: Vec<_> = self.network_knowledge.authority_provider().elders_vec();
             self.send_proposal_with(recipients, proposal, &key_share)
-                .await
         }
     }
 
@@ -289,6 +266,6 @@ impl Node {
         }
 
         let node_msg = SystemMsg::DkgFailureAgreement(failure_set);
-        self.send_msg_to_our_elders(node_msg).await
+        self.send_msg_to_our_elders(node_msg)
     }
 }

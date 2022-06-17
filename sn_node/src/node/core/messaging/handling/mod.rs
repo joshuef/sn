@@ -87,7 +87,6 @@ impl Node {
                 let mut known_keys: Vec<BlsPublicKey> = self
                     .network_knowledge
                     .section_chain()
-                    .await
                     .keys()
                     .copied()
                     .collect();
@@ -109,7 +108,7 @@ impl Node {
                 // Let's check for entropy before we proceed further
                 // Adult nodes don't need to carry out entropy checking,
                 // however the message shall always be handled.
-                if self.is_elder().await {
+                if self.is_elder() {
                     // For the case of receiving a join request not matching our prefix,
                     // we just let the join request handler to deal with it later on.
                     // We also skip AE check on Anti-Entropy messages
@@ -144,7 +143,7 @@ impl Node {
                                     .await?
                                 {
                                     // we want to log issues with an elder who is out of sync here...
-                                    let knowledge = self.network_knowledge.elders().await;
+                                    let knowledge = self.network_knowledge.elders();
                                     let mut known_elders = knowledge.iter().map(|peer| peer.name());
 
                                     if known_elders.contains(&sender.name()) {
@@ -198,7 +197,7 @@ impl Node {
 
                 let src_location = wire_msg.msg_kind().src();
 
-                if self.is_not_elder().await {
+                if self.is_not_elder() {
                     trace!("Redirecting from adult to section elders");
                     cmds.push(
                         self.ae_redirect_to_our_elders(sender, &src_location, &wire_msg)
@@ -270,10 +269,7 @@ impl Node {
         trace!("{:?}", LogMarker::SystemMsgToBeHandled);
 
         // We assume to be aggregated if it contains a BLS Share sig as authority.
-        match self
-            .aggregate_msg_and_stop(&mut msg_authority, payload)
-            .await
-        {
+        match self.aggregate_msg_and_stop(&mut msg_authority, payload) {
             Ok(false) => {
                 self.handle_valid_msg(msg_id, msg_authority, dst_location, msg, sender, known_keys)
                     .await
@@ -335,7 +331,7 @@ impl Node {
                     sender,
                     msg_id
                 );
-                if self.is_not_elder().await {
+                if self.is_not_elder() {
                     return Ok(vec![]);
                 }
 
@@ -343,10 +339,9 @@ impl Node {
             }
             SystemMsg::JoinAsRelocatedResponse(join_response) => {
                 trace!("Handling msg: JoinAsRelocatedResponse from {}", sender);
-                if let Some(ref mut joining_as_relocated) = *self.relocate_state.write().await {
-                    if let Some(cmd) = joining_as_relocated
-                        .handle_join_response(*join_response, sender.addr())
-                        .await?
+                if let Some(ref mut joining_as_relocated) = *self.relocate_state.borrow_mut() {
+                    if let Some(cmd) =
+                        joining_as_relocated.handle_join_response(*join_response, sender.addr())?
                     {
                         return Ok(vec![cmd]);
                     }
@@ -434,13 +429,18 @@ impl Node {
                         );
                         info!("Relocation: Successfully aggregated ApprovalShares for joining the network");
 
-                        if let Some(ref mut joining_as_relocated) =
-                            *self.relocate_state.write().await
-                        {
-                            let new_node = joining_as_relocated.node.clone();
+                        // let's set this before progressing so we can drop the borrow_mut
+                        let new_node = self
+                            .relocate_state
+                            .borrow()
+                            .as_ref()
+                            .map(|joining_as_relocated| joining_as_relocated.node.clone());
+
+                        if let Some(new_node) = new_node {
                             let new_name = new_node.name();
-                            let previous_name = self.info.read().await.name();
                             let new_keypair = new_node.keypair.clone();
+
+                            let previous_name = self.info.borrow().name();
 
                             info!(
                                 "Relocation: switching from {:?} to {:?}",
@@ -503,8 +503,8 @@ impl Node {
             }
             SystemMsg::JoinAsRelocatedRequest(join_request) => {
                 trace!("Handling msg: JoinAsRelocatedRequest from {}", sender);
-                if self.is_not_elder().await
-                    && join_request.section_key == self.network_knowledge.section_key().await
+                if self.is_not_elder()
+                    && join_request.section_key == self.network_knowledge.section_key()
                 {
                     return Ok(vec![]);
                 }
@@ -514,16 +514,16 @@ impl Node {
             }
             SystemMsg::MembershipVotes(votes) => {
                 let mut cmds = vec![];
-                cmds.extend(self.handle_membership_votes(sender, votes).await?);
+                cmds.extend(self.handle_membership_votes(sender, votes)?);
 
                 Ok(cmds)
             }
-            SystemMsg::MembershipAE(gen) => self.handle_membership_anti_entropy(sender, gen).await,
+            SystemMsg::MembershipAE(gen) => self.handle_membership_anti_entropy(sender, gen),
             SystemMsg::Propose {
                 proposal,
                 sig_share,
             } => {
-                if self.is_not_elder().await {
+                if self.is_not_elder() {
                     trace!("Adult handling a Propose msg from {}: {:?}", sender, msg_id);
                 }
 
@@ -550,17 +550,16 @@ impl Node {
                     &self.network_knowledge,
                     &self.proposal_aggregator,
                 )
-                .await
             }
             SystemMsg::DkgStart(session_id) => {
                 trace!("Handling msg: Dkg-Start {:?} from {}", session_id, sender);
                 self.log_dkg_session(&sender.name()).await;
-                let our_name = self.info.read().await.name();
+                let our_name = self.info.borrow().name();
                 if !session_id.contains_elder(our_name) {
                     return Ok(vec![]);
                 }
                 if let NodeMsgAuthority::Section(authority) = msg_authority {
-                    let _existing = self.dkg_sessions.write().await.insert(
+                    let _existing = self.dkg_sessions.borrow_mut().insert(
                         session_id.hash(),
                         DkgSessionInfo {
                             session_id: session_id.clone(),
@@ -601,7 +600,7 @@ impl Node {
                     sender,
                     message,
                     session_id,
-                    self.network_knowledge.section_key().await,
+                    self.network_knowledge.section_key(),
                 )
                 .await
             }
@@ -619,7 +618,7 @@ impl Node {
                 let changed = self.set_storage_level(&node_id, level).await;
                 if changed && level.value() == MIN_LEVEL_WHEN_FULL {
                     // ..then we accept a new node in place of the full node
-                    *self.joins_allowed.write().await = true;
+                    *self.joins_allowed.borrow_mut() = true;
                 }
                 Ok(vec![])
             }
@@ -638,14 +637,14 @@ impl Node {
                     msg_id
                 );
 
-                if self.is_elder().await {
+                if self.is_elder() {
                     if full {
                         let changed = self
                             .set_storage_level(&node_id, StorageLevel::from(StorageLevel::MAX)?)
                             .await;
                         if changed {
                             // ..then we accept a new node in place of the full node
-                            *self.joins_allowed.write().await = true;
+                            *self.joins_allowed.borrow_mut() = true;
                         }
                     }
                     self.replicate_data(data).await
@@ -656,7 +655,7 @@ impl Node {
             }
             SystemMsg::NodeCmd(NodeCmd::ReplicateData(data_collection)) => {
                 info!("ReplicateData MsgId: {:?}", msg_id);
-                return if self.is_elder().await {
+                return if self.is_elder() {
                     error!("Received unexpected message while Elder");
                     Ok(vec![])
                 } else {
@@ -675,15 +674,14 @@ impl Node {
                                 // db full
                                 error!("Not enough space to store more data");
 
-                                let node_id =
-                                    PublicKey::from(self.info.read().await.keypair.public);
+                                let node_id = PublicKey::from(self.info.borrow().keypair.public);
                                 let msg = SystemMsg::NodeEvent(NodeEvent::CouldNotStoreData {
                                     node_id,
                                     data,
                                     full: true,
                                 });
 
-                                cmds.push(self.send_msg_to_our_elders(msg).await?)
+                                cmds.push(self.send_msg_to_our_elders(msg)?)
                             }
                             Err(error) => {
                                 // the rest seem to be non-problematic errors.. (?)
@@ -776,12 +774,8 @@ impl Node {
                 session_id,
                 message,
             } => {
-                if let Some(session_info) = self
-                    .dkg_sessions
-                    .read()
-                    .await
-                    .get(&session_id.hash())
-                    .cloned()
+                if let Some(session_info) =
+                    self.dkg_sessions.borrow().get(&session_id.hash()).cloned()
                 {
                     let message_cache = self.dkg_voter.get_cached_msgs(&session_info.session_id);
                     trace!(
@@ -796,9 +790,9 @@ impl Node {
                         message_cache,
                         message,
                     };
-                    let section_pk = self.network_knowledge.section_key().await;
+                    let section_pk = self.network_knowledge.section_key();
                     let wire_msg = WireMsg::single_src(
-                        &self.info.read().await.clone(),
+                        &self.info.borrow().clone(),
                         DstLocation::Node {
                             name: sender.name(),
                             section_pk,
@@ -827,7 +821,7 @@ impl Node {
                 let payload =
                     WireMsg::serialize_msg_payload(&SystemMsg::DkgStart(session_id.clone()))?;
                 let auth = section_auth.clone().into_inner();
-                if self.network_knowledge.section_key().await == auth.sig.public_key {
+                if self.network_knowledge.section_key() == auth.sig.public_key {
                     if let Err(err) = AuthorityProof::verify(auth, payload) {
                         error!("Error verifying signature for DkgSessionInfo: {:?}", err);
                         return Ok(cmds);
@@ -839,11 +833,11 @@ impl Node {
                         "Cannot verify DkgSessionInfo: {:?}. Unknown key: {:?}!",
                         &session_id, auth.sig.public_key
                     );
-                    let chain = self.network_knowledge().section_chain().await;
+                    let chain = self.network_knowledge().section_chain();
                     warn!("Chain: {:?}", chain);
                     return Ok(cmds);
                 };
-                let _existing = self.dkg_sessions.write().await.insert(
+                let _existing = self.dkg_sessions.borrow_mut().insert(
                     session_id.hash(),
                     DkgSessionInfo {
                         session_id: session_id.clone(),
@@ -865,7 +859,7 @@ impl Node {
         let mut cmds = vec![];
         if let Some(level) = level {
             info!("Storage has now passed {} % used.", 10 * level.value());
-            let node_id = PublicKey::from(self.info.read().await.keypair.public);
+            let node_id = PublicKey::from(self.info.borrow().keypair.public);
             let node_xorname = XorName::from(node_id);
 
             // we ask the section to record the new level reached
@@ -877,7 +871,7 @@ impl Node {
 
             let dst = DstLocation::Section {
                 name: node_xorname,
-                section_pk: self.network_knowledge.section_key().await,
+                section_pk: self.network_knowledge.section_key(),
             };
 
             cmds.push(Cmd::SignOutgoingSystemMsg { msg, dst });
@@ -888,7 +882,7 @@ impl Node {
     // Convert the provided NodeMsgAuthority to be a `Section` message
     // authority on successful accumulation. Also return 'true' if
     // current message shall not be processed any further.
-    async fn aggregate_msg_and_stop(
+    fn aggregate_msg_and_stop(
         &self,
         msg_authority: &mut NodeMsgAuthority,
         payload: Bytes,
@@ -903,9 +897,7 @@ impl Node {
             self.message_aggregator.clone(),
             bls_share_auth.clone().into_inner(),
             &payload,
-        )
-        .await
-        {
+        ) {
             Ok(section_auth) => {
                 info!("Successfully aggregated message");
                 *msg_authority = NodeMsgAuthority::Section(section_auth);

@@ -28,7 +28,7 @@ use xor_name::XorName;
 
 impl Node {
     // Creates `Core` for the first node in the network
-    pub(crate) async fn first_node(
+    pub(crate) fn first_node(
         comm: Comm,
         mut node: NodeInfo,
         event_tx: mpsc::Sender<Event>,
@@ -40,7 +40,7 @@ impl Node {
         node.addr = comm.our_connection_info();
 
         let (section, section_key_share) =
-            NetworkKnowledge::first_node(node.peer(), genesis_sk_set).await?;
+            NetworkKnowledge::first_node(node.peer(), genesis_sk_set)?;
         Self::new(
             comm,
             node,
@@ -50,7 +50,6 @@ impl Node {
             used_space,
             root_storage_dir,
         )
-        .await
     }
 
     pub(crate) async fn relocate(
@@ -59,12 +58,12 @@ impl Node {
         new_section: NetworkKnowledge,
     ) -> Result<()> {
         // we first try to relocate section info.
-        self.network_knowledge.relocated_to(new_section).await?;
+        self.network_knowledge.relocated_to(new_section)?;
 
         // make sure the new Node has the correct local addr as Comm
         new_node.addr = self.comm.our_connection_info();
 
-        let mut our_node = self.info.write().await;
+        let mut our_node = self.info.borrow_mut();
         *our_node = new_node;
 
         Ok(())
@@ -74,19 +73,17 @@ impl Node {
         &self.network_knowledge
     }
 
-    pub(crate) async fn section_chain(&self) -> SecuredLinkedList {
-        self.network_knowledge.section_chain().await
+    pub(crate) fn section_chain(&self) -> SecuredLinkedList {
+        self.network_knowledge.section_chain()
     }
 
     /// Is this node an elder?
-    pub(crate) async fn is_elder(&self) -> bool {
-        self.network_knowledge
-            .is_elder(&self.info.read().await.name())
-            .await
+    pub(crate) fn is_elder(&self) -> bool {
+        self.network_knowledge.is_elder(&self.info.borrow().name())
     }
 
-    pub(crate) async fn is_not_elder(&self) -> bool {
-        !self.is_elder().await
+    pub(crate) fn is_not_elder(&self) -> bool {
+        !self.is_elder()
     }
 
     /// Returns connection info of this node.
@@ -95,8 +92,8 @@ impl Node {
     }
 
     /// Returns the current BLS public key set
-    pub(crate) async fn public_key_set(&self) -> Result<bls::PublicKeySet> {
-        Ok(self.key_share().await?.public_key_set)
+    pub(crate) fn public_key_set(&self) -> Result<bls::PublicKeySet> {
+        Ok(self.key_share()?.public_key_set)
     }
 
     /// Returns the SAP of the section matching the name.
@@ -111,11 +108,10 @@ impl Node {
 
     /// Returns our key share in the current BLS group if this node is a member of one, or
     /// `Error::MissingSecretKeyShare` otherwise.
-    pub(crate) async fn key_share(&self) -> Result<SectionKeyShare> {
-        let section_key = self.network_knowledge.section_key().await;
+    pub(crate) fn key_share(&self) -> Result<SectionKeyShare> {
+        let section_key = self.network_knowledge.section_key();
         self.section_keys_provider
             .key_share(&section_key)
-            .await
             .map_err(Error::from)
     }
 
@@ -132,30 +128,28 @@ impl Node {
 
     pub(crate) async fn handle_timeout(&self, token: u64) -> Result<Vec<Cmd>> {
         self.dkg_voter.handle_timeout(
-            &self.info.read().await.clone(),
+            &self.info.borrow().clone(),
             token,
-            self.network_knowledge().section_key().await,
+            self.network_knowledge().section_key(),
         )
     }
 
     // Send message to peers on the network.
     pub(crate) async fn send_msg_to_nodes(&self, mut wire_msg: WireMsg) -> Result<Option<Cmd>> {
         let dst_location = wire_msg.dst_location();
-        let (targets, dg_size) = delivery_group::delivery_targets(
-            dst_location,
-            &self.info.read().await.name(),
-            &self.network_knowledge,
-        )
-        .await?;
+        let our_name = self.info.borrow().name();
+        let (targets, dg_size) =
+            delivery_group::delivery_targets(dst_location, &our_name, &self.network_knowledge)
+                .await?;
 
         let target_name = dst_location.name();
 
         // To avoid loop: if destination is to Node, targets are multiple, self is an elder,
         //     self section prefix matches the destination name, then don't carry out a relay.
-        if self.is_elder().await
+        if self.is_elder()
             && targets.len() > 1
             && dst_location.is_to_node()
-            && self.network_knowledge.prefix().await.matches(&target_name)
+            && self.network_knowledge.prefix().matches(&target_name)
         {
             // This actually means being an elder, but we don't know the member yet. Which most likely
             // happens during the join process that a node's name is changed.
@@ -171,7 +165,7 @@ impl Node {
             wire_msg.src_section_pk(),
         );
 
-        let dst_pk = self.section_key_by_name(&target_name).await;
+        let dst_pk = self.section_key_by_name(&target_name);
         wire_msg.set_dst_section_pk(dst_pk);
 
         let cmd = Cmd::SendMsgDeliveryGroup {

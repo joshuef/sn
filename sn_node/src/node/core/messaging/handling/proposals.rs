@@ -18,7 +18,7 @@ use sn_interface::{
 };
 
 // Insert the proposal into the proposal aggregator and handle it if aggregated.
-pub(crate) async fn handle_proposal(
+pub(crate) fn handle_proposal(
     msg_id: MsgId,
     proposal: Proposal,
     sig_share: SigShare,
@@ -33,10 +33,10 @@ pub(crate) async fn handle_proposal(
         let section_auth = sap;
         // TODO: do we want to drop older generations too?
 
-        if section_auth.prefix() == network_knowledge.prefix().await
+        if section_auth.prefix() == network_knowledge.prefix()
             || section_auth
                 .prefix()
-                .is_extension_of(&network_knowledge.prefix().await)
+                .is_extension_of(&network_knowledge.prefix())
         {
             // This `SectionInfo` is proposed by the DKG participants and
             // it's signed by the new key created by the DKG so we don't
@@ -53,7 +53,7 @@ pub(crate) async fn handle_proposal(
     } else {
         // Proposal from other section shall be ignored.
         // TODO: check this is for our prefix , or a child prefix, otherwise just drop it
-        if !network_knowledge.prefix().await.matches(&sender.name()) {
+        if !network_knowledge.prefix().matches(&sender.name()) {
             trace!(
                 "Ignore proposal {:?} from other section, src {}: {:?}",
                 proposal,
@@ -65,7 +65,7 @@ pub(crate) async fn handle_proposal(
 
         // Let's now verify the section key in the msg authority is trusted
         // based on our current knowledge of the network and sections chains.
-        if !network_knowledge.has_chain_key(sig_share_pk).await {
+        if !network_knowledge.has_chain_key(sig_share_pk) {
             warn!(
                 "Dropped Propose msg ({:?}) with untrusted sig share from {}: {:?}",
                 msg_id, sender, proposal
@@ -81,32 +81,27 @@ pub(crate) async fn handle_proposal(
             "Failed to serialise proposal from {}, {:?}: {:?}",
             sender, msg_id, error
         ),
-        Ok(serialised_proposal) => {
-            match proposal_aggregator
-                .add(&serialised_proposal, sig_share)
-                .await
-            {
-                Ok(sig) => match proposal {
-                    Proposal::NewElders(_) => {
-                        cmds.push(Cmd::HandleNewEldersAgreement { proposal, sig })
-                    }
-                    _ => cmds.push(Cmd::HandleAgreement { proposal, sig }),
-                },
-                Err(AggregatorError::NotEnoughShares) => {
-                    trace!(
-                        "Proposal from {} inserted in aggregator, not enough sig shares yet: {:?}",
-                        sender,
-                        msg_id
-                    );
+        Ok(serialised_proposal) => match proposal_aggregator.add(&serialised_proposal, sig_share) {
+            Ok(sig) => match proposal {
+                Proposal::NewElders(_) => {
+                    cmds.push(Cmd::HandleNewEldersAgreement { proposal, sig })
                 }
-                Err(error) => {
-                    error!(
-                        "Failed to add proposal from {}, {:?}: {:?}",
-                        sender, msg_id, error
-                    );
-                }
+                _ => cmds.push(Cmd::HandleAgreement { proposal, sig }),
+            },
+            Err(AggregatorError::NotEnoughShares) => {
+                trace!(
+                    "Proposal from {} inserted in aggregator, not enough sig shares yet: {:?}",
+                    sender,
+                    msg_id
+                );
             }
-        }
+            Err(error) => {
+                error!(
+                    "Failed to add proposal from {}, {:?}: {:?}",
+                    sender, msg_id, error
+                );
+            }
+        },
     }
 
     Ok(cmds)

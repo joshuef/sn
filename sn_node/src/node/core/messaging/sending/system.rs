@@ -22,7 +22,7 @@ use xor_name::XorName;
 
 impl Node {
     /// Send a direct (`SystemMsg`) message to a node in the specified section
-    pub(crate) async fn send_direct_msg(
+    pub(crate) fn send_direct_msg(
         &self,
         recipient: Peer,
         node_msg: SystemMsg,
@@ -30,11 +30,10 @@ impl Node {
     ) -> Result<Cmd> {
         let section_name = recipient.name();
         self.send_direct_msg_to_nodes(vec![recipient], node_msg, section_name, section_pk)
-            .await
     }
 
     /// Send a direct (`SystemMsg`) message to a set of nodes in the specified section
-    pub(crate) async fn send_direct_msg_to_nodes(
+    pub(crate) fn send_direct_msg_to_nodes(
         &self,
         recipients: Vec<Peer>,
         node_msg: SystemMsg,
@@ -42,8 +41,8 @@ impl Node {
         section_pk: BlsPublicKey,
     ) -> Result<Cmd> {
         trace!("{}", LogMarker::SendDirectToNodes);
-        let our_node = self.info.read().await.clone();
-        let our_section_key = self.network_knowledge.section_key().await;
+        let our_node = self.info.borrow().clone();
+        let our_section_key = self.network_knowledge.section_key();
 
         let wire_msg = WireMsg::single_src(
             &our_node,
@@ -62,29 +61,28 @@ impl Node {
     }
 
     /// Send a `Relocate` message to the specified node
-    pub(crate) async fn send_relocate(
+    pub(crate) fn send_relocate(
         &self,
         recipient: Peer,
         node_state: SectionAuth<NodeState>,
     ) -> Result<Cmd> {
         let node_msg = SystemMsg::Relocate(node_state.into_authed_msg());
-        let section_pk = self.network_knowledge.section_key().await;
-        self.send_direct_msg(recipient, node_msg, section_pk).await
+        let section_pk = self.network_knowledge.section_key();
+        self.send_direct_msg(recipient, node_msg, section_pk)
     }
 
     /// Send a direct (`SystemMsg`) message to all Elders in our section
-    pub(crate) async fn send_msg_to_our_elders(&self, node_msg: SystemMsg) -> Result<Cmd> {
-        let sap = self.network_knowledge.authority_provider().await;
+    pub(crate) fn send_msg_to_our_elders(&self, node_msg: SystemMsg) -> Result<Cmd> {
+        let sap = self.network_knowledge.authority_provider();
         let dst_section_pk = sap.section_key();
         let section_name = sap.prefix().name();
         let elders = sap.elders_vec();
         self.send_direct_msg_to_nodes(elders, node_msg, section_name, dst_section_pk)
-            .await
     }
 
     // Send the message to all `recipients`. If one of the recipients is us, don't send it over the
     // network but handle it directly (should only be used when accumulation is necessary)
-    pub(crate) async fn send_messages_to_all_nodes_or_directly_handle_for_accumulation(
+    pub(crate) fn send_messages_to_all_nodes_or_directly_handle_for_accumulation(
         &self,
         recipients: Vec<Peer>,
         mut wire_msg: WireMsg,
@@ -95,7 +93,7 @@ impl Node {
 
         trace!("Send {:?} to {:?}", wire_msg, recipients);
 
-        let our_name = self.info.read().await.name();
+        let our_name = self.info.borrow().name();
         for recipient in recipients.into_iter() {
             if recipient.name() == our_name {
                 match wire_msg.msg_kind() {
@@ -111,7 +109,7 @@ impl Node {
         }
 
         if !others.is_empty() {
-            let dst_section_pk = self.section_key_by_name(&others[0].name()).await;
+            let dst_section_pk = self.section_key_by_name(&others[0].name());
             wire_msg.set_dst_section_pk(dst_section_pk);
 
             trace!("{}", LogMarker::SendOrHandle);
@@ -122,7 +120,7 @@ impl Node {
         }
 
         if handle {
-            wire_msg.set_dst_section_pk(self.network_knowledge.section_key().await);
+            wire_msg.set_dst_section_pk(self.network_knowledge.section_key());
             wire_msg.set_dst_xorname(our_name);
 
             cmds.push(Cmd::HandleMsg {
