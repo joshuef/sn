@@ -557,7 +557,7 @@ impl NetworkKnowledge {
     // Try to merge this `NetworkKnowledge` members with `peers`.
     pub async fn merge_members(&self, peers: BTreeSet<SectionAuth<NodeState>>) -> Result<bool> {
         let mut there_was_an_update = false;
-        let chain = self.chain.borrow().clone();
+        let chain = self.section_chain().await;
 
         for node_state in peers.iter() {
             trace!(
