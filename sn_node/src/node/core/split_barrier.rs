@@ -7,23 +7,21 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::dkg::KeyedSig;
-
 use sn_consensus::Generation;
-use sn_interface::{messaging::system::SectionAuth, network_knowledge::SectionAuthorityProvider};
-
-use std::{collections::BTreeMap, sync::Arc};
-use tokio::sync::RwLock;
+use sn_interface::messaging::system::SectionAuth;
+use sn_interface::network_knowledge::SectionAuthorityProvider;
+use std::collections::BTreeMap;
 use xor_name::Prefix;
-
 type Entry = (SectionAuth<SectionAuthorityProvider>, KeyedSig);
+use std::{cell::RefCell, rc::Rc};
 
 // Helper structure to make sure we process a split by updating info about both our section and the
 // sibling section at the same time.
-pub(crate) struct SplitBarrier(Arc<RwLock<BTreeMap<Generation, Vec<Entry>>>>);
+pub(crate) struct SplitBarrier(Rc<RefCell<BTreeMap<Generation, Vec<Entry>>>>);
 
 impl SplitBarrier {
     pub(crate) fn new() -> Self {
-        Self(Arc::new(RwLock::new(BTreeMap::default())))
+        Self(Rc::new(RefCell::new(BTreeMap::default())))
     }
 
     // Pass an agreed-on proposal for `NewElders` through this function. If there is no split, it
@@ -46,7 +44,7 @@ impl SplitBarrier {
             return vec![(section_auth, keyed_sig)];
         }
 
-        let mut gen_map_guard = self.0.write().await;
+        let mut gen_map_guard = self.0.borrow_mut();
         let gen_entries = gen_map_guard.remove(&generation).unwrap_or_default();
 
         // Split detected. Find all cached siblings.
