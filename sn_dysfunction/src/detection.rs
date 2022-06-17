@@ -17,7 +17,7 @@ static RECENT_ISSUE_DURATION: Duration = Duration::from_secs(60 * 10); // 10 min
 static CONN_WEIGHTING: f32 = 2.0;
 static OP_WEIGHTING: f32 = 1.0;
 static KNOWLEDGE_WEIGHTING: f32 = 2.0;
-static DKG_WEIGHTING: f32 = 4.0;
+static DKG_WEIGHTING: f32 = 7.0;
 
 /// Z-score value above which a node is dysfunctional
 static DYSFUNCTIONAL_DEVIATION: f32 = 1.2;
