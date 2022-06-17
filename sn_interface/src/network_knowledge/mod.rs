@@ -576,6 +576,9 @@ impl NetworkKnowledge {
             }
         }
 
+        // drop the borrow
+        drop(chain);
+
         self.section_peers.retain(&self.prefix().await);
 
         Ok(there_was_an_update)
@@ -589,7 +592,6 @@ impl NetworkKnowledge {
             node_name,
             node_state.state()
         );
-
         let the_chain = self.section_chain().await;
         // let's check the node state is properly signed by one of the keys in our chain
         if !node_state.verify(&the_chain) {
@@ -600,14 +602,12 @@ impl NetworkKnowledge {
             );
             return false;
         }
-
         let updated = self.section_peers.update(node_state);
         trace!(
             "Section member state, name: {:?}, updated: {}",
             node_name,
             updated
         );
-
         updated
     }
 
