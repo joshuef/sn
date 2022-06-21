@@ -56,25 +56,20 @@ impl DataStorage {
         match data.clone() {
             ReplicatedData::Chunk(chunk) => self.chunks.store(&chunk).await?,
             ReplicatedData::RegisterLog(data) => {
-                self.registers
-                    .update(RegisterStoreExport(vec![data]))
-                    .await?
+                self.registers.update(RegisterStoreExport(vec![data]))?
             }
-            ReplicatedData::RegisterWrite(cmd) => self.registers.write(cmd).await?,
+            ReplicatedData::RegisterWrite(cmd) => self.registers.write(cmd)?,
             ReplicatedData::SpentbookWrite(cmd) => {
                 // FIMXE: this is temporay logic to create a spentbook to make sure it exists.
                 // Spentbooks shall always exist, and the section nodes shall create them by default.
                 self.registers
-                    .create_spentbook_register(&cmd.dst_address())
-                    .await?;
+                    .create_spentbook_register(&cmd.dst_address())?;
 
                 // We now write the cmd received
-                self.registers.write(cmd).await?
+                self.registers.write(cmd)?
             }
             ReplicatedData::SpentbookLog(data) => {
-                self.registers
-                    .update(RegisterStoreExport(vec![data]))
-                    .await?
+                self.registers.update(RegisterStoreExport(vec![data]))?
             }
         };
 
@@ -100,7 +95,7 @@ impl DataStorage {
     pub(crate) async fn query(&self, query: &DataQuery, requester: User) -> NodeQueryResponse {
         match query {
             DataQuery::GetChunk(addr) => self.chunks.get(addr).await,
-            DataQuery::Register(read) => self.registers.read(read, requester).await,
+            DataQuery::Register(read) => self.registers.read(read, requester),
             DataQuery::Spentbook(read) => {
                 // TODO: this is temporary till spentbook native data type is implemented,
                 // we read from the Register where we store the spentbook data
@@ -116,7 +111,6 @@ impl DataStorage {
                 match self
                     .registers
                     .read(&RegisterQuery::Get(reg_addr), requester)
-                    .await
                 {
                     NodeQueryResponse::GetRegister((Err(Error::DataNotFound(_)), _)) => {
                         NodeQueryResponse::SpentProofShares((Ok(Vec::new()), spentbook_op_id))
@@ -166,32 +160,18 @@ impl DataStorage {
             ReplicatedDataAddress::Register(addr) => self
                 .registers
                 .get_register_replica(addr)
-                .await
                 .map(ReplicatedData::RegisterLog),
             ReplicatedDataAddress::Spentbook(addr) => {
                 let reg_addr = RegisterAddress::new(*addr.name(), SPENTBOOK_TYPE_TAG);
                 self.registers
                     .get_register_replica(&reg_addr)
-                    .await
                     .map(ReplicatedData::SpentbookLog)
             }
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) async fn remove(&self, address: &ReplicatedDataAddress) -> Result<()> {
-        match address {
-            ReplicatedDataAddress::Chunk(addr) => self.chunks.remove_chunk(addr).await,
-            ReplicatedDataAddress::Register(addr) => self.registers.remove_register(addr).await,
-            ReplicatedDataAddress::Spentbook(addr) => {
-                let reg_addr = RegisterAddress::new(*addr.name(), SPENTBOOK_TYPE_TAG);
-                self.registers.remove_register(&reg_addr).await
-            }
-        }
-    }
-
     /// Retrieve all keys/ReplicatedDataAddresses of stored data
-    pub async fn keys(&self) -> Result<Vec<ReplicatedDataAddress>> {
+    pub fn keys(&self) -> Result<Vec<ReplicatedDataAddress>> {
         let chunk_keys = self
             .chunks
             .keys()?
@@ -199,8 +179,7 @@ impl DataStorage {
             .map(ReplicatedDataAddress::Chunk);
         let reg_keys = self
             .registers
-            .keys()
-            .await?
+            .keys()?
             .into_iter()
             .map(ReplicatedDataAddress::Register);
         Ok(reg_keys.chain(chunk_keys).collect())

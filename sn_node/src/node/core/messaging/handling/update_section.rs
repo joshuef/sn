@@ -24,7 +24,7 @@ impl Node {
     /// Given what data the peer has, we shall calculate what data the peer is missing that
     /// we have, and send such data to the peer.
     #[instrument(skip(self, data_sender_has))]
-    pub(crate) async fn get_missing_data_for_node(
+    pub(crate) fn get_missing_data_for_node(
         &self,
         sender: Peer,
         data_sender_has: Vec<ReplicatedDataAddress>,
@@ -33,7 +33,7 @@ impl Node {
         // Collection of data addresses that we do not have
 
         // TODO: can we cache this data stored per churn event?
-        let data_i_have = self.data_storage.keys().await?;
+        let data_i_have = self.data_storage.keys()?;
         trace!("Our data got");
 
         if data_i_have.is_empty() {
@@ -85,9 +85,9 @@ impl Node {
     /// These nodes should send back anything missing (in batches).
     /// Relevant nodes should be all _prior_ neighbours + _new_ elders.
     #[instrument(skip(self))]
-    pub(crate) async fn ask_for_any_new_data(&self) -> Result<Vec<Cmd>> {
+    pub(crate) fn ask_for_any_new_data(&self) -> Result<Vec<Cmd>> {
         debug!("Querying section for any new data");
-        let data_i_have = self.data_storage.keys().await?;
+        let data_i_have = self.data_storage.keys()?;
         let mut cmds = vec![];
 
         let adults = self.network_knowledge.adults();
@@ -132,7 +132,7 @@ impl Node {
 
     /// Will reorganize data if we are an adult,
     /// and there were changes to adults (any added or removed).
-    pub(crate) async fn try_reorganize_data(&self) -> Result<Vec<Cmd>> {
+    pub(crate) fn try_reorganize_data(&self) -> Result<Vec<Cmd>> {
         // as an elder we dont want to get any more data for our name
         // (elders will eventually be caching data in general)
         if self.is_elder() {
@@ -141,6 +141,6 @@ impl Node {
 
         trace!("{:?}", LogMarker::DataReorganisationUnderway);
 
-        self.ask_for_any_new_data().await
+        self.ask_for_any_new_data()
     }
 }

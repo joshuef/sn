@@ -88,12 +88,12 @@ impl RegisterStorage {
     /// --- Node Synching ---
     /// These are node internal functions, not to be exposed to users.
     #[allow(dead_code)]
-    pub(crate) async fn remove_register(&self, address: &RegisterAddress) -> Result<()> {
+    pub(crate) fn remove_register(&self, address: &RegisterAddress) -> Result<()> {
         trace!("Removing register, {:?}", address);
-        self.drop_register_key(address.id()?).await
+        self.drop_register_key(address.id()?)
     }
 
-    pub(crate) async fn keys(&self) -> Result<Vec<RegisterAddress>> {
+    pub(crate) fn keys(&self) -> Result<Vec<RegisterAddress>> {
         type KeyResults = Vec<Result<XorName>>;
         let mut the_data = vec![];
         let current_db = self.key_db.export();
@@ -125,7 +125,7 @@ impl RegisterStorage {
 
         // TODO: make this concurrent
         for key in ok.iter().flatten() {
-            match self.try_load_cache_entry(key).await {
+            match self.try_load_cache_entry(key) {
                 Ok(entry) => {
                     the_data.push(*entry.state.borrow().address());
                 }
@@ -137,12 +137,12 @@ impl RegisterStorage {
     }
 
     /// Used for replication of data to new Adults.
-    pub(crate) async fn get_register_replica(
+    pub(crate) fn get_register_replica(
         &self,
         address: &RegisterAddress,
     ) -> Result<ReplicatedRegisterLog> {
         let key = address.id()?;
-        let entry = match self.try_load_cache_entry(&key).await {
+        let entry = match self.try_load_cache_entry(&key) {
             Ok(entry) => entry,
             Err(Error::KeyNotFound(_key)) => {
                 return Err(Error::NoSuchData(DataAddress::Register(*address)))
@@ -202,7 +202,7 @@ impl RegisterStorage {
 
     /// Used for replication of data to new Adults.
     #[cfg(test)]
-    pub(crate) async fn get_data_of(&self, prefix: Prefix) -> Result<RegisterStoreExport> {
+    pub(crate) fn get_data_of(&self, prefix: Prefix) -> Result<RegisterStoreExport> {
         type KeyResults = Vec<Result<XorName>>;
 
         // parse keys in parallel
@@ -236,7 +236,7 @@ impl RegisterStorage {
 
         // TODO: make this concurrent
         for key in ok.into_iter().flatten() {
-            match self.try_load_cache_entry(&key).await {
+            match self.try_load_cache_entry(&key) {
                 Ok(entry) => {
                     let read_only = entry.state.borrow();
                     if prefix.matches(read_only.name()) {
@@ -252,7 +252,7 @@ impl RegisterStorage {
     }
 
     /// On receiving data from Elders when promoted.
-    pub(crate) async fn update(&self, store_data: RegisterStoreExport) -> Result<()> {
+    pub(crate) fn update(&self, store_data: RegisterStoreExport) -> Result<()> {
         debug!("Updating Register store");
 
         let RegisterStoreExport(registers) = store_data;
@@ -268,7 +268,7 @@ impl RegisterStorage {
                     );
                     continue;
                 }
-                let _ = self.apply(replicated_cmd).await?;
+                let _ = self.apply(replicated_cmd)?;
             }
         }
 
@@ -277,16 +277,16 @@ impl RegisterStorage {
 
     /// --- Writing ---
 
-    pub(crate) async fn write(&self, cmd: RegisterCmd) -> Result<()> {
+    pub(crate) fn write(&self, cmd: RegisterCmd) -> Result<()> {
         // rough estimate ignoring the extra space used by sled
         let required_space = std::mem::size_of::<RegisterCmd>();
         if !self.used_space.can_add(required_space) {
             return Err(Error::NotEnoughSpace);
         }
-        self.apply(cmd).await
+        self.apply(cmd)
     }
 
-    async fn apply(&self, cmd: RegisterCmd) -> Result<()> {
+    fn apply(&self, cmd: RegisterCmd) -> Result<()> {
         // rough estimate ignoring the extra space used by sled
         let required_space = std::mem::size_of::<RegisterCmd>();
 
@@ -337,7 +337,7 @@ impl RegisterStorage {
 
                 let EditRegister { edit, .. } = op;
 
-                let entry = self.try_load_cache_entry(&key).await?;
+                let entry = self.try_load_cache_entry(&key)?;
 
                 info!("Editing Register");
                 entry
@@ -379,7 +379,7 @@ impl RegisterStorage {
 
                 let ExtendRegister { extend_with, .. } = op;
 
-                let entry = self.try_load_cache_entry(&key).await?;
+                let entry = self.try_load_cache_entry(&key)?;
                 entry.store.append(cmd)?;
 
                 let mut write = entry.state.borrow_mut();
@@ -400,7 +400,7 @@ impl RegisterStorage {
 
     /// Temporary helper function which makes sure there exists a Register for the spentbook,
     /// this shouldn't be required once we have a Spentbook data type.
-    pub(crate) async fn create_spentbook_register(&self, address: &RegisterAddress) -> Result<()> {
+    pub(crate) fn create_spentbook_register(&self, address: &RegisterAddress) -> Result<()> {
         trace!("Creating new spentbook register: {:?}", address);
 
         // TODO: use the node's own keypair and section key share for signatures
@@ -413,7 +413,7 @@ impl RegisterStorage {
         let keypair = Keypair::new_ed25519();
         let cmd = create_reg_w_policy(*address.name(), SPENTBOOK_TYPE_TAG, policy, keypair)?;
 
-        match self.write(cmd).await {
+        match self.write(cmd) {
             Ok(()) | Err(Error::DataExists) => Ok(()),
             other => other,
         }
@@ -421,7 +421,7 @@ impl RegisterStorage {
 
     /// --- Reading ---
 
-    pub(crate) async fn read(&self, read: &RegisterQuery, requester: User) -> NodeQueryResponse {
+    pub(crate) fn read(&self, read: &RegisterQuery, requester: User) -> NodeQueryResponse {
         trace!("Reading register {:?}", read.dst_address());
         let operation_id = match read.operation_id() {
             Ok(id) => id,
@@ -432,29 +432,25 @@ impl RegisterStorage {
         trace!("Operation of register read: {:?}", operation_id);
         use RegisterQuery::*;
         match read {
-            Get(address) => self.get(*address, requester, operation_id).await,
-            Read(address) => self.read_register(*address, requester, operation_id).await,
-            GetOwner(address) => self.get_owner(*address, requester, operation_id).await,
-            GetEntry { address, hash } => {
-                self.get_entry(*address, *hash, requester, operation_id)
-                    .await
-            }
-            GetPolicy(address) => self.get_policy(*address, requester, operation_id).await,
+            Get(address) => self.get(*address, requester, operation_id),
+            Read(address) => self.read_register(*address, requester, operation_id),
+            GetOwner(address) => self.get_owner(*address, requester, operation_id),
+            GetEntry { address, hash } => self.get_entry(*address, *hash, requester, operation_id),
+            GetPolicy(address) => self.get_policy(*address, requester, operation_id),
             GetUserPermissions { address, user } => {
                 self.get_user_permissions(*address, *user, requester, operation_id)
-                    .await
             }
         }
     }
 
     /// Get `Register` from the store and check permissions.
-    async fn get_register(
+    fn get_register(
         &self,
         address: &RegisterAddress,
         action: Action,
         requester: User,
     ) -> Result<Register> {
-        let entry = match self.try_load_cache_entry(&address.id()?).await {
+        let entry = match self.try_load_cache_entry(&address.id()?) {
             Ok(entry) => entry,
             Err(Error::KeyNotFound(_key)) => {
                 return Err(Error::NoSuchData(DataAddress::Register(*address)))
@@ -471,13 +467,13 @@ impl RegisterStorage {
     }
 
     /// Get entire Register.
-    async fn get(
+    fn get(
         &self,
         address: RegisterAddress,
         requester: User,
         operation_id: OperationId,
     ) -> NodeQueryResponse {
-        let result = match self.get_register(&address, Action::Read, requester).await {
+        let result = match self.get_register(&address, Action::Read, requester) {
             Ok(register) => Ok(register),
             Err(error) => Err(convert_to_error_msg(error)),
         };
@@ -485,13 +481,13 @@ impl RegisterStorage {
         NodeQueryResponse::GetRegister((result, operation_id))
     }
 
-    async fn read_register(
+    fn read_register(
         &self,
         address: RegisterAddress,
         requester: User,
         operation_id: OperationId,
     ) -> NodeQueryResponse {
-        let result = match self.get_register(&address, Action::Read, requester).await {
+        let result = match self.get_register(&address, Action::Read, requester) {
             Ok(register) => Ok(register.read()),
             Err(error) => Err(error),
         };
@@ -499,13 +495,13 @@ impl RegisterStorage {
         NodeQueryResponse::ReadRegister((result.map_err(convert_to_error_msg), operation_id))
     }
 
-    async fn get_owner(
+    fn get_owner(
         &self,
         address: RegisterAddress,
         requester: User,
         operation_id: OperationId,
     ) -> NodeQueryResponse {
-        let result = match self.get_register(&address, Action::Read, requester).await {
+        let result = match self.get_register(&address, Action::Read, requester) {
             Ok(res) => Ok(res.owner()),
             Err(error) => Err(convert_to_error_msg(error)),
         };
@@ -513,7 +509,7 @@ impl RegisterStorage {
         NodeQueryResponse::GetRegisterOwner((result, operation_id))
     }
 
-    async fn get_entry(
+    fn get_entry(
         &self,
         address: RegisterAddress,
         hash: EntryHash,
@@ -522,7 +518,6 @@ impl RegisterStorage {
     ) -> NodeQueryResponse {
         let result = match self
             .get_register(&address, Action::Read, requester)
-            .await
             .and_then(|register| register.get(hash).map(|c| c.clone()).map_err(Error::from))
         {
             Ok(res) => Ok(res),
@@ -532,7 +527,7 @@ impl RegisterStorage {
         NodeQueryResponse::GetRegisterEntry((result, operation_id))
     }
 
-    async fn get_user_permissions(
+    fn get_user_permissions(
         &self,
         address: RegisterAddress,
         user: User,
@@ -541,7 +536,6 @@ impl RegisterStorage {
     ) -> NodeQueryResponse {
         let result = match self
             .get_register(&address, Action::Read, requester)
-            .await
             .and_then(|register| register.permissions(user).map_err(Error::from))
         {
             Ok(res) => Ok(res),
@@ -551,7 +545,7 @@ impl RegisterStorage {
         NodeQueryResponse::GetRegisterUserPermissions((result, operation_id))
     }
 
-    async fn get_policy(
+    fn get_policy(
         &self,
         address: RegisterAddress,
         requester_pk: User,
@@ -559,7 +553,6 @@ impl RegisterStorage {
     ) -> NodeQueryResponse {
         let result = match self
             .get_register(&address, Action::Read, requester_pk)
-            .await
             .map(|register| register.policy().clone())
         {
             Ok(res) => Ok(res),
@@ -582,7 +575,7 @@ impl RegisterStorage {
     // decreases the used space by a rough estimate of the size before deletion
     // as with addition this estimate ignores the extra space used by sled
     // (that estimate can fall victim to a race condition if someone writes to a register that is being deleted)
-    async fn drop_register_key(&self, key: XorName) -> Result<()> {
+    fn drop_register_key(&self, key: XorName) -> Result<()> {
         let regcmd_size = std::mem::size_of::<RegisterCmd>();
         let reg_tree = self.reg_db.open_tree(key)?;
         let len = reg_tree.len();
@@ -591,15 +584,15 @@ impl RegisterStorage {
         let _removed = self.key_db.remove(key)?;
         let _removed = self.reg_db.drop_tree(key)?;
 
-        self.cache.remove(&key).await;
+        self.cache.remove(&key);
         self.used_space.decrease(key_used_space);
 
         Ok(())
     }
 
     // gets entry from the cache, or populates cache from disk if expired
-    async fn try_load_cache_entry(&self, key: &XorName) -> Result<Rc<CacheEntry>> {
-        let entry = self.cache.get(key).await;
+    fn try_load_cache_entry(&self, key: &XorName) -> Result<Rc<CacheEntry>> {
+        let entry = self.cache.get(key);
 
         // return early on cache hit
         if let Some(entry) = entry {
@@ -669,7 +662,7 @@ impl RegisterStorage {
                     section_auth,
                 });
                 // populate cache
-                self.cache.insert(key, entry.clone()).await;
+                self.cache.insert(key, entry.clone());
                 Ok(entry)
             }
         }

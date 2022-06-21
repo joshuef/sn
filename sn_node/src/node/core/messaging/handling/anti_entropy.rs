@@ -52,7 +52,7 @@ impl Node {
 
         // always run this, only changes will trigger events
         let mut cmds = self.update_self_for_new_node_state(snapshot).await?;
-        cmds.extend(self.try_reorganize_data().await?);
+        cmds.extend(self.try_reorganize_data()?);
 
         Ok(cmds)
     }

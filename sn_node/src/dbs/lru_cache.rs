@@ -44,7 +44,7 @@ impl<T> LruCache<T> {
         }
     }
 
-    pub(crate) async fn insert(&self, key: &XorName, val: Rc<T>) {
+    pub(crate) fn insert(&self, key: &XorName, val: Rc<T>) {
         if self.data.contains_key(key) {
             return;
         }
@@ -71,7 +71,7 @@ impl<T> LruCache<T> {
         }
     }
 
-    pub(crate) async fn get(&self, key: &XorName) -> Option<Rc<T>> {
+    pub(crate) fn get(&self, key: &XorName) -> Option<Rc<T>> {
         let exists = {
             let read_only = self.queue.borrow();
             read_only.get(key).is_some()
@@ -90,7 +90,7 @@ impl<T> LruCache<T> {
         self.data.get(key).as_deref().cloned()
     }
 
-    pub(crate) async fn remove(&self, key: &XorName) {
+    pub(crate) fn remove(&self, key: &XorName) {
         let _ = self.queue.borrow_mut().remove(key);
         let _ = self.data.remove(key);
     }
@@ -114,11 +114,11 @@ mod test {
         let key_1 = &xor_name::rand::random();
         let key_2 = &xor_name::rand::random();
         let key_3 = &xor_name::rand::random();
-        cache.insert(key_1, Rc::new("Strawberries")).await;
-        cache.insert(key_2, Rc::new("Bananas")).await;
-        cache.insert(key_3, Rc::new("Peaches")).await;
+        cache.insert(key_1, Rc::new("Strawberries"));
+        cache.insert(key_2, Rc::new("Bananas"));
+        cache.insert(key_3, Rc::new("Peaches"));
 
-        let result_string = format!("{:?}", cache.get(key_2).await);
+        let result_string = format!("{:?}", cache.get(key_2));
         let expected_string = format!("{:?}", Some("Bananas"));
 
         assert_eq!(result_string, expected_string);
@@ -132,12 +132,12 @@ mod test {
         let key_2 = &xor_name::rand::random();
         let key_3 = &xor_name::rand::random();
         let key_4 = &xor_name::rand::random();
-        cache.insert(key_1, Rc::new("Strawberries")).await;
-        cache.insert(key_2, Rc::new("Bananas")).await;
-        cache.insert(key_3, Rc::new("Peaches")).await;
-        cache.insert(key_4, Rc::new("Blueberries")).await;
+        cache.insert(key_1, Rc::new("Strawberries"));
+        cache.insert(key_2, Rc::new("Bananas"));
+        cache.insert(key_3, Rc::new("Peaches"));
+        cache.insert(key_4, Rc::new("Blueberries"));
 
-        let result_string = format!("{:?}", cache.get(key_1).await);
+        let result_string = format!("{:?}", cache.get(key_1));
         let expected_string = format!("{:?}", None::<String>);
 
         assert_eq!(result_string, expected_string);
@@ -150,18 +150,18 @@ mod test {
         let key_1 = &xor_name::rand::random();
         let key_2 = &xor_name::rand::random();
         let key_3 = &xor_name::rand::random();
-        cache.insert(key_1, Rc::new("Strawberries")).await;
-        cache.insert(key_2, Rc::new("Bananas")).await;
-        cache.insert(key_3, Rc::new("Peaches")).await;
+        cache.insert(key_1, Rc::new("Strawberries"));
+        cache.insert(key_2, Rc::new("Bananas"));
+        cache.insert(key_3, Rc::new("Peaches"));
 
-        let result_string = format!("{:?}", cache.get(key_2).await);
+        let result_string = format!("{:?}", cache.get(key_2));
         let expected_string = format!("{:?}", Some("Bananas"));
 
         assert_eq!(result_string, expected_string);
 
-        cache.remove(key_2).await;
+        cache.remove(key_2);
 
-        let result_string = format!("{:?}", cache.get(key_2).await);
+        let result_string = format!("{:?}", cache.get(key_2));
         let expected_string = format!("{:?}", None::<String>);
 
         assert_eq!(result_string, expected_string);

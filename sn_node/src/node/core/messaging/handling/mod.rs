@@ -701,7 +701,6 @@ impl Node {
                 );
 
                 self.get_missing_data_for_node(sender, known_data_addresses)
-                    .await
             }
             SystemMsg::NodeCmd(node_cmd) => {
                 self.send_event(Event::MessageReceived {
