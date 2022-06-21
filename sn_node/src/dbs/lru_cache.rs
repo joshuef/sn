@@ -8,11 +8,11 @@
 
 use dashmap::DashMap;
 use priority_queue::PriorityQueue;
-use std::sync::{
-    atomic::{AtomicU16, Ordering},
-    Arc,
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::atomic::{AtomicU16, Ordering},
 };
-use tokio::sync::RwLock;
 use xor_name::XorName;
 
 type Priority = u16;
@@ -28,23 +28,23 @@ type Priority = u16;
 /// recently used value will have the largest number, so it will be at the top of the queue.
 #[derive(Clone, Debug)]
 pub(crate) struct LruCache<T> {
-    data: DashMap<XorName, Arc<T>>,
-    queue: Arc<RwLock<PriorityQueue<XorName, Priority>>>,
+    data: DashMap<XorName, Rc<T>>,
+    queue: Rc<RefCell<PriorityQueue<XorName, Priority>>>,
     size: u16,
-    start: Arc<AtomicU16>,
+    start: Rc<AtomicU16>,
 }
 
 impl<T> LruCache<T> {
     pub(crate) fn new(size: u16) -> Self {
         Self {
             data: DashMap::new(),
-            queue: Arc::new(RwLock::new(PriorityQueue::new())),
+            queue: Rc::new(RefCell::new(PriorityQueue::new())),
             size,
-            start: Arc::new(AtomicU16::new(u16::MAX)),
+            start: Rc::new(AtomicU16::new(u16::MAX)),
         }
     }
 
-    pub(crate) async fn insert(&self, key: &XorName, val: Arc<T>) {
+    pub(crate) async fn insert(&self, key: &XorName, val: Rc<T>) {
         if self.data.contains_key(key) {
             return;
         }
@@ -54,44 +54,44 @@ impl<T> LruCache<T> {
             let mut prio = self.priority();
             if prio == 0 {
                 // empty the cache when we overflow
-                self.queue.write().await.clear();
+                self.queue.borrow_mut().clear();
                 self.data.clear();
                 prio = self.start.fetch_sub(1, Ordering::SeqCst)
             }
 
-            let _ = self.queue.write().await.push(*key, prio);
+            let _ = self.queue.borrow_mut().push(*key, prio);
         }
 
-        let len = { self.queue.read().await.len() as u16 };
+        let len = { self.queue.borrow().len() as u16 };
         if len > self.size {
-            let mut write = self.queue.write().await;
+            let mut write = self.queue.borrow_mut();
             if let Some((evicted, _)) = write.pop() {
                 let _ = self.data.remove(&evicted);
             }
         }
     }
 
-    pub(crate) async fn get(&self, key: &XorName) -> Option<Arc<T>> {
+    pub(crate) async fn get(&self, key: &XorName) -> Option<Rc<T>> {
         let exists = {
-            let read_only = self.queue.read().await;
+            let read_only = self.queue.borrow();
             read_only.get(key).is_some()
         };
         if exists {
             let mut prio = self.priority();
             if prio == 0 {
                 // empty the cache when we overflow
-                self.queue.write().await.clear();
+                self.queue.borrow_mut().clear();
                 self.data.clear();
                 prio = self.start.fetch_sub(1, Ordering::SeqCst)
             }
 
-            let _ = self.queue.write().await.change_priority(key, prio);
+            let _ = self.queue.borrow_mut().change_priority(key, prio);
         }
         self.data.get(key).as_deref().cloned()
     }
 
     pub(crate) async fn remove(&self, key: &XorName) {
-        let _ = self.queue.write().await.remove(key);
+        let _ = self.queue.borrow_mut().remove(key);
         let _ = self.data.remove(key);
     }
 
@@ -105,7 +105,7 @@ impl<T> LruCache<T> {
 mod test {
     use super::LruCache;
 
-    use std::sync::Arc;
+    use std::sync::Rc;
 
     #[tokio::test]
     async fn test_basic() {
@@ -114,9 +114,9 @@ mod test {
         let key_1 = &xor_name::rand::random();
         let key_2 = &xor_name::rand::random();
         let key_3 = &xor_name::rand::random();
-        cache.insert(key_1, Arc::new("Strawberries")).await;
-        cache.insert(key_2, Arc::new("Bananas")).await;
-        cache.insert(key_3, Arc::new("Peaches")).await;
+        cache.insert(key_1, Rc::new("Strawberries")).await;
+        cache.insert(key_2, Rc::new("Bananas")).await;
+        cache.insert(key_3, Rc::new("Peaches")).await;
 
         let result_string = format!("{:?}", cache.get(key_2).await);
         let expected_string = format!("{:?}", Some("Bananas"));
@@ -132,10 +132,10 @@ mod test {
         let key_2 = &xor_name::rand::random();
         let key_3 = &xor_name::rand::random();
         let key_4 = &xor_name::rand::random();
-        cache.insert(key_1, Arc::new("Strawberries")).await;
-        cache.insert(key_2, Arc::new("Bananas")).await;
-        cache.insert(key_3, Arc::new("Peaches")).await;
-        cache.insert(key_4, Arc::new("Blueberries")).await;
+        cache.insert(key_1, Rc::new("Strawberries")).await;
+        cache.insert(key_2, Rc::new("Bananas")).await;
+        cache.insert(key_3, Rc::new("Peaches")).await;
+        cache.insert(key_4, Rc::new("Blueberries")).await;
 
         let result_string = format!("{:?}", cache.get(key_1).await);
         let expected_string = format!("{:?}", None::<String>);
@@ -150,9 +150,9 @@ mod test {
         let key_1 = &xor_name::rand::random();
         let key_2 = &xor_name::rand::random();
         let key_3 = &xor_name::rand::random();
-        cache.insert(key_1, Arc::new("Strawberries")).await;
-        cache.insert(key_2, Arc::new("Bananas")).await;
-        cache.insert(key_3, Arc::new("Peaches")).await;
+        cache.insert(key_1, Rc::new("Strawberries")).await;
+        cache.insert(key_2, Rc::new("Bananas")).await;
+        cache.insert(key_3, Rc::new("Peaches")).await;
 
         let result_string = format!("{:?}", cache.get(key_2).await);
         let expected_string = format!("{:?}", Some("Bananas"));

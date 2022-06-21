@@ -30,12 +30,12 @@ use bincode::serialize;
 use rayon::prelude::*;
 use sled::Db;
 use std::{
+    cell::RefCell,
     collections::BTreeMap,
     fmt::{self, Display, Formatter},
     path::Path,
-    sync::Arc,
+    rc::Rc,
 };
-use tokio::sync::RwLock;
 use tracing::info;
 #[cfg(test)]
 use xor_name::Prefix;
@@ -60,7 +60,7 @@ pub(crate) struct RegisterStorage {
 
 #[derive(Clone, Debug)]
 struct CacheEntry {
-    state: Arc<RwLock<Register>>,
+    state: Rc<RefCell<Register>>,
     store: RegOpStore,
     section_auth: SectionAuth,
 }
@@ -127,7 +127,7 @@ impl RegisterStorage {
         for key in ok.iter().flatten() {
             match self.try_load_cache_entry(key).await {
                 Ok(entry) => {
-                    the_data.push(*entry.state.read().await.address());
+                    the_data.push(*entry.state.borrow().address());
                 }
                 Err(Error::KeyNotFound(_)) => return Err(Error::InvalidStore),
                 Err(e) => return Err(e),
@@ -153,11 +153,7 @@ impl RegisterStorage {
         self.create_replica(key, entry)
     }
 
-    fn create_replica(
-        &self,
-        key: XorName,
-        entry: Arc<CacheEntry>,
-    ) -> Result<ReplicatedRegisterLog> {
+    fn create_replica(&self, key: XorName, entry: Rc<CacheEntry>) -> Result<ReplicatedRegisterLog> {
         let mut address = None;
         let op_log = entry
             .store
@@ -242,7 +238,7 @@ impl RegisterStorage {
         for key in ok.into_iter().flatten() {
             match self.try_load_cache_entry(&key).await {
                 Ok(entry) => {
-                    let read_only = entry.state.read().await;
+                    let read_only = entry.state.borrow();
                     if prefix.matches(read_only.name()) {
                         the_data.push(self.create_replica(key, entry.clone())?);
                     }
@@ -346,13 +342,11 @@ impl RegisterStorage {
                 info!("Editing Register");
                 entry
                     .state
-                    .read()
-                    .await
+                    .borrow()
                     .check_permissions(Action::Write, Some(User::Key(public_key)))?;
                 let result = entry
                     .state
-                    .write()
-                    .await
+                    .borrow_mut()
                     .apply_op(edit)
                     .map_err(Error::NetworkData);
 
@@ -388,7 +382,7 @@ impl RegisterStorage {
                 let entry = self.try_load_cache_entry(&key).await?;
                 entry.store.append(cmd)?;
 
-                let mut write = entry.state.write().await;
+                let mut write = entry.state.borrow_mut();
                 let prev = write.cap();
                 write.increment_cap(extend_with);
 
@@ -468,7 +462,7 @@ impl RegisterStorage {
             Err(e) => return Err(e),
         };
 
-        let read_only = entry.state.read().await;
+        let read_only = entry.state.borrow();
         read_only
             .check_permissions(action, Some(requester))
             .map_err(Error::from)?;
@@ -604,7 +598,7 @@ impl RegisterStorage {
     }
 
     // gets entry from the cache, or populates cache from disk if expired
-    async fn try_load_cache_entry(&self, key: &XorName) -> Result<Arc<CacheEntry>> {
+    async fn try_load_cache_entry(&self, key: &XorName) -> Result<Rc<CacheEntry>> {
         let entry = self.cache.get(key).await;
 
         // return early on cache hit
@@ -669,8 +663,8 @@ impl RegisterStorage {
         match hydrated_register {
             None => Err(Error::KeyNotFound(key.to_string())), // nothing found on disk
             Some((reg, section_auth)) => {
-                let entry = Arc::new(CacheEntry {
-                    state: Arc::new(RwLock::new(reg)),
+                let entry = Rc::new(CacheEntry {
+                    state: Rc::new(RefCell::new(reg)),
                     store,
                     section_auth,
                 });
