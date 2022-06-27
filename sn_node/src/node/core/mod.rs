@@ -112,8 +112,7 @@ pub(crate) struct Node {
     /// queue up all batch data to be replicated (as a result of churn events atm)
     // TODO: This can probably be reworked into the general per peer msg queue, but as
     // we need to pull data first before we form the WireMsg, we won't do that just now
-    pub(crate) pending_data_to_replicate_to_peers:
-        Arc<DashMap<ReplicatedDataAddress, Arc<RwLock<BTreeSet<Peer>>>>>,
+    pub(crate) pending_data_to_replicate_to_peers: DashMap<ReplicatedDataAddress, BTreeSet<Peer>>,
     resource_proof: ResourceProof,
     // Network resources
     pub(crate) section_keys_provider: SectionKeysProvider,
@@ -228,7 +227,7 @@ impl Node {
             capacity: Capacity::default(),
             dysfunction_tracking: node_dysfunction_detector,
             pending_data_queries: Arc::new(Cache::with_expiry_duration(DATA_QUERY_TIMEOUT)),
-            pending_data_to_replicate_to_peers: Arc::new(DashMap::new()),
+            pending_data_to_replicate_to_peers: DashMap::new(),
             ae_backoff_cache: AeBackoffCache::default(),
             membership: Arc::new(RwLock::new(membership)),
         };

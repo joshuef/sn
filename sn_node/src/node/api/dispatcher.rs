@@ -19,7 +19,7 @@ use sn_interface::{
 };
 
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
-use tokio::{sync::watch, sync::RwLock, time};
+use tokio::{sync::watch, time};
 
 // Cmd Dispatcher.
 #[derive(Clone)]
@@ -116,12 +116,12 @@ impl Dispatcher {
             } => {
                 // we should queue this
                 for data in data_batch {
-                    if let Some(data_entry) =
+                    if let Some(mut data_entry) =
                         self.node.pending_data_to_replicate_to_peers.get_mut(&data)
                     {
-                        let peer_set = data_entry.value();
+                        let peer_set = data_entry.value_mut();
                         debug!("data already queued, adding peer");
-                        let _existed = peer_set.write().await.insert(recipient);
+                        let _existed = peer_set.insert(recipient);
                     } else {
                         // let queue = DashSet::new();
                         let mut peer_set = BTreeSet::new();
@@ -129,7 +129,7 @@ impl Dispatcher {
                         let _existed = self
                             .node
                             .pending_data_to_replicate_to_peers
-                            .insert(data, Arc::new(RwLock::new(peer_set)));
+                            .insert(data, peer_set);
                     }
                 }
                 Ok(vec![])

@@ -193,7 +193,7 @@ impl FlowCtrl {
 
                         let mut recipients = vec![];
 
-                        for peer in data_recipients.read().await.iter() {
+                        for peer in data_recipients.iter() {
                             recipients.push(*peer);
                         }
 
