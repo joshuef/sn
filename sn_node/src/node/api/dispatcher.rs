@@ -45,13 +45,15 @@ impl Dispatcher {
 
     /// Handles a single cmd.
     pub(crate) async fn process_cmd(&self, cmd: Cmd) -> Result<Vec<Cmd>> {
-        let mut node = self.node.write().await;
+        let node = self.node.read().await;
         match cmd {
             Cmd::CleanupPeerLinks => {
                 node.cleanup_non_elder_peers().await?;
                 Ok(vec![])
             }
             Cmd::SignOutgoingSystemMsg { msg, dst } => {
+
+
                 let src_section_pk = node.network_knowledge().section_key().await;
                 let wire_msg =
                     WireMsg::single_src(&*node.info.read().await, dst, msg, src_section_pk)?;
@@ -65,9 +67,15 @@ impl Dispatcher {
                 sender,
                 wire_msg,
                 original_bytes,
-            } => node.handle_msg(sender, wire_msg, original_bytes).await,
+            } => {
+                let mut node = self.node.write().await;
+
+                node.handle_msg(sender, wire_msg, original_bytes).await
+            },
             Cmd::HandleDkgTimeout(token) => node.handle_dkg_timeout(token).await,
             Cmd::HandleAgreement { proposal, sig } => {
+                let mut node = self.node.write().await;
+
                 node.handle_general_agreements(proposal, sig).await
             }
             Cmd::HandleNewNodeOnline(auth) => {
@@ -82,6 +90,8 @@ impl Dispatcher {
             }
             Cmd::HandleNewEldersAgreement { proposal, sig } => match proposal {
                 Proposal::NewElders(section_auth) => {
+                    let mut node = self.node.write().await;
+
                     node
                         .handle_new_elders_agreement(section_auth, sig)
                         .await
@@ -97,6 +107,8 @@ impl Dispatcher {
                 outcome,
                 generation,
             } => {
+                let mut node = self.node.write().await;
+
                 node
                     .handle_dkg_outcome(section_auth, outcome, generation)
                     .await
@@ -192,7 +204,7 @@ impl Dispatcher {
                 }
                 if let Some(recipient) = recipients.get(0) {
                     if let Err(err) = self
-                        .node.write().await
+                        .node.read().await
                         .comm
                         .send_to_client(recipient, wire_msg.clone())
                         .await
@@ -218,7 +230,7 @@ impl Dispatcher {
         wire_msg: WireMsg,
     ) -> Result<Vec<Cmd>> {
         let status = self
-            .node.write().await
+            .node.read().await
             .comm
             .send(recipients, delivery_group_size, wire_msg)
             .await?;

@@ -172,7 +172,7 @@ impl FlowCtrl {
                 use rand::seq::IteratorRandom;
                 let mut rng = rand::rngs::OsRng;
                 let mut this_batch_address = None;
-                let node = self.node.write().await;
+                let node = self.node.read().await;
 
                 // choose a data to replicate at random
                 if let Some(data_queued) = node

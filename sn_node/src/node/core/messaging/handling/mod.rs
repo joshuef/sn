@@ -52,7 +52,7 @@ use xor_name::XorName;
 impl Node {
     #[instrument(skip(self, original_bytes))]
     pub(crate) async fn handle_msg(
-        &mut self,
+        &self,
         sender: Peer,
         wire_msg: WireMsg,
         original_bytes: Option<Bytes>,
@@ -250,7 +250,7 @@ impl Node {
     // Handler for all system messages
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn handle_system_msg(
-        &mut self,
+        &self,
         sender: Peer,
         msg_id: MsgId,
         mut msg_authority: NodeMsgAuthority,
