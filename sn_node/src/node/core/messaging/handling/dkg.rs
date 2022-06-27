@@ -241,7 +241,7 @@ impl Node {
     }
 
     pub(crate) async fn handle_dkg_outcome(
-        &self,
+        &mut self,
         sap: SectionAuthorityProvider,
         key_share: SectionKeyShare,
         generation: Generation,

@@ -126,7 +126,7 @@ pub(crate) struct Node {
     dkg_voter: DkgVoter,
     relocate_state: Arc<RwLock<Option<Box<JoiningAsRelocated>>>>,
     // ======================== Elder only ========================
-    pub(crate) membership: Arc<RwLock<Option<Membership>>>,
+    pub(crate) membership: Option<Membership>,
     // Section handover consensus state (Some for Elders, None for others)
     pub(crate) handover_voting: Arc<RwLock<Option<Handover>>>,
     joins_allowed: Arc<RwLock<bool>>,
@@ -229,7 +229,7 @@ impl Node {
             pending_data_queries: Arc::new(Cache::with_expiry_duration(DATA_QUERY_TIMEOUT)),
             pending_data_to_replicate_to_peers: DashMap::new(),
             ae_backoff_cache: AeBackoffCache::default(),
-            membership: Arc::new(RwLock::new(membership)),
+            membership,
         };
 
         node.write_prefix_map().await;
@@ -356,7 +356,7 @@ impl Node {
         // get current gen and members
         let current_gen;
         let members: BTreeMap<XorName, NodeState> =
-            if let Some(m) = self.membership.read().await.as_ref() {
+            if let Some(m) = self.membership.as_ref() {
                 current_gen = m.generation();
                 m.current_section_members()
                     .iter()
@@ -455,15 +455,14 @@ impl Node {
         Ok(res)
     }
 
-    async fn initialize_membership(&self, sap: SectionAuthorityProvider) -> Result<()> {
+    async fn initialize_membership(&mut self, sap: SectionAuthorityProvider) -> Result<()> {
         let key = self
             .section_keys_provider
             .key_share(&self.network_knowledge.section_key().await)
             .await?;
 
-        let mut membership = self.membership.write().await;
 
-        *membership = Some(Membership::from(
+        self.membership = Some(Membership::from(
             (key.index as u8, key.secret_key_share),
             key.public_key_set,
             sap.elders.len(),
@@ -498,7 +497,7 @@ impl Node {
         Ok(())
     }
 
-    async fn initialize_elder_state(&self) -> Result<()> {
+    async fn initialize_elder_state(&mut self) -> Result<()> {
         let sap = self
             .network_knowledge
             .section_signed_authority_provider()
@@ -512,7 +511,7 @@ impl Node {
 
     /// Generate cmds and fire events based upon any node state changes.
     pub(super) async fn update_self_for_new_node_state(
-        &self,
+        &mut self,
         old: StateSnapshot,
     ) -> Result<Vec<Cmd>> {
         let mut cmds = vec![];
@@ -694,7 +693,7 @@ impl Node {
     }
 
     pub(super) async fn log_section_stats(&self) {
-        if let Some(m) = self.membership.read().await.as_ref() {
+        if let Some(m) = self.membership.as_ref() {
             let adults = self.network_knowledge.adults().await.len();
 
             let elders = self

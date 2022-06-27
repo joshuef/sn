@@ -7,12 +7,13 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{
+
     api::{
         cmds::{Cmd, CmdJob},
         dispatcher::Dispatcher,
         event_channel::EventSender,
     },
-    core::RateLimits,
+    core::{Node, RateLimits},
     CmdProcessEvent, Error, Event, Result,
 };
 
@@ -78,7 +79,7 @@ impl CmdCtrl {
         session
     }
 
-    pub(crate) fn node(&self) -> Arc<crate::node::core::Node> {
+    pub(crate) fn node(&self) -> Arc<RwLock<Node>> {
         self.dispatcher.node()
     }
 

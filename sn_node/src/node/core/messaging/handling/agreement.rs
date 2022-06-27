@@ -27,7 +27,7 @@ use std::{cmp, collections::BTreeSet};
 impl Node {
     #[instrument(skip(self), level = "trace")]
     pub(crate) async fn handle_general_agreements(
-        &self,
+        &mut self,
         proposal: Proposal,
         sig: KeyedSig,
     ) -> Result<Vec<Cmd>> {
@@ -151,7 +151,7 @@ impl Node {
 
     #[instrument(skip(self))]
     async fn handle_offline_agreement(
-        &self,
+        &mut self,
         node_state: NodeState,
         sig: KeyedSig,
     ) -> Result<Vec<Cmd>> {
@@ -253,7 +253,7 @@ impl Node {
 
     #[instrument(skip(self), level = "trace")]
     pub(crate) async fn handle_new_elders_agreement(
-        &self,
+        &mut self,
         signed_section_auth: SectionAuth<SectionAuthorityProvider>,
         key_sig: KeyedSig,
     ) -> Result<Vec<Cmd>> {

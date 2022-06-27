@@ -27,7 +27,7 @@ use sn_interface::{
 
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use tokio::{
-    sync::mpsc,
+    sync::{RwLock, mpsc},
     task::{self, JoinHandle},
     time::MissedTickBehavior,
 };
@@ -42,7 +42,7 @@ const DYSFUNCTION_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub(crate) struct FlowCtrl {
-    node: Arc<Node>,
+    node: Arc<RwLock<Node>>,
     cmd_ctrl: CmdCtrl,
 }
 
@@ -116,7 +116,7 @@ impl FlowCtrl {
                 let _instant = interval.tick().await;
 
                 // Send a probe message if we are an elder
-                let node = &self.node;
+                let node = &self.node.read().await;
                 if node.is_elder().await && !node.network_knowledge().prefix().await.is_empty() {
                     match node.generate_probe_msg().await {
                         Ok(cmd) => {
@@ -142,7 +142,7 @@ impl FlowCtrl {
                 let _instant = interval.tick().await;
 
                 // Send a probe message to an elder
-                let node = &self.node;
+                let node = &self.node.read().await;
                 if !node.network_knowledge().prefix().await.is_empty() {
                     match node.generate_section_probe_msg().await {
                         Ok(cmd) => {
@@ -172,7 +172,7 @@ impl FlowCtrl {
                 use rand::seq::IteratorRandom;
                 let mut rng = rand::rngs::OsRng;
                 let mut this_batch_address = None;
-                let node = &self.node;
+                let node = self.node.write().await;
 
                 // choose a data to replicate at random
                 if let Some(data_queued) = node
@@ -189,7 +189,7 @@ impl FlowCtrl {
                     {
                         // get info for the WireMsg
                         let src_section_pk = node.network_knowledge().section_key().await;
-                        let our_info = &*node.info.read().await;
+                        let our_info = node.info.read().await;
 
                         let mut recipients = vec![];
 
@@ -216,7 +216,7 @@ impl FlowCtrl {
                         let system_msg =
                             SystemMsg::NodeCmd(NodeCmd::ReplicateData(vec![data_to_send]));
                         let wire_msg =
-                            WireMsg::single_src(our_info, dst, system_msg, src_section_pk)?;
+                            WireMsg::single_src(&our_info, dst, system_msg, src_section_pk)?;
 
                         debug!(
                             "{:?} to: {:?} w/ {:?} ",
@@ -267,7 +267,7 @@ impl FlowCtrl {
             loop {
                 let _instant = interval.tick().await;
 
-                let node = &self.node;
+                let node = &self.node.read().await;
 
                 let unresponsive_nodes = match node.get_dysfunctional_node_names().await {
                     Ok(nodes) => nodes,
@@ -383,7 +383,7 @@ async fn handle_connection_events(ctrl: FlowCtrl, mut incoming_conns: mpsc::Rece
 
                 let span = {
                     let node = &ctrl.node;
-                    trace_span!("handle_message", name = %node.info.read().await.name(), ?sender, msg_id = ?wire_msg.msg_id())
+                    trace_span!("handle_message", name = %node.read().await.info.read().await.name(), ?sender, msg_id = ?wire_msg.msg_id())
                 };
                 let _span_guard = span.enter();
 

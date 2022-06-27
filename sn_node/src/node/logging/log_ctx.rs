@@ -10,17 +10,18 @@ use crate::node::core::Node;
 
 use std::sync::Arc;
 use xor_name::Prefix;
+use tokio::sync::RwLock;
 
 pub(crate) struct LogCtx {
-    node: Arc<Node>,
+    node: Arc<RwLock<Node>>,
 }
 
 impl LogCtx {
-    pub(crate) fn new(node: Arc<Node>) -> Self {
+    pub(crate) fn new(node: Arc<RwLock<Node>>) -> Self {
         Self { node }
     }
 
     pub(crate) async fn prefix(&self) -> Prefix {
-        self.node.network_knowledge().prefix().await
+        self.node.read().await.network_knowledge().prefix().await
     }
 }

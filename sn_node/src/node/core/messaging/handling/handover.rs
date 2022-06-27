@@ -88,7 +88,7 @@ impl Node {
     }
 
     async fn get_members_at_gen(&self, gen: Generation) -> Result<BTreeMap<XorName, NodeState>> {
-        if let Some(m) = self.membership.read().await.as_ref() {
+        if let Some(m) = self.membership.as_ref() {
             Ok(m.section_members(gen)?)
         } else {
             error!("Missing membership instance when checking handover SAP candidates");

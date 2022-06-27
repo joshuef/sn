@@ -30,7 +30,7 @@ use xor_name::XorName;
 impl Node {
     #[instrument(skip_all)]
     pub(crate) async fn handle_anti_entropy_update_msg(
-        &self,
+        &mut self,
         section_auth: SectionAuthorityProvider,
         section_signed: KeyedSig,
         proof_chain: SecuredLinkedList,
@@ -63,7 +63,7 @@ impl Node {
     }
 
     pub(crate) async fn handle_anti_entropy_retry_msg(
-        &self,
+        &mut self,
         section_auth: SectionAuthorityProvider,
         section_signed: KeyedSig,
         proof_chain: SecuredLinkedList,

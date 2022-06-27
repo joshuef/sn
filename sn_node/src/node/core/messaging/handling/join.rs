@@ -30,7 +30,7 @@ const FIRST_SECTION_MIN_ELDER_AGE: u8 = 90;
 // Message handling
 impl Node {
     pub(crate) async fn handle_join_request(
-        &self,
+        &mut self,
         peer: Peer,
         join_request: JoinRequest,
     ) -> Result<Vec<Cmd>> {
@@ -208,7 +208,7 @@ impl Node {
     }
 
     pub(crate) async fn handle_join_as_relocated_request(
-        &self,
+        &mut self,
         peer: Peer,
         join_request: JoinAsRelocatedRequest,
         known_keys: Vec<BlsPublicKey>,
