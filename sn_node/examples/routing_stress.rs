@@ -650,9 +650,9 @@ async fn add_node(id: u64, mut config: Config, event_sender: Sender<Event>) -> R
     let (_, root_dir) = create_test_max_capacity_and_root_storage()?;
 
     config.root_dir = Some(root_dir);
-    let joining_timeout = Duration::from_secs(3 * 60);
+    let join_timeout = Duration::from_secs(3 * 60);
 
-    let (node, mut event_receiver) = match NodeApi::new(&config, joining_timeout).await {
+    let (node, mut event_receiver) = match NodeApi::new(&config, join_timeout).await {
         Ok(output) => output,
         Err(error) => {
             let _res = event_sender

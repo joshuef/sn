@@ -73,7 +73,7 @@ impl NodeApi {
     ////////////////////////////////////////////////////////////////////////////
 
     /// Initialize a new node.
-    pub async fn new(config: &Config, joining_timeout: Duration) -> Result<(Self, EventReceiver)> {
+    pub async fn new(config: &Config, join_timeout: Duration) -> Result<(Self, EventReceiver)> {
         let root_dir_buf = config.root_dir()?;
         let root_dir = root_dir_buf.as_path();
         tokio::fs::create_dir_all(root_dir).await?;
@@ -90,12 +90,8 @@ impl NodeApi {
 
         let used_space = UsedSpace::new(config.max_capacity());
 
-        let (api, network_events) = tokio::time::timeout(
-            joining_timeout,
-            Self::start_node(config, used_space, root_dir),
-        )
-        .await
-        .map_err(|_| Error::JoinTimeout)??;
+        let (api, network_events) =
+            Self::start_node(config, used_space, root_dir, join_timeout).await?;
 
         // Network keypair may have to be changed due to naming criteria or network requirements.
         let keypair_as_bytes = api.node.keypair.read().await.to_bytes();
@@ -123,14 +119,11 @@ impl NodeApi {
     }
 
     // Private helper to create a new node using the given config and bootstraps it to the network.
-    //
-    // NOTE: It's not guaranteed this function ever returns. This can happen due to messages being
-    // lost in transit during bootstrapping, or other reasons. It's the responsibility of the
-    // caller to handle this case, for example by using a timeout.
     async fn start_node(
         config: &Config,
         used_space: UsedSpace,
         root_storage_dir: &Path,
+        join_timeout: Duration,
     ) -> Result<(Self, EventReceiver)> {
         let (connection_event_tx, mut connection_event_rx) = mpsc::channel(1);
 
@@ -242,6 +235,7 @@ impl NodeApi {
                 &mut connection_event_rx,
                 bootstrap_addr,
                 genesis_key,
+                join_timeout,
             )
             .await?;
 

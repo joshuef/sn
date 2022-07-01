@@ -195,9 +195,9 @@ async fn start_node(
         ..Default::default()
     };
 
-    let joining_timeout = Duration::from_secs(3 * 60);
+    let join_timeout = Duration::from_secs(3 * 60);
 
-    let (node, event_receiver) = NodeApi::new(&config, joining_timeout)
+    let (node, event_receiver) = NodeApi::new(&config, join_timeout)
         .await
         .expect("Failed to instantiate a Node");
 

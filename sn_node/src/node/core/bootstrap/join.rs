@@ -30,7 +30,10 @@ use bls::PublicKey as BlsPublicKey;
 use futures::future;
 use resource_proof::ResourceProof;
 use std::net::SocketAddr;
-use tokio::{sync::mpsc, time::sleep, time::Duration};
+use tokio::{
+    sync::mpsc,
+    time::{sleep, Duration, Instant},
+};
 use tracing::Instrument;
 use xor_name::Prefix;
 
@@ -45,6 +48,7 @@ pub(crate) async fn join_network(
     incoming_msgs: &mut mpsc::Receiver<MsgEvent>,
     bootstrap_addr: SocketAddr,
     genesis_key: BlsPublicKey,
+    join_timeout: Duration,
 ) -> Result<(NodeInfo, NetworkKnowledge)> {
     let (outgoing_msgs_sender, outgoing_msgs_receiver) = mpsc::channel(1);
 
@@ -53,11 +57,11 @@ pub(crate) async fn join_network(
     // Read prefix map from cache if available
     let prefix_map = read_prefix_map_from_disk(genesis_key).await?;
 
-    let state = Join::new(node, outgoing_msgs_sender, incoming_msgs, prefix_map);
+    let joiner = Joiner::new(node, outgoing_msgs_sender, incoming_msgs, prefix_map);
 
     debug!("=========> attempting bootstrap to {bootstrap_addr}");
     future::join(
-        state.run(bootstrap_addr),
+        joiner.try_join(bootstrap_addr, join_timeout),
         send_messages(outgoing_msgs_receiver, comm),
     )
     .instrument(span)
@@ -65,7 +69,7 @@ pub(crate) async fn join_network(
     .0
 }
 
-struct Join<'a> {
+struct Joiner<'a> {
     // Sender for outgoing messages.
     outgoing_msgs: mpsc::Sender<(WireMsg, Vec<Peer>)>,
     // Receiver for incoming messages.
@@ -77,7 +81,7 @@ struct Join<'a> {
     aggregated: bool,
 }
 
-impl<'a> Join<'a> {
+impl<'a> Joiner<'a> {
     fn new(
         node: NodeInfo,
         outgoing_msgs: mpsc::Sender<(WireMsg, Vec<Peer>)>,
@@ -111,7 +115,11 @@ impl<'a> Join<'a> {
     // - `ResourceChallenge`: carry out resource proof calculation.
     // - `Approval`: returns the initial `Section` value to use by this node,
     //    completing the bootstrap.
-    async fn run(self, bootstrap_addr: SocketAddr) -> Result<(NodeInfo, NetworkKnowledge)> {
+    async fn try_join(
+        self,
+        bootstrap_addr: SocketAddr,
+        join_timeout: Duration,
+    ) -> Result<(NodeInfo, NetworkKnowledge)> {
         // Use our XorName as we do not know their name or section key yet.
         let bootstrap_peer = Peer::new(self.node.name(), bootstrap_addr);
 
@@ -128,7 +136,8 @@ impl<'a> Join<'a> {
                 (genesis_key, vec![bootstrap_peer])
             };
 
-        self.join(genesis_key, target_section_key, recipients).await
+        self.join(genesis_key, target_section_key, recipients, join_timeout)
+            .await
     }
 
     #[tracing::instrument(skip(self))]
@@ -137,6 +146,7 @@ impl<'a> Join<'a> {
         network_genesis_key: BlsPublicKey,
         target_section_key: BlsPublicKey,
         recipients: Vec<Peer>,
+        mut join_timeout: Duration,
     ) -> Result<(NodeInfo, NetworkKnowledge)> {
         // We first use genesis key as the target section key, we'll be getting
         // a response with the latest section key for us to retry with.
@@ -152,6 +162,8 @@ impl<'a> Join<'a> {
             resource_proof_response: None,
         };
 
+        let mut timer = Instant::now(); // start right before sending msgs
+
         self.send_join_requests(join_request.clone(), &recipients, section_key, false)
             .await?;
 
@@ -159,7 +171,14 @@ impl<'a> Join<'a> {
         let mut used_recipient_saps = UsedRecipientSaps::new();
 
         loop {
-            let (response, sender) = self.receive_join_response().await?;
+            // Breaks the loop raising an error, if join_timeout time elapses.
+            join_timeout = join_timeout
+                .checked_sub(timer.elapsed())
+                .ok_or(Error::JoinTimeout)?;
+            timer = Instant::now(); // reset timer
+
+            let (response, sender) = self.receive_join_response(join_timeout).await?;
+
             match response {
                 JoinResponse::Rejected(JoinRejectionReason::NodeNotReachable(addr)) => {
                     error!(
@@ -434,8 +453,23 @@ impl<'a> Join<'a> {
     // TODO: receive JoinResponse from the JoinResponse handler directly,
     // analogous to the JoinAsRelocated flow.
     #[tracing::instrument(skip(self))]
-    async fn receive_join_response(&mut self) -> Result<(JoinResponse, Peer)> {
-        while let Some(event) = self.incoming_msgs.recv().await {
+    async fn receive_join_response(
+        &mut self,
+        mut join_timeout: Duration,
+    ) -> Result<(JoinResponse, Peer)> {
+        let mut timer = Instant::now();
+
+        // Awaits at most the time left of join_timeout.
+        while let Some(event) = tokio::time::timeout(join_timeout, self.incoming_msgs.recv())
+            .await
+            .map_err(|_| Error::JoinTimeout)?
+        {
+            // Breaks the loop raising an error, if join_timeout time elapses.
+            join_timeout = join_timeout
+                .checked_sub(timer.elapsed())
+                .ok_or(Error::JoinTimeout)?;
+            timer = Instant::now(); // reset timer
+
             // We are interested only in `JoinResponse` type of messages
             let (join_response, sender) = match event {
                 MsgEvent::Received {
@@ -530,8 +564,11 @@ mod tests {
     use tokio::task;
     use xor_name::XorName;
 
+    const JOIN_TIMEOUT_SEC: u64 = 15;
+
     #[tokio::test]
     async fn join_as_adult() -> Result<()> {
+        let join_timeout = Duration::from_secs(JOIN_TIMEOUT_SEC);
         let (send_tx, mut send_rx) = mpsc::channel(1);
         let (recv_tx, mut recv_rx) = mpsc::channel(1);
 
@@ -550,7 +587,7 @@ mod tests {
             gen_addr(),
         );
         let peer = node.peer();
-        let state = Join::new(
+        let state = Joiner::new(
             node,
             send_tx,
             &mut recv_rx,
@@ -558,7 +595,12 @@ mod tests {
         );
 
         // Create the bootstrap task, but don't run it yet.
-        let bootstrap = async move { state.run(bootstrap_addr).await.map_err(Error::from) };
+        let bootstrap = async move {
+            state
+                .try_join(bootstrap_addr, join_timeout)
+                .await
+                .map_err(Error::from)
+        };
 
         // Create the task that executes the body of the test, but don't run it either.
         let others = async {
@@ -642,6 +684,7 @@ mod tests {
 
     #[tokio::test]
     async fn join_receive_redirect_response() -> Result<()> {
+        let join_timeout = Duration::from_secs(JOIN_TIMEOUT_SEC);
         let (send_tx, mut send_rx) = mpsc::channel(1);
         let (recv_tx, mut recv_rx) = mpsc::channel(1);
 
@@ -654,14 +697,14 @@ mod tests {
             ed25519::gen_keypair(&Prefix::default().range_inclusive(), MIN_ADULT_AGE),
             gen_addr(),
         );
-        let state = Join::new(
+        let state = Joiner::new(
             node,
             send_tx,
             &mut recv_rx,
             NetworkPrefixMap::new(genesis_key),
         );
 
-        let bootstrap_task = state.run(bootstrap_node.addr);
+        let bootstrap_task = state.try_join(bootstrap_node.addr, join_timeout);
         let test_task = async move {
             // Receive JoinRequest
             let (wire_msg, recipients) = send_rx
@@ -747,6 +790,7 @@ mod tests {
         init_logger();
         let _span = tracing::info_span!("join_invalid_redirect_response").entered();
 
+        let join_timeout = Duration::from_secs(JOIN_TIMEOUT_SEC);
         let (send_tx, mut send_rx) = mpsc::channel(1);
         let (recv_tx, mut recv_rx) = mpsc::channel(1);
 
@@ -759,14 +803,14 @@ mod tests {
             gen_addr(),
         );
         let section_key = sk_set.secret_key().public_key();
-        let state = Join::new(
+        let state = Joiner::new(
             node,
             send_tx,
             &mut recv_rx,
             NetworkPrefixMap::new(section_key),
         );
 
-        let bootstrap_task = state.run(bootstrap_node.addr);
+        let bootstrap_task = state.try_join(bootstrap_node.addr, join_timeout);
         let test_task = async {
             let (wire_msg, _) = send_rx
                 .recv()
@@ -838,6 +882,7 @@ mod tests {
 
     #[tokio::test]
     async fn join_disallowed_response() -> Result<()> {
+        let join_timeout = Duration::from_secs(JOIN_TIMEOUT_SEC);
         let (send_tx, mut send_rx) = mpsc::channel(1);
         let (recv_tx, mut recv_rx) = mpsc::channel(1);
 
@@ -851,14 +896,14 @@ mod tests {
         );
 
         let section_key = sk_set.secret_key().public_key();
-        let state = Join::new(
+        let state = Joiner::new(
             node,
             send_tx,
             &mut recv_rx,
             NetworkPrefixMap::new(section_key),
         );
 
-        let bootstrap_task = state.run(bootstrap_node.addr);
+        let bootstrap_task = state.try_join(bootstrap_node.addr, join_timeout);
         let test_task = async {
             let (wire_msg, _) = send_rx
                 .recv()
@@ -895,6 +940,7 @@ mod tests {
         init_logger();
         let _span = tracing::info_span!("join_invalid_retry_prefix_response").entered();
 
+        let join_timeout = Duration::from_secs(JOIN_TIMEOUT_SEC);
         let (send_tx, mut send_rx) = mpsc::channel(1);
         let (recv_tx, mut recv_rx) = mpsc::channel(1);
 
@@ -922,7 +968,7 @@ mod tests {
         let (section_auth, _, sk_set) = gen_section_authority_provider(good_prefix, elder_count());
         let section_key = sk_set.public_keys().public_key();
 
-        let state = Join::new(
+        let state = Joiner::new(
             node,
             send_tx,
             &mut recv_rx,
@@ -937,7 +983,7 @@ mod tests {
                 )
             })
             .collect();
-        let join_task = state.join(section_key, section_key, elders);
+        let join_task = state.join(section_key, section_key, elders, join_timeout);
 
         let test_task = async {
             let (wire_msg, _) = send_rx

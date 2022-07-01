@@ -53,6 +53,7 @@ use tracing_subscriber::filter::EnvFilter;
 
 #[cfg(not(feature = "tokio-console"))]
 const MODULE_NAME: &str = "sn_node";
+const JOIN_TIMEOUT_SEC: u64 = 30;
 const BOOTSTRAP_RETRY_TIME_SEC: u64 = 15;
 
 fn main() -> Result<()> {
@@ -310,9 +311,11 @@ async fn run_node(config: Config) -> Result<()> {
 
     let log = format!("The network is not accepting nodes right now. Retrying after {BOOTSTRAP_RETRY_TIME_SEC} seconds");
 
+    let join_timeout = Duration::from_secs(JOIN_TIMEOUT_SEC);
     let bootstrap_retry_duration = Duration::from_secs(BOOTSTRAP_RETRY_TIME_SEC);
+
     let (node, mut event_stream) = loop {
-        match NodeApi::new(&config, bootstrap_retry_duration).await {
+        match NodeApi::new(&config, join_timeout).await {
             Ok(result) => break result,
             Err(NodeError::CannotConnectEndpoint(qp2p::EndpointError::Upnp(error))) => {
                 return Err(error).suggestion(
