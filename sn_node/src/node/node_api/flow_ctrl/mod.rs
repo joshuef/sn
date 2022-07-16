@@ -62,7 +62,7 @@ impl FlowCtrl {
 
     /// Does not await the completion of the cmd.
     pub(crate) async fn fire_and_forget(&self, cmd: Cmd) -> Result<()> {
-        let _ = self.cmd_ctrl.push(cmd).await?;
+        let _ = self.cmd_ctrl.push_and_merge(cmd).await?;
         Ok(())
     }
 
@@ -71,30 +71,35 @@ impl FlowCtrl {
     pub(crate) async fn await_result(&self, cmd: Cmd) -> Result<()> {
         use cmd_ctrl::CtrlStatus;
 
-        let mut watcher = self.cmd_ctrl.push(cmd).await?;
+        let mut watcher = self.cmd_ctrl.push_and_merge(cmd).await?;
 
-        loop {
-            match watcher.await_change().await {
-                CtrlStatus::Finished => {
-                    return Ok(());
-                }
-                CtrlStatus::Enqueued => {
-                    // this block should be unreachable, as Enqueued is the initial state
-                    // but let's handle it anyway..
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
-                CtrlStatus::MaxRetriesReached(retries) => {
-                    return Err(Error::MaxCmdRetriesReached(retries));
-                }
-                CtrlStatus::WatcherDropped => {
-                    // the send job is dropped for some reason,
-                    return Err(Error::CmdJobWatcherDropped);
-                }
-                CtrlStatus::Error(error) => {
-                    continue; // await change on the same recipient again
+        if let Some(mut watcher) = watcher {
+            loop {
+                match watcher.await_change().await {
+                    CtrlStatus::Finished => {
+                        return Ok(());
+                    }
+                    CtrlStatus::Enqueued => {
+                        // this block should be unreachable, as Enqueued is the initial state
+                        // but let's handle it anyway..
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
+                    }
+                    CtrlStatus::MaxRetriesReached(retries) => {
+                        return Err(Error::MaxCmdRetriesReached(retries));
+                    }
+                    CtrlStatus::WatcherDropped => {
+                        // the send job is dropped for some reason,
+                        return Err(Error::CmdJobWatcherDropped);
+                    }
+                    CtrlStatus::Error(error) => {
+                        continue; // await change on the same recipient again
+                    }
                 }
             }
+        } else {
+            /// Cmd was merged into an existing Cmd, so no watcher returned
+            return Ok(());
         }
     }
 
@@ -123,7 +128,7 @@ impl FlowCtrl {
                     match probe {
                         Ok(cmd) => {
                             info!("Sending probe msg");
-                            if let Err(e) = self.cmd_ctrl.push(cmd).await {
+                            if let Err(e) = self.cmd_ctrl.push_and_merge(cmd).await {
                                 error!("Error sending a probe msg to the network: {:?}", e);
                             }
                         }
@@ -151,7 +156,7 @@ impl FlowCtrl {
                     match probe {
                         Ok(cmd) => {
                             info!("Sending section probe msg");
-                            if let Err(e) = self.cmd_ctrl.push(cmd).await {
+                            if let Err(e) = self.cmd_ctrl.push_and_merge(cmd).await {
                                 error!("Error sending section probe msg: {:?}", e);
                             }
                         }
@@ -191,7 +196,7 @@ impl FlowCtrl {
 
                             trace!("Vote resending cmds: {:?}", cmds.len());
                             for cmd in cmds {
-                                if let Err(e) = self.cmd_ctrl.push(cmd).await {
+                                if let Err(e) = self.cmd_ctrl.push_and_merge(cmd).await {
                                     error!("Error resending a vote msg to the network: {:?}", e);
                                 }
                             }
@@ -295,7 +300,7 @@ impl FlowCtrl {
                                 recipients: vec![recipient],
                             };
 
-                            if let Err(e) = self.cmd_ctrl.push(cmd).await {
+                            if let Err(e) = self.cmd_ctrl.push_and_merge(cmd).await {
                                 error!("Error in data replication loop: {:?}", e);
                             }
                         }
@@ -314,12 +319,20 @@ impl FlowCtrl {
 
             loop {
                 let _ = interval.tick().await;
-                if let Err(e) = self.cmd_ctrl.push(Cmd::CleanupPeerLinks).await {
+                debug!("CMD Q len before: {:?}", self.cmd_ctrl.q_len().await);
+                if let Err(e) = self.cmd_ctrl.push_and_merge(Cmd::CleanupPeerLinks).await {
                     error!(
                         "Error requesting a cleaning up of unused PeerLinks: {:?}",
                         e
                     );
                 }
+                if let Err(e) = self.cmd_ctrl.push_and_merge(Cmd::CleanupPeerLinks).await {
+                    error!(
+                        "Error requesting a cleaning up of unused PeerLinks: {:?}",
+                        e
+                    );
+                }
+                debug!("CMD Q len after: {:?}", self.cmd_ctrl.q_len().await);
             }
         });
     }
@@ -346,7 +359,7 @@ impl FlowCtrl {
                     debug!("{:?} : {unresponsive_nodes:?}", LogMarker::ProposeOffline);
                     if let Err(e) = self
                         .cmd_ctrl
-                        .push(Cmd::ProposeOffline(unresponsive_nodes))
+                        .push_and_merge(Cmd::ProposeOffline(unresponsive_nodes))
                         .await
                     {
                         error!("Error sending Propose Offline for dysfunctional nodes: {e:?}");
@@ -421,7 +434,7 @@ impl FlowCtrl {
                             recipients: vec![*peer],
                         };
 
-                        if let Err(e) = self.cmd_ctrl.push(cmd).await {
+                        if let Err(e) = self.cmd_ctrl.push_and_merge(cmd).await {
                             error!(
                                 "Error sending backpressure report to section member {:?}: {:?}",
                                 peer, e
@@ -476,7 +489,7 @@ async fn handle_connection_events(ctrl: FlowCtrl, mut incoming_conns: mpsc::Rece
                     original_bytes,
                 };
 
-                let _res = ctrl.cmd_ctrl.push(cmd).await;
+                let _res = ctrl.cmd_ctrl.push_and_merge(cmd).await;
             }
         }
     }

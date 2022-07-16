@@ -10,7 +10,6 @@ use crate::node::{node_api::cmds::Cmd, Error, Node, Result};
 use bytes::Bytes;
 use ed25519_dalek::Signer;
 use itertools::Itertools;
-use rand::thread_rng;
 use sn_dbc::{
     Commitment, Hash, IndexedSignatureShare, KeyImage, RingCtTransaction, SpentProof,
     SpentProofContent, SpentProofShare,
@@ -203,12 +202,16 @@ impl Node {
         };
         let (auth_kind, payload) = self.ed_sign_client_msg(&msg)?;
 
-        // set a random xorname first. We set it specifically per peer thereafter
-        // This is overwritten in comm.send_to_client
-        let mut rng = thread_rng();
-        let dst = DstLocation::EndUser(EndUser(xor_name::XorName::random(&mut rng)));
+        // Set a nonsense XorName at first.
+        // It is set specifically per recipient and overwritten in comm.send_to_client
+        // by having this be something standard, we can dedupe this in the CmdQueue
+        let dst = DstLocation::EndUser(EndUser(xor_name::XorName::from_content(b"X")));
         let wire_msg = WireMsg::new_msg(msg_id, payload, auth_kind, dst)?;
 
+        cmds.push(Cmd::SendMsg {
+            recipients: waiting_peers.clone().into_iter().collect_vec(),
+            wire_msg: wire_msg.clone(),
+        });
         cmds.push(Cmd::SendMsg {
             recipients: waiting_peers.into_iter().collect_vec(),
             wire_msg,

@@ -14,9 +14,10 @@ use crate::node::{
     },
     CmdProcessEvent, Error, Event, RateLimits, Result,
 };
-
 use custom_debug::Debug;
 use priority_queue::PriorityQueue;
+use sn_interface::messaging::WireMsg;
+use sn_interface::types::Peer;
 use std::time::SystemTime;
 use std::{
     sync::{
@@ -77,12 +78,16 @@ impl CmdCtrl {
         session
     }
 
+    pub(crate) async fn q_len(&self) -> usize {
+        self.cmd_queue.read().await.len()
+    }
+
     pub(crate) fn node(&self) -> Arc<RwLock<crate::node::Node>> {
         self.dispatcher.node()
     }
 
-    pub(crate) async fn push(&self, cmd: Cmd) -> Result<SendWatcher> {
-        self.push_internal(cmd, None).await
+    pub(crate) async fn push_and_merge(&self, cmd: Cmd) -> Result<Option<SendWatcher>> {
+        self.push_and_merge_internal(cmd, None).await
     }
 
     // consume self
@@ -93,20 +98,158 @@ impl CmdCtrl {
         self.cmd_queue.write().await.clear();
     }
 
-    async fn extend(&self, cmds: Vec<Cmd>, parent_id: Option<usize>) -> Vec<Result<SendWatcher>> {
+    async fn extend(
+        &self,
+        cmds: Vec<Cmd>,
+        parent_id: Option<usize>,
+    ) -> Vec<Result<Option<SendWatcher>>> {
         let mut results = vec![];
 
         for cmd in cmds {
-            results.push(self.push_internal(cmd, parent_id).await);
+            results.push(self.push_and_merge_internal(cmd, parent_id).await);
         }
 
         results
     }
 
-    async fn push_internal(&self, cmd: Cmd, parent_id: Option<usize>) -> Result<SendWatcher> {
+    // TODO: rework this to pass in the queue so we can test it easily
+    /// Certain commands can me merged without losing anything
+    /// eg, `CleanupPeerLinks` commands can be merged if there is one in the queue.
+    /// two back to back should not do anything new.
+    /// SendMsg commands can be merged if the message content is the same
+    /// as the send functions will update the destination per peer, so we just have to ensure
+    /// that `recipients` are updated with any new.
+    /// A `debug` log will be emitted noting the CmdId merge for tracing purposes
+    async fn merge_if_existing_compatible_cmd_exists(&self, cmd: &Cmd) -> Option<usize> {
+        match cmd {
+            Cmd::CleanupPeerLinks => {
+                let q = self.cmd_queue.read().await;
+
+                for (enqueued_job, _prio) in q.iter() {
+                    let queued_cmd = enqueued_job.job.cmd();
+                    if matches!(queued_cmd, Cmd::CleanupPeerLinks) {
+                        let existing_cmd_id = enqueued_job.job.id();
+                        return Some(existing_cmd_id);
+                    }
+                }
+
+                None
+            }
+            Cmd::SendMsg {
+                recipients: new_cmd_recipients,
+                wire_msg: new_cmd_msg,
+            } => {
+                let mut all_recipients = new_cmd_recipients.clone();
+                let (msg_match, exact_same_existing_cmd_id) = self
+                    .check_if_matching_send_msg_exists(new_cmd_recipients, new_cmd_msg)
+                    .await;
+                if msg_match {
+                    // dropping msg and exiting out early as we have the same exact cmd already waiting to be parsed
+                    if let Some(existing_cmd_id) = exact_same_existing_cmd_id {
+                        return Some(existing_cmd_id);
+                    }
+
+                    // otherwise, continue into lock
+                    // we can merge it then!
+                    let mut q = self.cmd_queue.write().await;
+
+                    for (enqueued_job, _prio) in q.iter_mut() {
+                        let queued_cmd = enqueued_job.job.cmd();
+                        if let Cmd::SendMsg {
+                            wire_msg,
+                            recipients,
+                        } = queued_cmd
+                        {
+                            // if we've the same msg and different recipients, we should merge
+                            if wire_msg == new_cmd_msg {
+                                let existing_cmd_id = enqueued_job.job.id();
+
+                                // double check here, in case more than one cmd was somehow queued.... (is that possible?)
+                                if recipients == &all_recipients {
+                                    return Some(existing_cmd_id);
+                                };
+
+                                // now we flesh out and add a new job with both recipients merged.
+                                all_recipients.extend(recipients);
+
+                                let new_cmd = Cmd::SendMsg {
+                                    recipients: all_recipients,
+                                    wire_msg: wire_msg.clone(),
+                                };
+                                enqueued_job.job.update_cmd(new_cmd);
+                                return Some(existing_cmd_id);
+                            }
+                        }
+                    }
+                }
+
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// checks for a matching SendMsg, returns (true,..) if one exists and (.., Some(CmdId)) if recipients match too
+    /// That way we can exit early with never taking a write lock on the cmd struct, and log that we've dropped this
+    /// duplicate Cmd.
+    ///
+    /// Ie, returns (msg matches, recipients are the same)
+    async fn check_if_matching_send_msg_exists(
+        &self,
+        cmd_recipients: &Vec<Peer>,
+        cmd_wire_msg: &WireMsg,
+    ) -> (bool, Option<usize>) {
+        let q = self.cmd_queue.read().await;
+
+        for (enqueued_job, _prio) in q.iter() {
+            let queued_cmd = enqueued_job.job.cmd();
+            if let Cmd::SendMsg {
+                recipients,
+                wire_msg,
+            } = queued_cmd
+            {
+                // if we have the same wire msg, it's a match
+                let msg_match = wire_msg == cmd_wire_msg;
+                let existing_cmd_id = enqueued_job.job.id();
+
+                if msg_match {
+                    debug!("MsgMatching cmdid {existing_cmd_id} found, going to: {:?}", wire_msg.dst_location());
+                    if recipients == cmd_recipients {
+                        debug!("Recipients where the same for {existing_cmd_id}");
+                        // we know the Cmd and it matches completely so we drop it
+                        return (msg_match, Some(existing_cmd_id));
+                    } else {
+                        return (msg_match, None);
+                    }
+                }
+            }
+        }
+
+        (false, None)
+    }
+
+
+    async fn push_and_merge_internal(
+        &self,
+        cmd: Cmd,
+        parent_id: Option<usize>,
+    ) -> Result<Option<SendWatcher>> {
         if self.stopped().await {
             // should not happen (be reachable)
             return Err(Error::InvalidState);
+        }
+
+        // TODO: should each merge bump prio?
+        if let Some(existing_queued_cmd_id) =
+            self.merge_if_existing_compatible_cmd_exists(&cmd).await
+        {
+            trace!(
+                "New Cmd was merged into {:?}, (Cmd was: {:?})",
+                existing_queued_cmd_id,
+                cmd
+            );
+
+            return Ok(None);
         }
 
         let priority = cmd.priority();
@@ -126,7 +269,7 @@ impl CmdCtrl {
 
         let _ = self.cmd_queue.write().await.push(job, priority);
 
-        Ok(watcher)
+        Ok(Some(watcher))
     }
 
     // could be accessed via a clone
