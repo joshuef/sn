@@ -213,7 +213,10 @@ impl CmdCtrl {
                 let existing_cmd_id = enqueued_job.job.id();
 
                 if msg_match {
-                    debug!("MsgMatching cmdid {existing_cmd_id} found, going to: {:?}", wire_msg.dst_location());
+                    debug!(
+                        "MsgMatching cmdid {existing_cmd_id} found, going to: {:?}",
+                        wire_msg.dst_location()
+                    );
                     if recipients == cmd_recipients {
                         debug!("Recipients where the same for {existing_cmd_id}");
                         // we know the Cmd and it matches completely so we drop it
@@ -227,7 +230,6 @@ impl CmdCtrl {
 
         (false, None)
     }
-
 
     async fn push_and_merge_internal(
         &self,
