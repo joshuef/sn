@@ -158,12 +158,6 @@ pub(crate) enum Cmd {
     /// Performs serialisation and signing for sending of NodeMsg.
     /// This cmd only send this to other nodes
     SignOutgoingSystemMsg { msg: SystemMsg, dst: DstLocation },
-    /// Send a message to `delivery_group_size` peers out of the given `recipients`.
-    SendMsgDeliveryGroup {
-        recipients: Vec<Peer>,
-        delivery_group_size: usize,
-        wire_msg: WireMsg,
-    },
     /// Schedule a timeout after the given duration. When the timeout expires, a `HandleDkgTimeout`
     /// cmd is raised. The token is used to identify the timeout.
     ScheduleDkgTimeout { duration: Duration, token: u64 },
@@ -208,7 +202,6 @@ impl Cmd {
             HandleValidServiceMsg { msg, .. } => msg.priority(),
             SendMsg { wire_msg, .. } => wire_msg.priority(),
             SignOutgoingSystemMsg { msg, .. } => msg.priority(),
-            SendMsgDeliveryGroup { wire_msg, .. } => wire_msg.priority(),
 
             ValidateMsg { .. } => -9, // before it's validated, we cannot give it high prio, as it would be a spam vector
         }
@@ -264,19 +257,6 @@ impl fmt::Display for Cmd {
             }
             Cmd::SignOutgoingSystemMsg { .. } => write!(f, "SignOutgoingSystemMsg"),
             Cmd::EnqueueDataForReplication { .. } => write!(f, "ThrottledSendBatchMsgs"),
-            #[cfg(not(feature = "test-utils"))]
-            Cmd::SendMsgDeliveryGroup { wire_msg, .. } => {
-                write!(f, "SendMsgDeliveryGroup {:?}", wire_msg.msg_id())
-            }
-            #[cfg(feature = "test-utils")]
-            Cmd::SendMsgDeliveryGroup { wire_msg, .. } => {
-                write!(
-                    f,
-                    "SendMsg {:?} {:?}",
-                    wire_msg.msg_id(),
-                    wire_msg.payload_debug
-                )
-            }
             Cmd::ProposeOffline(_) => write!(f, "ProposeOffline"),
             Cmd::StartConnectivityTest(_) => write!(f, "StartConnectivityTest"),
             Cmd::TestConnectivity(_) => write!(f, "TestConnectivity"),

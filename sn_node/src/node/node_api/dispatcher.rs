@@ -171,7 +171,7 @@ impl Dispatcher {
             Cmd::SendMsg {
                 recipients,
                 wire_msg,
-            } => self.send_msg(&recipients, recipients.len(), wire_msg).await,
+            } => self.send_msg(&recipients, wire_msg).await,
             Cmd::EnqueueDataForReplication {
                 // throttle_duration,
                 recipient,
@@ -194,14 +194,6 @@ impl Dispatcher {
                     };
                 }
                 Ok(vec![])
-            }
-            Cmd::SendMsgDeliveryGroup {
-                recipients,
-                delivery_group_size,
-                wire_msg,
-            } => {
-                self.send_msg(&recipients, delivery_group_size, wire_msg)
-                    .await
             }
             Cmd::ScheduleDkgTimeout { duration, token } => Ok(self
                 .handle_scheduled_dkg_timeout(duration, token)
@@ -244,16 +236,10 @@ impl Dispatcher {
         }
     }
 
-    async fn send_msg(
-        &self,
-        recipients: &[Peer],
-        delivery_group_size: usize,
-        wire_msg: WireMsg,
-    ) -> Result<Vec<Cmd>> {
+    async fn send_msg(&self, recipients: &[Peer], wire_msg: WireMsg) -> Result<Vec<Cmd>> {
         let cmds = match wire_msg.auth_kind() {
             AuthKind::Node(_) | AuthKind::NodeBlsShare(_) => {
-                self.deliver_msgs(recipients, delivery_group_size, wire_msg)
-                    .await?
+                self.deliver_msgs(recipients, wire_msg).await?
             }
             AuthKind::Service(_) => {
                 for peer in recipients {
@@ -271,25 +257,15 @@ impl Dispatcher {
         Ok(cmds)
     }
 
-    async fn deliver_msgs(
-        &self,
-        recipients: &[Peer],
-        delivery_group_size: usize,
-        wire_msg: WireMsg,
-    ) -> Result<Vec<Cmd>> {
-        let status = self
-            .comm
-            .send(recipients, delivery_group_size, wire_msg)
-            .await?;
+    async fn deliver_msgs(&self, recipients: &[Peer], wire_msg: WireMsg) -> Result<Vec<Cmd>> {
+        let status = self.comm.send(recipients, wire_msg).await?;
 
         match status {
-            DeliveryStatus::MinDeliveryGroupSizeReached(failed_recipients)
-            | DeliveryStatus::MinDeliveryGroupSizeFailed(failed_recipients) => {
-                Ok(failed_recipients
-                    .into_iter()
-                    .map(Cmd::HandlePeerLost)
-                    .collect())
-            }
+            DeliveryStatus::DeliveredToAll(failed_recipients)
+            | DeliveryStatus::FailedToDeliverAll(failed_recipients) => Ok(failed_recipients
+                .into_iter()
+                .map(Cmd::HandlePeerLost)
+                .collect()),
             _ => Ok(vec![]),
         }
     }

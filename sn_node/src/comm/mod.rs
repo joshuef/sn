@@ -321,28 +321,12 @@ impl Comm {
     pub(crate) async fn send(
         &self,
         recipients: &[Peer],
-        delivery_group_size: usize,
         wire_msg: WireMsg,
     ) -> Result<DeliveryStatus> {
         // todo: this type of task needs a send job, that we can come back to
 
         let msg_id = wire_msg.msg_id();
-        trace!(
-            "Sending message (msg_id: {:?}) to {} of {:?}",
-            msg_id,
-            delivery_group_size,
-            recipients
-        );
-
-        if recipients.len() < delivery_group_size {
-            warn!(
-                "Less than delivery_group_size valid recipients - delivery_group_size: {}, recipients: {:?}",
-                delivery_group_size,
-                recipients,
-            );
-        }
-
-        let delivery_group_size = delivery_group_size.min(recipients.len());
+        trace!("Sending message (msg_id: {:?}) to {:?}", msg_id, recipients);
 
         if recipients.is_empty() {
             return Err(Error::EmptyRecipientList);
@@ -353,7 +337,7 @@ impl Comm {
         // Run all the sends concurrently (using `FuturesUnordered`). If any of them fails, pick
         // the next recipient and try to send to them. Proceed until the needed number of sends
         // succeeds or if there are no more recipients to pick.
-        let mut tasks: FuturesUnordered<_> = recipients[0..delivery_group_size]
+        let mut tasks: FuturesUnordered<_> = recipients
             .iter()
             .map(|recipient| {
                 let mut msg = wire_msg.clone();
@@ -362,6 +346,7 @@ impl Comm {
             })
             .collect();
 
+        let delivery_group_size = recipients.len();
         let mut next = delivery_group_size;
         let mut successes = 0;
         let mut failed_recipients = vec![];
@@ -457,15 +442,11 @@ impl Comm {
             if failed_recipients.is_empty() {
                 Ok(DeliveryStatus::AllRecipients)
             } else {
-                Ok(DeliveryStatus::MinDeliveryGroupSizeReached(
-                    failed_recipients,
-                ))
+                Ok(DeliveryStatus::DeliveredToAll(failed_recipients))
             }
         } else {
             // todo: is this really a success case..?
-            Ok(DeliveryStatus::MinDeliveryGroupSizeFailed(
-                failed_recipients,
-            ))
+            Ok(DeliveryStatus::FailedToDeliverAll(failed_recipients))
         }
     }
 
@@ -633,8 +614,8 @@ pub(crate) enum MsgEvent {
 #[derive(Debug, Clone)]
 pub(crate) enum DeliveryStatus {
     AllRecipients,
-    MinDeliveryGroupSizeReached(Vec<Peer>),
-    MinDeliveryGroupSizeFailed(Vec<Peer>),
+    DeliveredToAll(Vec<Peer>),
+    FailedToDeliverAll(Vec<Peer>),
 }
 
 #[cfg(test)]
@@ -769,7 +750,7 @@ mod tests {
 
                 assert_matches!(
                     &status,
-                    &DeliveryStatus::MinDeliveryGroupSizeFailed(_) => vec![invalid_addr]
+                    &DeliveryStatus::FailedToDeliverAll(_) => vec![invalid_addr]
                 );
 
                 Result::<()>::Ok(())
@@ -783,38 +764,40 @@ mod tests {
         let local = tokio::task::LocalSet::new();
 
         // Run the local task set.
-        local.run_until(async move {
-            let (tx, _rx) = mpsc::channel(1);
-            let comm = Comm::first_node(
-                local_addr(),
-                Config {
-                    idle_timeout: Some(Duration::from_millis(1)),
-                    ..Config::default()
-                },
-                RateLimits::new(),
-                tx,
-            )
-            .await?;
-            let (peer, mut rx) = new_peer().await?;
-            let invalid_peer = get_invalid_peer().await?;
+        local
+            .run_until(async move {
+                let (tx, _rx) = mpsc::channel(1);
+                let comm = Comm::first_node(
+                    local_addr(),
+                    Config {
+                        idle_timeout: Some(Duration::from_millis(1)),
+                        ..Config::default()
+                    },
+                    RateLimits::new(),
+                    tx,
+                )
+                .await?;
+                let (peer, mut rx) = new_peer().await?;
+                let invalid_peer = get_invalid_peer().await?;
 
-            let message = new_test_msg()?;
-            let status = comm.send(&[invalid_peer, peer], 1, message.clone()).await?;
-            assert_matches!(status, DeliveryStatus::MinDeliveryGroupSizeReached(failed_recipients) => {
-                assert_eq!(&failed_recipients, &[invalid_peer])
-            });
+                let message = new_test_msg()?;
+                let status = comm.send(&[invalid_peer, peer], 1, message.clone()).await?;
+                assert_matches!(status, DeliveryStatus::DeliveredToAll(failed_recipients) => {
+                    assert_eq!(&failed_recipients, &[invalid_peer])
+                });
 
-            if let Some(bytes) = rx.recv().await {
-                // the dst location name is updated per sender, so
-                // we need to update that here before we check
-                let mut check_msg = message.clone();
-                check_msg.set_dst_xorname(peer.name());
+                if let Some(bytes) = rx.recv().await {
+                    // the dst location name is updated per sender, so
+                    // we need to update that here before we check
+                    let mut check_msg = message.clone();
+                    check_msg.set_dst_xorname(peer.name());
 
-                assert_eq!(WireMsg::from(bytes)?, check_msg);
-            }
+                    assert_eq!(WireMsg::from(bytes)?, check_msg);
+                }
 
-            Result::<()>::Ok(())
-        }).await
+                Result::<()>::Ok(())
+            })
+            .await
     }
 
     #[tokio::test]
@@ -844,7 +827,7 @@ mod tests {
 
                 assert_matches!(
                     status,
-                    DeliveryStatus::MinDeliveryGroupSizeFailed(_) => vec![invalid_peer]
+                    DeliveryStatus::FailedToDeliverAll(_) => vec![invalid_peer]
                 );
 
                 if let Some(bytes) = rx.recv().await {

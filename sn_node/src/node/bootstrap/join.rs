@@ -516,13 +516,9 @@ async fn send_messages(
     comm: &Comm,
 ) -> Result<()> {
     while let Some((wire_msg, recipients)) = outgoing_msgs.recv().await {
-        match comm
-            .send(&recipients, recipients.len(), wire_msg.clone())
-            .await
-        {
-            Ok(DeliveryStatus::AllRecipients)
-            | Ok(DeliveryStatus::MinDeliveryGroupSizeReached(_)) => {}
-            Ok(DeliveryStatus::MinDeliveryGroupSizeFailed(recipients)) => {
+        match comm.send(&recipients, wire_msg.clone()).await {
+            Ok(DeliveryStatus::AllRecipients) | Ok(DeliveryStatus::DeliveredToAll(_)) => {}
+            Ok(DeliveryStatus::FailedToDeliverAll(recipients)) => {
                 error!("Failed to send message {:?} to {:?}", wire_msg, recipients)
             }
             Err(err) => {
