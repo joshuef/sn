@@ -656,9 +656,7 @@ mod tests {
 
                 let original_message = new_test_msg()?;
 
-                let status = comm
-                    .send(&[peer0, peer1], 2, original_message.clone())
-                    .await?;
+                let status = comm.send(&[peer0, peer1], original_message.clone()).await?;
 
                 assert_matches!(status, DeliveryStatus::AllRecipients);
 
@@ -699,9 +697,7 @@ mod tests {
                 let (peer1, mut rx1) = new_peer().await?;
 
                 let original_message = new_test_msg()?;
-                let status = comm
-                    .send(&[peer0, peer1], 1, original_message.clone())
-                    .await?;
+                let status = comm.send(&[peer0, peer1], original_message.clone()).await?;
 
                 assert_matches!(status, DeliveryStatus::AllRecipients);
 
@@ -746,7 +742,7 @@ mod tests {
                 let invalid_peer = get_invalid_peer().await?;
                 let invalid_addr = invalid_peer.addr();
 
-                let status = comm.send(&[invalid_peer], 1, new_test_msg()?).await?;
+                let status = comm.send(&[invalid_peer], new_test_msg()?).await?;
 
                 assert_matches!(
                     &status,
@@ -781,7 +777,7 @@ mod tests {
                 let invalid_peer = get_invalid_peer().await?;
 
                 let message = new_test_msg()?;
-                let status = comm.send(&[invalid_peer, peer], 1, message.clone()).await?;
+                let status = comm.send(&[invalid_peer, peer], message.clone()).await?;
                 assert_matches!(status, DeliveryStatus::DeliveredToAll(failed_recipients) => {
                     assert_eq!(&failed_recipients, &[invalid_peer])
                 });
@@ -823,7 +819,7 @@ mod tests {
                 let invalid_peer = get_invalid_peer().await?;
 
                 let message = new_test_msg()?;
-                let status = comm.send(&[invalid_peer, peer], 2, message.clone()).await?;
+                let status = comm.send(&[invalid_peer, peer], message.clone()).await?;
 
                 assert_matches!(
                     status,
@@ -863,7 +859,7 @@ mod tests {
 
                 let msg0 = new_test_msg()?;
                 let status = send_comm
-                    .send(&[Peer::new(name, recv_addr)], 1, msg0.clone())
+                    .send(&[Peer::new(name, recv_addr)], msg0.clone())
                     .await?;
                 assert_matches!(status, DeliveryStatus::AllRecipients);
 
@@ -888,7 +884,7 @@ mod tests {
 
                 let msg1 = new_test_msg()?;
                 let status = send_comm
-                    .send(&[Peer::new(name, recv_addr)], 1, msg1.clone())
+                    .send(&[Peer::new(name, recv_addr)], msg1.clone())
                     .await?;
                 assert_matches!(status, DeliveryStatus::AllRecipients);
 
@@ -935,7 +931,6 @@ mod tests {
                 let status = comm1
                     .send(
                         &[Peer::new(xor_name::rand::random(), addr0)],
-                        1,
                         new_test_msg()?,
                     )
                     .await?;
