@@ -155,7 +155,7 @@ impl Comm {
             }
         }
 
-        debug!("PeerLink count post-cleanup: ${:?}", self.sessions.len());
+        debug!("PeerLink count post-cleanup: {:?}", self.sessions.len());
         Ok(())
     }
 

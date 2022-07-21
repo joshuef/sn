@@ -93,6 +93,7 @@ impl Link {
                 .close(Some("We disconnected from peer.".to_string()));
         }
         self.connections.clear();
+
     }
 
     /// Send a message to the peer with default retry configuration.
@@ -133,12 +134,16 @@ impl Link {
                 Ok(())
             }
             Err(error) => {
+                error!("dropping connection due to error, {error:?}");
                 // clean up failing connections at once, no nead to leak it outside of here
                 // next send (e.g. when retrying) will use/create a new connection
                 let id = &conn.id();
-                let _ = self.connections.remove(id);
+                let conn = self.connections.remove(id);
                 let _ = self.queue.remove(id);
-                conn.close(Some(format!("{:?}", error)));
+
+                if let Some(conn) = conn {
+                    conn.close(Some(format!("{:?}", error)));
+                }
                 Err(SendToOneError::Send(error))
             }
         }
@@ -258,7 +263,7 @@ impl Link {
 
             if let Some(item) = self.connections.remove(&id) {
                 trace!("Connection expired: {}", item.conn.id());
-                item.conn.close(Some("Connection expired.".to_string()));
+                item.conn.close(Some("Connection expired and so closing.".to_string()));
             }
         }
 
