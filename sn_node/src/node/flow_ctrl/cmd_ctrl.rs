@@ -264,18 +264,18 @@ impl CmdCtrl {
             return Err(Error::InvalidState);
         }
 
-        // TODO: should each merge bump prio?
-        if let Some(existing_queued_cmd_id) =
-            self.merge_if_existing_compatible_cmd_exists(&cmd).await
-        {
-            trace!(
-                "New Cmd was merged into {:?}, (Cmd was: {:?})",
-                existing_queued_cmd_id,
-                cmd
-            );
+        // // TODO: should each merge bump prio?
+        // if let Some(existing_queued_cmd_id) =
+        //     self.merge_if_existing_compatible_cmd_exists(&cmd).await
+        // {
+        //     trace!(
+        //         "New Cmd was merged into {:?}, (Cmd was: {:?})",
+        //         existing_queued_cmd_id,
+        //         cmd
+        //     );
 
-            return Ok(None);
-        }
+        //     return Ok(None);
+        // }
 
         let priority = cmd.priority();
 
