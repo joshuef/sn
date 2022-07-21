@@ -124,6 +124,8 @@ impl Comm {
         retain_peers: Vec<Peer>,
         mut dysfunction: DysfunctionDetection,
     ) -> Result<()> {
+        debug!("Cleanup peers except: {:?}", retain_peers);
+
         let mut peers_to_cleanup = vec![];
         for entry in self.sessions.iter() {
             let peer = entry.key();
@@ -153,6 +155,8 @@ impl Comm {
                     session.disconnect().await
                 };
             }
+        } else {
+            debug!("No peers to cleanup!!!!!");
         }
 
         debug!("PeerLink count post-cleanup: {:?}", self.sessions.len());

@@ -93,7 +93,6 @@ impl Link {
                 .close(Some("We disconnected from peer.".to_string()));
         }
         self.connections.clear();
-
     }
 
     /// Send a message to the peer with default retry configuration.
@@ -138,12 +137,10 @@ impl Link {
                 // clean up failing connections at once, no nead to leak it outside of here
                 // next send (e.g. when retrying) will use/create a new connection
                 let id = &conn.id();
-                let conn = self.connections.remove(id);
+                let _ = self.connections.remove(id);
                 let _ = self.queue.remove(id);
 
-                if let Some(conn) = conn {
-                    conn.close(Some(format!("{:?}", error)));
-                }
+                conn.close(Some(format!("{:?}", error)));
                 Err(SendToOneError::Send(error))
             }
         }
@@ -158,7 +155,6 @@ impl Link {
     }
 
     /// Is this Link currently connected?
-    #[allow(unused)]
     pub(crate) fn is_connected(&self) -> bool {
         // get the most recently used connection
 
@@ -263,7 +259,8 @@ impl Link {
 
             if let Some(item) = self.connections.remove(&id) {
                 trace!("Connection expired: {}", item.conn.id());
-                item.conn.close(Some("Connection expired and so closing.".to_string()));
+                item.conn
+                    .close(Some("Connection expired and so closing.".to_string()));
             }
         }
 
@@ -272,6 +269,7 @@ impl Link {
 
     /// Remove connections that exceed capacity, oldest first.
     fn drop_excess(&mut self) {
+        debug!("drop excress, queuelen: {:?}", self.queue.len());
         if self.queue.len() >= CAPACITY {
             // remove the least recently used connections
             if let Some((evicted_id, _)) = self.queue.pop_min() {

@@ -160,7 +160,12 @@ impl PeerSessionWorker {
                 }
                 SessionCmd::RemoveExpired => {
                     self.link.remove_expired();
-                    SessionStatus::Ok
+                    if !self.link.is_connected() {
+                        debug!("link is no longer connected, terminating session");
+                        SessionStatus::Terminating
+                    } else {
+                        SessionStatus::Ok
+                    }
                 }
                 SessionCmd::AddConnection(conn) => {
                     self.link.add(conn);
