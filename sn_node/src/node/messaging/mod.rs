@@ -34,7 +34,7 @@ use bytes::Bytes;
 use itertools::Itertools;
 use std::collections::BTreeSet;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum OutgoingMsg {
     System(SystemMsg),
@@ -42,7 +42,7 @@ pub(crate) enum OutgoingMsg {
     DstAggregated((BlsShareAuth, Bytes)),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Peers {
     Single(Peer),
     Multiple(BTreeSet<Peer>),
