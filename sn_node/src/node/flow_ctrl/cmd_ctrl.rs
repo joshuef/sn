@@ -29,7 +29,7 @@ use tokio::{sync::RwLock, time::Instant};
 
 type Priority = i32;
 
-const MAX_RETRIES: usize = 1; // drops on first error..
+// const MAX_RETRIES: usize = 1; // drops on first error..
 const SLEEP_TIME: Duration = Duration::from_millis(20);
 
 const ORDER: Ordering = Ordering::SeqCst;
@@ -47,7 +47,7 @@ const ORDER: Ordering = Ordering::SeqCst;
 #[derive(Clone)]
 pub(crate) struct CmdCtrl {
     cmd_queue: Arc<RwLock<PriorityQueue<EnqueuedJob, Priority>>>,
-    attempted: MsgThroughput,
+    attempted: CmdThroughput,
     monitoring: RateLimits,
     stopped: Arc<RwLock<bool>>,
     pub(crate) dispatcher: Arc<Dispatcher>,
@@ -63,7 +63,7 @@ impl CmdCtrl {
     ) -> Self {
         let session = Self {
             cmd_queue: Arc::new(RwLock::new(PriorityQueue::new())),
-            attempted: MsgThroughput::default(),
+            attempted: CmdThroughput::default(),
             monitoring,
             stopped: Arc::new(RwLock::new(false)),
             dispatcher: Arc::new(dispatcher),
@@ -72,7 +72,7 @@ impl CmdCtrl {
         };
 
         let session_clone = session.clone();
-        let _ = tokio::task::spawn_local(async move { session_clone.keep_sending().await });
+        let _ = tokio::task::spawn_local(async move { session_clone.keep_processing().await });
 
         session
     }
@@ -120,7 +120,7 @@ impl CmdCtrl {
                 cmd,
                 SystemTime::now(),
             ),
-            retries: 0,
+            // retries: 0,
             reporter,
         };
 
@@ -138,7 +138,7 @@ impl CmdCtrl {
         self.event_sender.send(event).await
     }
 
-    async fn keep_sending(&self) {
+    async fn keep_processing(&self) {
         loop {
             if self.stopped().await {
                 break;
@@ -163,36 +163,27 @@ impl CmdCtrl {
 
             let queue_res = { self.cmd_queue.write().await.pop() };
             if let Some((mut enqueued, prio)) = queue_res {
-                if enqueued.retries >= MAX_RETRIES {
-                    // break this loop, report error to other nodes
-                    // await decision on how to continue
-                    // (or send event on a channel (to report error to other nodes), then sleep for a very long time, then try again?)
+                // if enqueued.retries >= MAX_RETRIES {
+                //     // break this loop, report error to other nodes
+                //     // await decision on how to continue
+                //     // (or send event on a channel (to report error to other nodes), then sleep for a very long time, then try again?)
 
-                    enqueued
-                        .reporter
-                        .send(CtrlStatus::MaxRetriesReached(enqueued.retries));
+                //     enqueued
+                //         .reporter
+                //         .send(CtrlStatus::MaxRetriesReached(enqueued.retries));
 
-                    continue; // this means we will drop this cmd entirely!
-                }
-                let clone = self.clone();
+                //     continue; // this means we will drop this cmd entirely!
+                // }
+                let cmd_ctrl = self.clone();
+                cmd_ctrl
+                    .notify(Event::CmdProcessing(CmdProcessEvent::Started {
+                        job: enqueued.job.clone(),
+                        time: SystemTime::now(),
+                    }))
+                    .await;
+
                 let _ = tokio::task::spawn_local(async move {
-                    if enqueued.retries == 0 {
-                        clone
-                            .notify(Event::CmdProcessing(CmdProcessEvent::Started {
-                                job: enqueued.job.clone(),
-                                time: SystemTime::now(),
-                            }))
-                            .await;
-                    } else {
-                        clone
-                            .notify(Event::CmdProcessing(CmdProcessEvent::Retrying {
-                                job: enqueued.job.clone(),
-                                retry: enqueued.retries,
-                                time: SystemTime::now(),
-                            }))
-                            .await;
-                    }
-                    match clone
+                    match cmd_ctrl
                         .dispatcher
                         .process_cmd(enqueued.job.cmd().clone())
                         .await
@@ -200,11 +191,11 @@ impl CmdCtrl {
                         Ok(cmds) => {
                             enqueued.reporter.send(CtrlStatus::Finished);
 
-                            clone.monitoring.increment_cmds().await;
+                            cmd_ctrl.monitoring.increment_cmds().await;
 
                             // evaluate: handle these watchers?
-                            let _watchers = clone.extend(cmds, enqueued.job.id()).await;
-                            clone
+                            let _watchers = cmd_ctrl.extend(cmds, enqueued.job.parent_id()).await;
+                            cmd_ctrl
                                 .notify(Event::CmdProcessing(CmdProcessEvent::Finished {
                                     job: enqueued.job,
                                     time: SystemTime::now(),
@@ -212,20 +203,20 @@ impl CmdCtrl {
                                 .await;
                         }
                         Err(error) => {
-                            clone
+                            cmd_ctrl
                                 .notify(Event::CmdProcessing(CmdProcessEvent::Failed {
                                     job: enqueued.job.clone(),
-                                    retry: enqueued.retries,
+                                    // retry: enqueued.retries,
                                     time: SystemTime::now(),
                                     error: format!("{:?}", error),
                                 }))
                                 .await;
-                            enqueued.retries += 1;
+                            // enqueued.retries += 1;
                             enqueued.reporter.send(CtrlStatus::Error(Arc::new(error)));
-                            let _ = clone.cmd_queue.write().await.push(enqueued, prio);
+                            // let _ = cmd_ctrl.cmd_queue.write().await.push(enqueued, prio);
                         }
                     }
-                    clone.attempted.increment(); // both on fail and success
+                    cmd_ctrl.attempted.increment(); // both on fail and success
                 });
             }
         }
@@ -233,12 +224,12 @@ impl CmdCtrl {
 }
 
 #[derive(Clone, Debug)]
-struct MsgThroughput {
+struct CmdThroughput {
     msgs: Arc<AtomicUsize>,
     since: Instant,
 }
 
-impl Default for MsgThroughput {
+impl Default for CmdThroughput {
     fn default() -> Self {
         Self {
             msgs: Arc::new(AtomicUsize::new(0)),
@@ -247,7 +238,7 @@ impl Default for MsgThroughput {
     }
 }
 
-impl MsgThroughput {
+impl CmdThroughput {
     fn increment(&self) {
         let _ = self.msgs.fetch_add(1, Ordering::SeqCst);
     }
@@ -263,7 +254,7 @@ impl MsgThroughput {
 #[derive(Debug)]
 pub(crate) struct EnqueuedJob {
     job: CmdJob,
-    retries: usize,
+    // retries: usize,
     reporter: StatusReporting,
 }
 
@@ -279,7 +270,7 @@ impl std::hash::Hash for EnqueuedJob {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         //self.job.hash(state);
         self.job.id().hash(state);
-        self.retries.hash(state);
+        // self.retries.hash(state);
     }
 }
 
