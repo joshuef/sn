@@ -68,7 +68,6 @@ pub async fn new_test_api(
 #[allow(missing_debug_implementations, dead_code)]
 pub struct NodeRef {
     node: Arc<RwLock<Node>>,
-    flow_ctrl: FlowCtrl,
 }
 
 /// Start a new node.
@@ -77,7 +76,13 @@ pub async fn start_node(
     join_timeout: Duration,
 ) -> Result<(NodeRef, EventReceiver)> {
     let (node, flow_ctrl, event_receiver) = new_node(config, join_timeout).await?;
-    Ok((NodeRef { node, flow_ctrl }, event_receiver))
+
+    let _ =
+        tokio::task::spawn_local(
+            async move { flow_ctrl.process_messages_and_periodic_checks().await },
+        );
+
+    Ok((NodeRef { node }, event_receiver))
 }
 
 // Private helper to create a new node using the given config and bootstraps it to the network.
