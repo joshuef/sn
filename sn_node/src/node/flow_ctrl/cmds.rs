@@ -79,6 +79,10 @@ impl CmdJob {
         &self.cmd
     }
 
+    pub(crate) fn update_cmd(&mut self, cmd: Cmd) {
+        self.cmd = cmd
+    }
+
     pub(crate) fn priority(&self) -> i32 {
         self.priority
     }

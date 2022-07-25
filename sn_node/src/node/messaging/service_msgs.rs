@@ -11,7 +11,9 @@ use crate::node::{
     messaging::{OutgoingMsg, Peers},
     Error, Node, Result,
 };
-
+use bytes::Bytes;
+use ed25519_dalek::Signer;
+use itertools::Itertools;
 use sn_dbc::{
     Commitment, Hash, IndexedSignatureShare, KeyImage, RingCtTransaction, SpentProof,
     SpentProofContent, SpentProofShare,
@@ -33,7 +35,6 @@ use sn_interface::{
     },
 };
 
-use bytes::Bytes;
 use std::collections::{BTreeMap, BTreeSet};
 use xor_name::XorName;
 
