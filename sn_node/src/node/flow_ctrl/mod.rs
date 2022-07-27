@@ -53,6 +53,7 @@ const DYSFUNCTION_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 // 30 adult nodes checked per minute., so each node should be queried 10x in 10 mins
 // Which should hopefully trigger dysfunction if we're not getting responses back
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(2);
+// to prevent cpu racing
 const LOOP_SLEEP_INTERVAL: Duration = Duration::from_millis(10);
 
 pub(crate) struct FlowCtrl {
@@ -101,7 +102,8 @@ impl FlowCtrl {
             #[cfg(feature = "back-pressure")]
             if last_backpressure_check.elapsed() > BACKPRESSURE_INTERVAL {
                 last_backpressure_check = now;
-                cmds.extend(Self::start_backpressure_reporting(node))
+
+                cmds.extend(Self::report_backpressure(self.node.clone(), &self.cmd_ctrl).await)
             }
 
             // Things that should only happen to non elder nodes
@@ -420,7 +422,7 @@ impl FlowCtrl {
     /// know about our load just now. Though that would only be AE messages... and if backpressure is working we should
     /// not be overloaded...
     #[cfg(feature = "back-pressure")]
-    fn start_backpressure_reporting(node: Arc<RwLock<Node>>, cmd_ctrl: &CmdCtrl) -> Vec<Cmd> {
+    async fn start_backpressure_reporting(node: Arc<RwLock<Node>>, cmd_ctrl: &CmdCtrl) -> Vec<Cmd> {
         use sn_interface::messaging::DstLocation;
 
         info!("Firing off backpressure reports");
@@ -508,13 +510,11 @@ impl FlowCtrl {
                     wire_msg
                 };
 
-                let cmd = Cmd::ValidateMsg {
+                Cmd::ValidateMsg {
                     origin: sender,
                     wire_msg,
                     original_bytes,
-                };
-
-                return cmd;
+                }
             }
         }
     }
