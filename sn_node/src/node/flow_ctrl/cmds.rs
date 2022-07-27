@@ -190,11 +190,11 @@ impl Cmd {
         match self {
             // TODO: check if we can pull out node DST here
             SendMsg { wire_msg, .. } => match wire_msg.dst_location() {
-                DstLocation::EndUser(_) => 18,
-                _ => 20,
+                DstLocation::EndUser(_) => wire_msg.priority() + 9,
+                _ => wire_msg.priority() + 10,
             },
             // Note: This is more important than getting our EndUser msgs, and is a prereq for actually getting a msg out the door
-            SignOutgoingSystemMsg { .. } => 19,
+            SignOutgoingSystemMsg { msg, .. } => msg.priority() + 8,
             HandleAgreement { .. } => 10,
             HandleNewEldersAgreement { .. } => 10,
             HandleDkgOutcome { .. } => 10,
