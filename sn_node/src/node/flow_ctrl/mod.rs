@@ -163,7 +163,10 @@ impl FlowCtrl {
                     .await?;
 
                 for cmd in cmds {
-                    info!("Sending healthcheck chunk query {:?}", msg_id);
+                    info!(
+                        "Sending healthcheck chunk query to {:?} {:?}",
+                        chunk_addr, msg_id
+                    );
                     if let Err(e) = self.cmd_ctrl.push(cmd).await {
                         error!("Error sending a health check msg to the network: {:?}", e);
                     }

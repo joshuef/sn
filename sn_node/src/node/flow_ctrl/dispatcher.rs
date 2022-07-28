@@ -222,9 +222,9 @@ impl Dispatcher {
                 data_batch,
             } => {
                 // we should queue this
+                let mut node = self.node.write().await;
                 for data in data_batch {
                     trace!("data being enqueued for replication {:?}", data);
-                    let mut node = self.node.write().await;
                     if let Some(peers_set) = node.pending_data_to_replicate_to_peers.get_mut(&data)
                     {
                         debug!("data already queued, adding peer");
