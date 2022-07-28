@@ -156,7 +156,6 @@ impl CmdCtrl {
                 continue;
             }
 
-            #[cfg(feature = "test-utils")]
             {
                 let queue = self.cmd_queue.read().await;
                 debug!("Cmd queue length: {}", queue.len());
