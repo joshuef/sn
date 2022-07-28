@@ -56,26 +56,38 @@ const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 // to prevent cpu racing
 const LOOP_SLEEP_INTERVAL: Duration = Duration::from_millis(10);
 
+/// Listens for incoming msgs and forms Cmds for each,
+/// Periodically triggers other Cmd Processes (eg health checks, dysfunction etc)
 pub(crate) struct FlowCtrl {
     node: Arc<RwLock<Node>>,
     cmd_ctrl: CmdCtrl,
     incoming_msg_events: mpsc::Receiver<MsgEvent>,
+    incoming_cmds_from_apis: mpsc::Receiver<Cmd>,
 }
 
 impl FlowCtrl {
-    pub(crate) fn new(cmd_ctrl: CmdCtrl, incoming_msg_events: mpsc::Receiver<MsgEvent>) -> Self {
+    pub(crate) fn new(
+        cmd_ctrl: CmdCtrl,
+        incoming_msg_events: mpsc::Receiver<MsgEvent>,
+    ) -> (Self, mpsc::Sender<Cmd>) {
         let node = cmd_ctrl.node();
-        Self {
-            cmd_ctrl,
-            node,
-            incoming_msg_events,
-        }
+        let (cmd_sender, incoming_cmds_from_apis) = mpsc::channel(1);
+
+        (
+            Self {
+                cmd_ctrl,
+                node,
+                incoming_msg_events,
+                incoming_cmds_from_apis,
+            },
+            cmd_sender,
+        )
     }
 
     /// This is a never ending loop as long as the node is live.
     /// This loop drives the periodic events internal to the node.
     pub(crate) async fn process_messages_and_periodic_checks(mut self) {
-        debug!("Starting internal------------------------------------------");
+        debug!("Starting internal processing...");
         let mut last_probe = Instant::now();
         let mut last_section_probe = Instant::now();
         let mut last_health_check = Instant::now();
@@ -89,9 +101,38 @@ impl FlowCtrl {
         // the internal process loop
         loop {
             let now = Instant::now();
-            let is_elder = self.node.read().await.is_elder();
-
             let mut cmds = vec![];
+
+            let (info, is_elder) = {
+                let node = self.node.read().await;
+
+                (node.info(), node.is_elder())
+            };
+
+            // Finally, handle any incoming conn messages
+            // this requires mut self
+            match self.incoming_cmds_from_apis.try_recv() {
+                Ok(cmd) => cmds.push(cmd),
+                Err(TryRecvError::Empty) => {
+                    // do nothing
+                }
+                Err(TryRecvError::Disconnected) => {
+                    trace!("Senders to `incoming_cmds_from_apis` have disconnected.");
+                }
+            }
+
+            // Finally, handle any incoming conn messages
+            // this requires mut self
+            match self.incoming_msg_events.try_recv() {
+                Ok(msg) => cmds.push(self.handle_new_msg_event(info.clone(), msg).await),
+                Err(TryRecvError::Empty) => {
+                    // do nothing
+                }
+                Err(TryRecvError::Disconnected) => {
+                    trace!("Senders to `incoming_msg_events` have disconnected. Stopping node periodic tasks.");
+                    break;
+                }
+            }
 
             // happens regardless of if elder or adult
             if last_link_cleanup.elapsed() > LINK_CLEANUP_INTERVAL {
@@ -103,7 +144,11 @@ impl FlowCtrl {
             if last_backpressure_check.elapsed() > BACKPRESSURE_INTERVAL {
                 last_backpressure_check = now;
 
-                cmds.extend(Self::report_backpressure(self.node.clone(), &self.cmd_ctrl).await)
+                if let Some(cmd) =
+                    Self::report_backpressure(self.node.clone(), &self.cmd_ctrl).await
+                {
+                    cmds.push(cmd)
+                }
             }
 
             // Things that should only happen to non elder nodes
@@ -116,6 +161,21 @@ impl FlowCtrl {
                     }
                 }
 
+                let no_cmds = cmds.is_empty();
+
+                for cmd in cmds {
+                    if let Err(error) = self.fire_and_forget(cmd).await {
+                        error!("Error pushing node process cmd to controller: {error:?}");
+                    }
+                }
+
+                if no_cmds {
+                    // prevent cpu racing
+                    sleep(LOOP_SLEEP_INTERVAL).await;
+                }
+
+                // remaining cmds are for elders only.
+                // we've pushed what we have so we can continue
                 continue;
             }
 
@@ -168,30 +228,21 @@ impl FlowCtrl {
                 cmds.extend(dysf_cmds);
             }
 
-            // Finally, handle any incoming conn messages
-            // this requires mut self
-            match self.incoming_msg_events.try_recv() {
-                Ok(msg) => {
-                    let node_info = self.node.read().await.info();
-                    cmds.push(self.handle_new_msg_event(node_info.clone(), msg).await)
-                }
-                Err(TryRecvError::Empty) => {
-                    // prevent cpu racing
-                    sleep(LOOP_SLEEP_INTERVAL).await;
-                    continue;
-                }
-                Err(TryRecvError::Disconnected) => {
-                    trace!("Senders to `incoming_msg_events` have disconnected. Stopping node periodic tasks.");
-                    break;
-                }
-            }
+            let no_cmds = cmds.is_empty();
 
             for cmd in cmds {
                 if let Err(error) = self.fire_and_forget(cmd).await {
                     error!("Error pushing node process cmd to controller: {error:?}");
                 }
             }
+
+            if no_cmds {
+                // prevent cpu racing
+                sleep(LOOP_SLEEP_INTERVAL).await;
+            }
         }
+
+        error!("Internal processing ended.")
     }
 
     /// Does not await the completion of the cmd.
@@ -234,8 +285,8 @@ impl FlowCtrl {
         info!("Starting to check the section's health");
         let node = node.read().await;
         let our_prefix = node.network_knowledge.prefix();
-        let our_info = node.info();
-        let keypair = node.keypair.clone();
+        let _our_info = node.info();
+        let _keypair = node.keypair.clone();
 
         // random chunk addr will be sent to relevant nodes in the section.
         let chunk_addr = xor_name::rand::random();
@@ -333,9 +384,7 @@ impl FlowCtrl {
         use rand::seq::IteratorRandom;
         let mut rng = rand::rngs::OsRng;
 
-        let mut this_batch_address = None;
-
-        let (src_section_pk, our_info, data_queued) = {
+        let (_src_section_pk, _our_info, data_queued) = {
             let node = node.read().await;
             // get info for the WireMsg
             let src_section_pk = node.network_knowledge().section_key();
@@ -350,7 +399,7 @@ impl FlowCtrl {
             (src_section_pk, our_info, data_queued)
         };
 
-        if let Some(address) = this_batch_address {
+        if let Some(address) = data_queued {
             trace!("Data found in queue to send out");
 
             let target_peer = {
@@ -422,58 +471,27 @@ impl FlowCtrl {
     /// know about our load just now. Though that would only be AE messages... and if backpressure is working we should
     /// not be overloaded...
     #[cfg(feature = "back-pressure")]
-    async fn start_backpressure_reporting(node: Arc<RwLock<Node>>, cmd_ctrl: &CmdCtrl) -> Vec<Cmd> {
-        use sn_interface::messaging::DstLocation;
-
+    async fn report_backpressure(the_node: Arc<RwLock<Node>>, cmd_ctrl: &CmdCtrl) -> Option<Cmd> {
         info!("Firing off backpressure reports");
-        let node = node.read().await;
+        let node = the_node.read().await;
         let our_info = node.info();
-        let our_name = our_info.name();
-
-        let mut members = node.network_knowledge().section_members();
-        let section_pk = node.network_knowledge().section_key();
-        drop(node);
-
+        let mut members = node.network_knowledge().members();
         let _ = members.remove(&our_info.peer());
 
-        if let Some(load_report) = self.cmd_ctrl.dispatcher.comm().tolerated_msgs_per_s().await {
+        drop(node);
+
+        if let Some(load_report) = cmd_ctrl.dispatcher.comm().tolerated_msgs_per_s().await {
             trace!("New BackPressure report to disseminate: {:?}", load_report);
             // TODO: use comms to send report to anyone connected? (can we ID end users there?)
-            let node = self.node.read().await;
-            let cmd = node.send_system_msg(
+            let cmd = the_node.read().await.send_system_msg(
                 SystemMsg::BackPressure(load_report),
                 Peers::Multiple(members),
             );
-            if let Err(e) = self.cmd_ctrl.push(cmd).await {
-                error!("Error sending backpressure to section members: {e:?}");
-            }
+
+            Some(cmd)
+        } else {
+            None
         }
-
-        let wire_msg = match WireMsg::single_src(
-            &our_info,
-            DstLocation::Node {
-                name: peer.name(),
-                section_pk,
-            },
-            SystemMsg::BackPressure(load_report),
-            section_pk,
-        ) {
-            Ok(msg) => msg,
-            Err(e) => {
-                error!(
-                    "Error forming backpressure message to section member {:?}",
-                    e
-                );
-                continue;
-            }
-        };
-
-        cmds.push(Cmd::SendMsg {
-            wire_msg,
-            recipients: vec![*peer],
-        });
-
-        cmds
     }
 
     // Listen for a new incoming connection event and handle it.

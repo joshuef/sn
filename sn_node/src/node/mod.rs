@@ -41,6 +41,7 @@ use self::{
         cmds::Cmd,
         event::{CmdProcessEvent, Elders},
     },
+    node_starter::CmdChannel,
     proposal::Proposal,
 };
 pub use self::{

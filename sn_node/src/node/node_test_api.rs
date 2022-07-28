@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{flow_ctrl::FlowCtrl, Node, Peer, Result};
+use crate::node::{CmdChannel, Error, Node, Peer, Result};
 
 use sn_interface::{messaging::system::SystemMsg, network_knowledge::SectionAuthorityProvider};
 
@@ -29,12 +29,12 @@ use super::{
 #[allow(missing_debug_implementations)]
 pub struct NodeTestApi {
     node: Arc<RwLock<Node>>,
-    flow_ctrl: FlowCtrl,
+    cmd_channel: CmdChannel,
 }
 
 impl NodeTestApi {
-    pub(crate) fn new(node: Arc<RwLock<Node>>, flow_ctrl: FlowCtrl) -> Self {
-        Self { node, flow_ctrl }
+    pub(crate) fn new(node: Arc<RwLock<Node>>, cmd_channel: CmdChannel) -> Self {
+        Self { node, cmd_channel }
     }
 
     /// Returns the current age of this node.
@@ -98,9 +98,15 @@ impl NodeTestApi {
         self.send_cmd(cmd).await
     }
 
-    /// Send a cmd.
+    /// Send a message.
+    /// Messages sent here, either section to section or node to node.
     async fn send_cmd(&self, cmd: Cmd) -> Result<()> {
-        self.flow_ctrl.fire_and_forget(cmd).await
+        self.cmd_channel
+            .send(cmd)
+            .await
+            .map_err(|_| Error::CmdSendError)?;
+
+        Ok(())
     }
 
     /// Returns the current BLS public key set if this node has one, or

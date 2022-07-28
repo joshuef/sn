@@ -10,6 +10,7 @@ use crate::comm::Comm;
 use crate::node::{
     cfg::keypair_storage::{get_reward_pk, store_network_keypair, store_new_reward_keypair},
     flow_ctrl::{
+        cmds::Cmd,
         dispatcher::Dispatcher,
         event::{Elders, Event, MembershipEvent, NodeElderChange},
         event_channel,
@@ -52,13 +53,15 @@ const GENESIS_DBC_FILENAME: &str = "genesis_dbc";
 
 static EVENT_CHANNEL_SIZE: usize = 20;
 
+pub(crate) type CmdChannel = mpsc::Sender<Cmd>;
+
 /// Test only
 pub async fn new_test_api(
     config: &Config,
     join_timeout: Duration,
 ) -> Result<(super::NodeTestApi, EventReceiver)> {
-    let (node, flow_ctrl, event_receiver) = new_node(config, join_timeout).await?;
-    Ok((super::NodeTestApi::new(node, flow_ctrl), event_receiver))
+    let (node, cmd_channel, event_receiver) = new_node(config, join_timeout).await?;
+    Ok((super::NodeTestApi::new(node, cmd_channel), event_receiver))
 }
 
 /// A reference held to the node to keep it running.
@@ -68,6 +71,8 @@ pub async fn new_test_api(
 #[allow(missing_debug_implementations, dead_code)]
 pub struct NodeRef {
     node: Arc<RwLock<Node>>,
+    /// Sender which can be used to add a Cmd to the Node's CmdQueue
+    cmd_channel: CmdChannel,
 }
 
 /// Start a new node.
@@ -75,21 +80,16 @@ pub async fn start_node(
     config: &Config,
     join_timeout: Duration,
 ) -> Result<(NodeRef, EventReceiver)> {
-    let (node, flow_ctrl, event_receiver) = new_node(config, join_timeout).await?;
+    let (node, cmd_channel, event_receiver) = new_node(config, join_timeout).await?;
 
-    let _ =
-        tokio::task::spawn_local(
-            async move { flow_ctrl.process_messages_and_periodic_checks().await },
-        );
-
-    Ok((NodeRef { node }, event_receiver))
+    Ok((NodeRef { node, cmd_channel }, event_receiver))
 }
 
 // Private helper to create a new node using the given config and bootstraps it to the network.
 async fn new_node(
     config: &Config,
     join_timeout: Duration,
-) -> Result<(Arc<RwLock<Node>>, FlowCtrl, EventReceiver)> {
+) -> Result<(Arc<RwLock<Node>>, CmdChannel, EventReceiver)> {
     let root_dir_buf = config.root_dir()?;
     let root_dir = root_dir_buf.as_path();
     fs::create_dir_all(root_dir).await?;
@@ -106,7 +106,7 @@ async fn new_node(
 
     let used_space = UsedSpace::new(config.max_capacity());
 
-    let (node, flow_ctrl, network_events) =
+    let (node, cmd_channel, network_events) =
         bootstrap_node(config, used_space, root_dir, join_timeout).await?;
 
     {
@@ -135,7 +135,7 @@ async fn new_node(
 
     run_system_logger(LogCtx::new(node.clone()), config.resource_logs).await;
 
-    Ok((node, flow_ctrl, network_events))
+    Ok((node, cmd_channel, network_events))
 }
 
 // Private helper to create a new node using the given config and bootstraps it to the network.
@@ -144,7 +144,7 @@ async fn bootstrap_node(
     used_space: UsedSpace,
     root_storage_dir: &Path,
     join_timeout: Duration,
-) -> Result<(Arc<RwLock<Node>>, FlowCtrl, EventReceiver)> {
+) -> Result<(Arc<RwLock<Node>>, CmdChannel, EventReceiver)> {
     let (connection_event_tx, mut connection_event_rx) = mpsc::channel(1);
 
     let local_addr = config
@@ -282,7 +282,13 @@ async fn bootstrap_node(
         monitoring,
         event_sender,
     );
-    let flow_ctrl = FlowCtrl::new(cmd_ctrl, connection_event_rx);
+    let (msg_and_period_ctrl, cmd_channel) = FlowCtrl::new(cmd_ctrl, connection_event_rx);
 
-    Ok((node, flow_ctrl, event_receiver))
+    let _ = tokio::task::spawn_local(async move {
+        msg_and_period_ctrl
+            .process_messages_and_periodic_checks()
+            .await
+    });
+
+    Ok((node, cmd_channel, event_receiver))
 }
