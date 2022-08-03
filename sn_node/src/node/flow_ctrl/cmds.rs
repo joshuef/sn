@@ -244,8 +244,8 @@ impl Cmd {
             AddToPendingQueries { .. } => 6,
 
             // See [`MsgType`] for the priority constants and the range of possible values.
-            HandleValidSystemMsg { msg, .. } => msg.priority(),
-            HandleValidServiceMsg { msg, .. } => msg.priority(),
+            HandleValidSystemMsg { .. } => 5,
+            HandleValidServiceMsg { .. } => 4,
 
             ValidateMsg { .. } => -9, // before it's validated, we cannot give it high prio, as it would be a spam vector
         }

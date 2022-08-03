@@ -339,7 +339,7 @@ impl Comm {
     #[instrument(skip(self, wire_msg))]
     async fn send_to_one(&self, recipient: Peer, wire_msg: WireMsg) -> Result<SendWatcher> {
         let msg_id = wire_msg.msg_id();
-        let priority = wire_msg.priority();
+        let priority = 10;
         let msg_bytes = match wire_msg.serialize() {
             Ok(bytes) => bytes,
             Err(error) => {
