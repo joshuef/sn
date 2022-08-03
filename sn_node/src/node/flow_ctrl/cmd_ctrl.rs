@@ -123,7 +123,7 @@ impl CmdCtrl {
     /// A `debug` log will be emitted noting the CmdId merge for tracing purposes
     async fn merge_if_existing_compatible_cmd_exists(&self, new_cmd: &Cmd, new_cmd_prio: i32) -> Option<usize> {
         // let the_q = self.cmd_queue.read().await;
-        let q_vec =  self.cmd_queue.read().await.iter().map(|(enqueued_job, _prio)| {
+        let mut q_vec =  self.cmd_queue.write().await.iter().map(|(enqueued_job, _prio)| {
             (enqueued_job.job.priority(), enqueued_job.job.cmd().clone(), enqueued_job.job.id() )
         }).collect_vec() ;
 
@@ -137,7 +137,7 @@ impl CmdCtrl {
 
             match queued_cmd {
                 Cmd::CleanupPeerLinks => {
-                    debug!("matched CleanupPeerLinks");
+                    debug!("matched CleanupPeerLinks, dropping");
                     return Some(existing_cmd_id)
                 },
                 Cmd::TellEldersToStartConnectivityTest(node) => {
@@ -155,7 +155,7 @@ impl CmdCtrl {
                     //     recipients: new_cmd_recipients,
                     //     wire_msg: new_cmd_msg,
                     // } => {
-                    let mut all_recipients = enqeued_cmd_recipients.clone();
+                    let mut queued_peers = enqeued_cmd_recipients.clone();
                     if let Cmd::SendMsg { recipients, msg, .. } = new_cmd {
                         let msg_match = msg == &enqeued_outgoing_msg;
                         if msg_match {
@@ -163,15 +163,19 @@ impl CmdCtrl {
                                 "MsgMatching cmdid {existing_cmd_id} found, going to: {:?}",
                                 recipients
                             );
-                            if recipients == &all_recipients {
+                            if recipients == &queued_peers {
                                 debug!("matched SendMsg exactly, so dropping");
                                 debug!("Recipients where the same for {existing_cmd_id}");
                                 // we know the Cmd and it matches completely so we drop it
                                 return Some(existing_cmd_id);
                             }
-                            // else {
-                            //     return (msg_match, None);
-                            // }
+                            else {
+                                // here we modify the existing Cmd
+                                match queued_peers {
+
+                                }
+                                // return (msg_match, None);
+                            }
                         }
 
                     }
