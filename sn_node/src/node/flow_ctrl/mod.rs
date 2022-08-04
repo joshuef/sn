@@ -55,7 +55,7 @@ const DYSFUNCTION_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 const ADULT_HEALTH_CHECK_INTERVAL: Duration = Duration::from_millis(50);
 const ELDER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 // to prevent cpu racing
-const LOOP_SLEEP_INTERVAL: Duration = Duration::from_millis(10);
+const LOOP_SLEEP_INTERVAL: Duration = Duration::from_nanos(10);
 
 /// Listens for incoming msgs and forms Cmds for each,
 /// Periodically triggers other Cmd Processes (eg health checks, dysfunction etc)
@@ -102,6 +102,13 @@ impl FlowCtrl {
 
         // the internal process loop
         loop {
+            // First things. Lets process the next cmd
+            debug!("pre process");
+            if let Err(error) = self.cmd_ctrl.process_next_cmd().await {
+                error!("Error during cmd processing: {error:?}");
+            }
+            debug!("post process");
+
             let now = Instant::now();
             let mut cmds = vec![];
 
@@ -111,8 +118,13 @@ impl FlowCtrl {
                 (node.info(), node.is_elder())
             };
 
-            // Finally, handle any incoming conn messages
-            // this requires mut self
+            // // Finally, handle any incoming conn messages
+            // // this requires mut self
+
+            // Now, we want to check for msgs / cmds via api
+
+            // Here we handle any incoming conn messages
+            // via the API channel
             match self.incoming_cmds_from_apis.try_recv() {
                 Ok(cmd) => cmds.push(cmd),
                 Err(TryRecvError::Empty) => {
@@ -171,14 +183,12 @@ impl FlowCtrl {
                     }
                 }
 
+                // prevent cpu racing
                 if no_cmds {
-                    // prevent cpu racing
                     sleep(LOOP_SLEEP_INTERVAL).await;
-                }
+                };
 
-                // remaining cmds are for elders only.
-                // we've pushed what we have so we can continue
-                continue;
+                continue
             }
 
             // Okay, so the node is currently an elder...
@@ -248,24 +258,24 @@ impl FlowCtrl {
                 }
             }
 
+            // prevent cpu racing
             if no_cmds {
-                // prevent cpu racing
                 sleep(LOOP_SLEEP_INTERVAL).await;
-            }
+            };
         }
 
         error!("Internal processing ended.")
     }
 
     /// Does not await the completion of the cmd.
-    pub(crate) async fn fire_and_forget(&self, cmd: Cmd) -> Result<()> {
+    pub(crate) async fn fire_and_forget(&mut self, cmd: Cmd) -> Result<()> {
         let _ = self.cmd_ctrl.push(cmd).await?;
         Ok(())
     }
 
     /// Awaits the completion of the cmd.
     #[allow(unused)]
-    pub(crate) async fn await_result(&self, cmd: Cmd) -> Result<()> {
+    pub(crate) async fn await_result(&mut self, cmd: Cmd) -> Result<()> {
         use cmd_ctrl::CtrlStatus;
 
         let mut watcher = self.cmd_ctrl.push(cmd).await?;
@@ -417,12 +427,10 @@ impl FlowCtrl {
 
     /// Periodically loop over any pending data batches and queue up `send_msg` for those
     async fn replicate_queued_data(node: Arc<RwLock<Node>>) -> Result<Option<Cmd>> {
-        info!("Starting sending any queued data for replication in batches");
-
-        use rand::seq::IteratorRandom;
-        let mut rng = rand::rngs::OsRng;
-
         let (_src_section_pk, _our_info, data_queued) = {
+            use rand::seq::IteratorRandom;
+            let mut rng = rand::rngs::OsRng;
+
             let node = node.read().await;
             // get info for the WireMsg
             let src_section_pk = node.network_knowledge().section_key();

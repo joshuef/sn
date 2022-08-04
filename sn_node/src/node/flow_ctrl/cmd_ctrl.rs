@@ -43,9 +43,8 @@ const ORDER: Ordering = Ordering::SeqCst;
 /// like saying to a node "do everything everyone is asking of you, now".
 /// We're now saying to a node "do as much as you can without choking,
 /// and start with the most important things first".
-#[derive(Clone)]
 pub(crate) struct CmdCtrl {
-    cmd_queue: Arc<RwLock<PriorityQueue<EnqueuedJob, Priority>>>,
+    cmd_queue: PriorityQueue<EnqueuedJob, Priority>,
     attempted: CmdThroughput,
     monitoring: RateLimits,
     stopped: Arc<RwLock<bool>>,
@@ -60,39 +59,39 @@ impl CmdCtrl {
         monitoring: RateLimits,
         event_sender: EventSender,
     ) -> Self {
-        let session = Self {
-            cmd_queue: Arc::new(RwLock::new(PriorityQueue::new())),
+        Self {
+            cmd_queue: PriorityQueue::new(),
             attempted: CmdThroughput::default(),
             monitoring,
             stopped: Arc::new(RwLock::new(false)),
             dispatcher: Arc::new(dispatcher),
             id_counter: Arc::new(AtomicUsize::new(0)),
             event_sender,
-        };
+        }
 
-        let session_clone = session.clone();
-        let _ = tokio::task::spawn_local(async move { session_clone.keep_processing().await });
+        // let session_clone = session.clone();
+        // let _ = tokio::task::spawn_local(async move { session_clone.keep_processing().await });
 
-        session
+        // session
     }
 
     pub(crate) fn node(&self) -> Arc<RwLock<crate::node::Node>> {
         self.dispatcher.node()
     }
 
-    pub(crate) async fn push(&self, cmd: Cmd) -> Result<SendWatcher> {
+    pub(crate) async fn push(&mut self, cmd: Cmd) -> Result<SendWatcher> {
         self.push_internal(cmd, None).await
     }
 
     // consume self
     // NB that clones could still exist, however they would be in the disconnected state
     #[allow(unused)]
-    pub(crate) async fn stop(self) {
+    pub(crate) async fn stop(mut self) {
         *self.stopped.write().await = true;
-        self.cmd_queue.write().await.clear();
+        self.cmd_queue.clear();
     }
 
-    async fn extend(&self, cmds: Vec<Cmd>, parent_id: usize) -> Vec<Result<SendWatcher>> {
+    async fn extend(&mut self, cmds: Vec<Cmd>, parent_id: usize) -> Vec<Result<SendWatcher>> {
         let mut results = vec![];
 
         for cmd in cmds {
@@ -102,7 +101,8 @@ impl CmdCtrl {
         results
     }
 
-    async fn push_internal(&self, cmd: Cmd, parent_id: Option<usize>) -> Result<SendWatcher> {
+    async fn push_internal(&mut self, cmd: Cmd, parent_id: Option<usize>) -> Result<SendWatcher> {
+        debug!("pushing cmd {cmd:?}");
         if self.stopped().await {
             // should not happen (be reachable)
             return Err(Error::InvalidState);
@@ -122,8 +122,8 @@ impl CmdCtrl {
             reporter,
         };
 
-        let _ = self.cmd_queue.write().await.push(job, priority);
-
+        let _ = self.cmd_queue.push(job, priority);
+        debug!("cmd pushed to q");
         Ok(watcher)
     }
 
@@ -136,75 +136,80 @@ impl CmdCtrl {
         self.event_sender.send(event).await
     }
 
-    async fn keep_processing(&self) {
-        loop {
-            if self.stopped().await {
-                break;
-            }
-
-            let expected_rate = self.monitoring.max_cmds_per_s().await;
-            let actual_rate = self.attempted.value();
-            if actual_rate > expected_rate {
-                let diff = actual_rate - expected_rate;
-                let diff_ms = Duration::from_millis((diff * 10_f64) as u64);
-                tokio::time::sleep(diff_ms).await;
-                continue;
-            } else if self.cmd_queue.read().await.is_empty() {
-                tokio::time::sleep(SLEEP_TIME).await;
-                continue;
-            }
-
-            #[cfg(feature = "test-utils")]
-            {
-                let queue = self.cmd_queue.read().await;
-                debug!("Cmd queue length: {}", queue.len());
-            }
-
-            let queue_res = { self.cmd_queue.write().await.pop() };
-            if let Some((enqueued, _prio)) = queue_res {
-                let cmd_ctrl = self.clone();
-                cmd_ctrl
-                    .notify(Event::CmdProcessing(CmdProcessEvent::Started {
-                        job: enqueued.job.clone(),
-                        time: SystemTime::now(),
-                    }))
-                    .await;
-
-                let _ = tokio::task::spawn_local(async move {
-                    match cmd_ctrl
-                        .dispatcher
-                        .process_cmd(enqueued.job.cmd().clone())
-                        .await
-                    {
-                        Ok(cmds) => {
-                            enqueued.reporter.send(CtrlStatus::Finished);
-
-                            cmd_ctrl.monitoring.increment_cmds().await;
-
-                            // evaluate: handle these watchers?
-                            let _watchers = cmd_ctrl.extend(cmds, enqueued.job.id()).await;
-                            cmd_ctrl
-                                .notify(Event::CmdProcessing(CmdProcessEvent::Finished {
-                                    job: enqueued.job,
-                                    time: SystemTime::now(),
-                                }))
-                                .await;
-                        }
-                        Err(error) => {
-                            cmd_ctrl
-                                .notify(Event::CmdProcessing(CmdProcessEvent::Failed {
-                                    job: enqueued.job.clone(),
-                                    time: SystemTime::now(),
-                                    error: format!("{:?}", error),
-                                }))
-                                .await;
-                            enqueued.reporter.send(CtrlStatus::Error(Arc::new(error)));
-                        }
-                    }
-                    cmd_ctrl.attempted.increment(); // both on fail and success
-                });
-            }
+    /// Processes the next priority cmd
+    pub(crate) async fn process_next_cmd(&mut self) -> Result<()> {
+        debug!("processing next cmd");
+        // loop {
+        if self.stopped().await {
+            return Err(Error::CmdCtrlStopped);
         }
+
+        let expected_rate = self.monitoring.max_cmds_per_s().await;
+        let actual_rate = self.attempted.value();
+        if actual_rate > expected_rate {
+            let diff = actual_rate - expected_rate;
+            let diff_ms = Duration::from_millis((diff * 10_f64) as u64);
+            tokio::time::sleep(diff_ms).await;
+            return Ok(());
+        } else if self.cmd_queue.is_empty() {
+            tokio::time::sleep(SLEEP_TIME).await;
+            return Ok(());
+        }
+
+        #[cfg(feature = "test-utils")]
+        {
+            let queue = self.cmd_queue;
+            debug!("Cmd queue length: {}", queue.len());
+        }
+
+        debug!("q lennn {}", self.cmd_queue.len());
+        let queue_res = self.cmd_queue.pop();
+        if let Some((enqueued, _prio)) = queue_res {
+            let cmd_ctrl = self;
+            cmd_ctrl
+                .notify(Event::CmdProcessing(CmdProcessEvent::Started {
+                    job: enqueued.job.clone(),
+                    time: SystemTime::now(),
+                }))
+                .await;
+
+            // let _ = tokio::task::spawn_local(async move {
+            match cmd_ctrl
+                .dispatcher
+                .process_cmd(enqueued.job.cmd().clone())
+                .await
+            {
+                Ok(cmds) => {
+                    enqueued.reporter.send(CtrlStatus::Finished);
+
+                    cmd_ctrl.monitoring.increment_cmds().await;
+
+                    // evaluate: handle these watchers?
+                    let _watchers = cmd_ctrl.extend(cmds, enqueued.job.id()).await;
+                    cmd_ctrl
+                        .notify(Event::CmdProcessing(CmdProcessEvent::Finished {
+                            job: enqueued.job,
+                            time: SystemTime::now(),
+                        }))
+                        .await;
+                }
+                Err(error) => {
+                    cmd_ctrl
+                        .notify(Event::CmdProcessing(CmdProcessEvent::Failed {
+                            job: enqueued.job.clone(),
+                            time: SystemTime::now(),
+                            error: format!("{:?}", error),
+                        }))
+                        .await;
+                    enqueued.reporter.send(CtrlStatus::Error(Arc::new(error)));
+                }
+            }
+            cmd_ctrl.attempted.increment(); // both on fail and success
+                                            // });
+        }
+
+        Ok(())
+        // }
     }
 }
 
