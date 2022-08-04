@@ -38,7 +38,7 @@ pub(crate) const SERVICE_QUERY_PRIORITY: i32 = -10;
 /// Type of message.
 /// Note this is part of this crate's public API but this enum is
 /// never serialised or even part of the message that is sent over the wire.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum MsgType {
     #[cfg(any(feature = "chunks", feature = "registers"))]

@@ -102,17 +102,22 @@ impl FlowCtrl {
 
         // the internal process loop
         loop {
+            // First things. Lets process the next cmd
+            debug!("pre process");
+            if let Err(error) = self.cmd_ctrl.process_next_cmd().await {
+                error!("Error during cmd processing: {error:?}");
+            }
+            debug!("post process");
+
             let now = Instant::now();
             let mut cmds = vec![];
 
-            let (info, is_elder) = {
-                let node = self.node.read().await;
+            let is_elder = self.node.read().await.is_elder();
 
-                (node.info(), node.is_elder())
-            };
+            // Now, we want to check for msgs / cmds via api
 
-            // Finally, handle any incoming conn messages
-            // this requires mut self
+            // Here we handle any incoming conn messages
+            // via the API channel
             match self.incoming_cmds_from_apis.try_recv() {
                 Ok(cmd) => cmds.push(cmd),
                 Err(TryRecvError::Empty) => {
@@ -126,7 +131,10 @@ impl FlowCtrl {
             // Finally, handle any incoming conn messages
             // this requires mut self
             match self.incoming_msg_events.try_recv() {
-                Ok(msg) => cmds.push(self.handle_new_msg_event(info.clone(), msg).await),
+                Ok(msg) => cmds.push(
+                    self.handle_new_msg_event(self.node.read().await.info(), msg)
+                        .await,
+                ),
                 Err(TryRecvError::Empty) => {
                     // do nothing
                 }
@@ -171,13 +179,11 @@ impl FlowCtrl {
                     }
                 }
 
+                // prevent cpu racing
                 if no_cmds {
-                    // prevent cpu racing
                     sleep(LOOP_SLEEP_INTERVAL).await;
-                }
+                };
 
-                // remaining cmds are for elders only.
-                // we've pushed what we have so we can continue
                 continue;
             }
 
@@ -248,24 +254,24 @@ impl FlowCtrl {
                 }
             }
 
+            // prevent cpu racing
             if no_cmds {
-                // prevent cpu racing
                 sleep(LOOP_SLEEP_INTERVAL).await;
-            }
+            };
         }
 
         error!("Internal processing ended.")
     }
 
     /// Does not await the completion of the cmd.
-    pub(crate) async fn fire_and_forget(&self, cmd: Cmd) -> Result<()> {
+    pub(crate) async fn fire_and_forget(&mut self, cmd: Cmd) -> Result<()> {
         let _ = self.cmd_ctrl.push(cmd).await?;
         Ok(())
     }
 
     /// Awaits the completion of the cmd.
     #[allow(unused)]
-    pub(crate) async fn await_result(&self, cmd: Cmd) -> Result<()> {
+    pub(crate) async fn await_result(&mut self, cmd: Cmd) -> Result<()> {
         use cmd_ctrl::CtrlStatus;
 
         let mut watcher = self.cmd_ctrl.push(cmd).await?;
@@ -420,10 +426,10 @@ impl FlowCtrl {
 
     /// Periodically loop over any pending data batches and queue up `send_msg` for those
     async fn replicate_queued_data(node: Arc<RwLock<Node>>) -> Result<Option<Cmd>> {
-        use rand::seq::IteratorRandom;
-        let mut rng = rand::rngs::OsRng;
-
         let (_src_section_pk, _our_info, data_queued) = {
+            use rand::seq::IteratorRandom;
+            let mut rng = rand::rngs::OsRng;
+
             let node = node.read().await;
             // get info for the WireMsg
             let src_section_pk = node.network_knowledge().section_key();

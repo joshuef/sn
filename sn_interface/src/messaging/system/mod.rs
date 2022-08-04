@@ -55,7 +55,7 @@ pub enum AntiEntropyKind {
     Update { members: SectionPeers },
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, custom_debug::Debug)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, custom_debug::Debug)]
 #[allow(clippy::large_enum_variant)]
 /// Message sent over the among nodes
 pub enum SystemMsg {
