@@ -169,13 +169,13 @@ impl CmdCtrl {
                                 // we know the Cmd and it matches completely so we drop it
                                 return Some(existing_cmd_id);
                             }
-                            else {
-                                // here we modify the existing Cmd
-                                match queued_peers {
+                            // else {
+                            //     // here we modify the existing Cmd
+                            //     // match queued_peers {
 
-                                }
-                                // return (msg_match, None);
-                            }
+                            //     // }
+                            //     // return (msg_match, None);
+                            // }
                         }
 
                     }
