@@ -200,7 +200,7 @@ impl PeerSessionWorker {
         let actual_rate = self.attempted.value();
         if actual_rate > self.peer_desired_rate {
             let diff = actual_rate - self.peer_desired_rate;
-            let diff_ms = Duration::from_millis((diff * 1000_f64) as u64);
+            let diff_ms = Duration::from_millis((diff * 10_f64) as u64);
             tokio::time::sleep(diff_ms).await;
         }
 
