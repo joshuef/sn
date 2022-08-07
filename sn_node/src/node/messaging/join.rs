@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::comm::Comm;
-use crate::node::{flow_ctrl::cmds::Cmd, messaging::Peers, Node, Result};
+use crate::node::{flow_ctrl::cmds::Cmd, messaging::Peers, Error, Node, Result};
 
 use sn_interface::{
     elder_count,
@@ -83,7 +83,7 @@ impl Node {
             return Ok(Some(self.send_system_msg(msg, Peers::Single(peer))));
         }
 
-        let (is_age_invalid, expected_age) = self.verify_joining_node_age(&peer);
+        let (is_age_invalid, expected_age) = self.verify_joining_node_age(&peer)?;
 
         trace!(
             "our_prefix {:?} expected_age {:?} is_age_invalid {:?}",
@@ -139,38 +139,51 @@ impl Node {
         }
     }
 
-    pub(crate) fn verify_joining_node_age(&self, peer: &Peer) -> (bool, u8) {
+    pub(crate) fn verify_joining_node_age(&self, peer: &Peer) -> Result<(bool, u8)> {
         // During the first section, nodes shall use ranged age to avoid too many nodes getting
         // relocated at the same time. After the first section splits, nodes shall only
         // start with an age of MIN_ADULT_AGE
-        let current_section_size = self.network_knowledge.section_size();
-        let our_prefix = self.network_knowledge.prefix();
 
-        // Prefix will be empty for first section
-        if our_prefix.is_empty() {
-            let elders = self.network_knowledge.elders();
-            // Forces the joining node to be younger than the youngest elder in genesis section
-            // avoiding unnecessary churn.
+        if let Some(membership) = &self.membership {
+            let current_section_size = membership.current_section_members().len();
+            let our_prefix = self.network_knowledge.prefix();
 
-            // Check if `elder_count()` Elders are already present
-            if elders.len() == elder_count() {
-                // Check if the joining node is younger than the youngest elder and older than
-                // MIN_ADULT_AGE in the first section, to avoid unnecessary churn during genesis.
-                let expected_age = FIRST_SECTION_MIN_ELDER_AGE - current_section_size as u8 * 2;
-                let is_age_invalid = peer.age() <= MIN_ADULT_AGE || peer.age() > expected_age;
-                (is_age_invalid, expected_age)
+            // Prefix will be empty for first section
+            if our_prefix.is_empty() {
+                let elders = self.network_knowledge.elders();
+                // Forces the joining node to be younger than the youngest elder in genesis section
+                // avoiding unnecessary churn.
+
+                // Check if `elder_count()` Elders are already present
+                if elders.len() == elder_count() {
+                    // Check if the joining node is younger than the youngest elder and older than
+                    // MIN_ADULT_AGE in the first section, to avoid unnecessary churn during genesis.
+                    let mut expected_age =
+                        FIRST_SECTION_MIN_ELDER_AGE - (current_section_size as u8 * 2);
+                    if expected_age < MIN_ADULT_AGE {
+                        expected_age = MIN_ADULT_AGE
+                    }
+
+                    let is_age_invalid = peer.age() < MIN_ADULT_AGE || peer.age() > expected_age;
+
+                    Ok((is_age_invalid, expected_age))
+                } else {
+                    // Since enough elders haven't joined the first section calculate a value
+                    // within the range [FIRST_SECTION_MIN_ELDER_AGE, FIRST_SECTION_MAX_AGE].
+                    let expected_age = FIRST_SECTION_MAX_AGE - (current_section_size as u8 * 2);
+
+                    // TODO: avoid looping by ensure can only update to lower non-FIRST_SECTION_MIN_ELDER_AGE age
+                    let is_age_invalid = peer.age() != expected_age;
+                    Ok((is_age_invalid, expected_age))
+                }
             } else {
-                // Since enough elders haven't joined the first section calculate a value
-                // within the range [FIRST_SECTION_MIN_ELDER_AGE, FIRST_SECTION_MAX_AGE].
-                let expected_age = FIRST_SECTION_MAX_AGE - current_section_size as u8 * 2;
-                // TODO: avoid looping by ensure can only update to lower non-FIRST_SECTION_MIN_ELDER_AGE age
-                let is_age_invalid = peer.age() != expected_age;
-                (is_age_invalid, expected_age)
+                // Age should be MIN_ADULT_AGE for joining nodes after genesis section.
+                let is_age_invalid = peer.age() != MIN_ADULT_AGE;
+                Ok((is_age_invalid, MIN_ADULT_AGE))
             }
         } else {
-            // Age should be MIN_ADULT_AGE for joining nodes after genesis section.
-            let is_age_invalid = peer.age() != MIN_ADULT_AGE;
-            (is_age_invalid, MIN_ADULT_AGE)
+            error!("No membership found, cannot guage age of joining nodes.");
+            Err(Error::NoMembershipFound)
         }
     }
 

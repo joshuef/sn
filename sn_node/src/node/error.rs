@@ -33,6 +33,8 @@ pub enum Error {
     // section keys are not in chain.
     #[error("Dkg prefix is shorter than our prefix, so dropping the message.")]
     InvalidDkgPrefix,
+    #[error("No membership data exists when it is needed.")]
+    NoMembershipFound,
     #[error("Max retries reached for processing cmd, cmd dropped.")]
     MaxCmdRetriesReached(usize),
     #[error("Cmd job watcher dropped for some unknown reason.")]
@@ -138,6 +140,9 @@ pub enum Error {
     /// Network data error.
     #[error("Network data error:: {0}")]
     NetworkData(#[from] sn_interface::types::Error),
+    /// Error Sending Cmd in to node for processing
+    #[error("Error Sending Cmd in to node for processing.")]
+    CmdSendError,
     /// Network Knowledge error.
     #[error("Network data error:: {0}")]
     NetworkKnowledge(#[from] sn_interface::network_knowledge::Error),
