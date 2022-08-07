@@ -17,6 +17,8 @@ use crate::{
     },
 };
 
+use std::collections::BTreeSet;
+
 #[cfg(feature = "traceroute")]
 use sn_interface::messaging::Traceroute;
 use sn_interface::{
@@ -235,9 +237,12 @@ impl Node {
                 )
                 .await
             }
-            SystemMsg::AntiEntropyProbe => {
+            SystemMsg::AntiEntropyProbe(section_key) => {
                 trace!("Received Probe message from {}: {:?}", sender, msg_id);
-                Ok(vec![])
+                let mut recipients = BTreeSet::new();
+                let _existed = recipients.insert(sender);
+                let cmd = self.send_ae_update_to_nodes(recipients, section_key);
+                Ok(vec![cmd])
             }
             #[cfg(feature = "back-pressure")]
             SystemMsg::BackPressure(msgs_per_s) => {

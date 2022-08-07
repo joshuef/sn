@@ -291,6 +291,7 @@ mod core {
         // Miscellaneous
         ////////////////////////////////////////////////////////////////////////////
 
+        /// Generates a random AE probe for _anywhere_ on the network.
         pub(crate) fn generate_probe_msg(&self) -> Result<Cmd> {
             // Generate a random address not belonging to our Prefix
             let mut dst = xor_name::rand::random();
@@ -311,20 +312,30 @@ mod core {
                 section_key
             );
 
-            Ok(self.send_system_msg(SystemMsg::AntiEntropyProbe, Peers::Multiple(recipients)))
+            Ok(self.send_system_msg(
+                SystemMsg::AntiEntropyProbe(section_key),
+                Peers::Multiple(recipients),
+            ))
         }
 
+        /// Generates a SectionProbeMsg with our current knowledge,
+        /// targetting our section elders.
+        /// Even if we're up to date, we expect a response.
         pub(crate) fn generate_section_probe_msg(&self) -> Cmd {
             let our_section = self.network_knowledge.authority_provider();
             let recipients = our_section.elders_set();
+            let our_key = our_section.section_key();
 
             info!(
-                "ProbeMsg target section {:?} recipients {:?}",
+                "ProbeMsg target our section {:?} recipients {:?}",
                 our_section.prefix(),
                 recipients,
             );
 
-            self.send_system_msg(SystemMsg::AntiEntropyProbe, Peers::Multiple(recipients))
+            self.send_system_msg(
+                SystemMsg::AntiEntropyProbe(our_key),
+                Peers::Multiple(recipients),
+            )
         }
 
         /// returns names that are relatively dysfunctional

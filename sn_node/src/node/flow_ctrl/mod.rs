@@ -52,7 +52,8 @@ const DATA_BATCH_INTERVAL: Duration = Duration::from_millis(50);
 const DYSFUNCTION_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 // 30 adult nodes checked per minute., so each node should be queried 10x in 10 mins
 // Which should hopefully trigger dysfunction if we're not getting responses back
-const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(2);
+const ADULT_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(2);
+const ELDER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 // to prevent cpu racing
 const LOOP_SLEEP_INTERVAL: Duration = Duration::from_millis(10);
 
@@ -90,7 +91,8 @@ impl FlowCtrl {
         debug!("Starting internal processing...");
         let mut last_probe = Instant::now();
         let mut last_section_probe = Instant::now();
-        let mut last_health_check = Instant::now();
+        let mut last_adult_health_check = Instant::now();
+        let mut last_elder_health_check = Instant::now();
         let mut last_vote_check = Instant::now();
         let mut last_data_batch_check = Instant::now();
         let mut last_link_cleanup = Instant::now();
@@ -203,8 +205,8 @@ impl FlowCtrl {
                 }
             }
 
-            if last_health_check.elapsed() > HEALTH_CHECK_INTERVAL {
-                last_health_check = now;
+            if last_adult_health_check.elapsed() > ADULT_HEALTH_CHECK_INTERVAL {
+                last_adult_health_check = now;
                 let health_cmds = match Self::perform_health_checks(self.node.clone()).await {
                     Ok(cmds) => cmds,
                     Err(error) => {
@@ -213,6 +215,16 @@ impl FlowCtrl {
                     }
                 };
                 cmds.extend(health_cmds);
+            }
+
+            // The above health check only queries for chunks
+            // here we specifically ask for AE prob msgs and manually
+            // track dysfunction
+            if last_elder_health_check.elapsed() > ELDER_HEALTH_CHECK_INTERVAL {
+                last_elder_health_check = now;
+                if let Some(cmd) = Self::probe_the_section(self.node.clone()).await {
+                    cmds.push(cmd);
+                }
             }
 
             if last_vote_check.elapsed() > MISSING_VOTE_INTERVAL {
