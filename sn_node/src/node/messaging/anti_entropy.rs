@@ -377,10 +377,11 @@ impl Node {
 
         // If the new SAP's section key is the same as the section key set when the
         // bounced message was originally sent, we just drop it.
-        if dst.section_key == dst_section_key {
+        if dst.section_key == dst_section_key || !there_was_an_update {
             error!("Dropping bounced msg ({:?}) received in AE-Retry from {} as suggested new dst section key is the same as previously sent: {:?}", msg_id, sender,dst_section_key);
             Ok(None)
         } else {
+            // we are bounding a msg here...
             Ok(Some((bounced_msg, msg_id)))
         }
     }

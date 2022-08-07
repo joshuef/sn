@@ -19,6 +19,7 @@ static CONN_WEIGHTING: f32 = 2.0;
 static OP_WEIGHTING: f32 = 1.0;
 static KNOWLEDGE_WEIGHTING: f32 = 3.0;
 static DKG_WEIGHTING: f32 = 5.0;
+static AE_PROBE_WEIGHTING: f32 = 15.0;
 
 static DIFF_THRESHOLD: f32 = 1.0;
 
@@ -30,6 +31,8 @@ static DYSFUNCTIONAL_DEVIATION: f32 = 2.0;
 /// system.
 /// Issues have a xorname so they can be reliable assignd to the same nodes
 pub enum IssueType {
+    /// Represents an AEProbeMsg has been sent, but we're awaiting response.
+    AwaitingProbeResponse,
     /// Represents a Dkg issue to be tracked by Dysfunction Detection.
     Dkg,
     /// Represents a communication issue to be tracked by Dysfunction Detection.
@@ -46,6 +49,7 @@ pub struct ScoreResults {
     pub dkg_scores: BTreeMap<XorName, f32>,
     pub knowledge_scores: BTreeMap<XorName, f32>,
     pub op_scores: BTreeMap<XorName, f32>,
+    pub probe_scores: BTreeMap<XorName, f32>,
 }
 
 /// Severity of dysfunction... Is it not yet fully dysfunctional? But out of line with neighbours?
@@ -73,12 +77,17 @@ impl DysfunctionDetection {
         let mut knowledge_scores = BTreeMap::new();
         let mut op_scores = BTreeMap::new();
         let mut dkg_scores = BTreeMap::new();
+        let mut probe_scores = BTreeMap::new();
 
         let nodes = self.nodes.to_vec();
         for node in nodes.iter() {
             let _ = dkg_scores.insert(
                 *node,
                 self.calculate_node_score(node, nodes.clone(), &IssueType::Dkg),
+            );
+            let _ = probe_scores.insert(
+                *node,
+                self.calculate_node_score(node, nodes.clone(), &IssueType::AwaitingProbeResponse),
             );
             let _ = communication_scores.insert(
                 *node,
@@ -102,6 +111,7 @@ impl DysfunctionDetection {
             dkg_scores,
             knowledge_scores,
             op_scores,
+            probe_scores,
         }
     }
 
@@ -146,6 +156,14 @@ impl DysfunctionDetection {
                 };
                 count
             }
+            IssueType::AwaitingProbeResponse => {
+                let count = if let Some(issues) = self.dkg_issues.get(node) {
+                    issues.len()
+                } else {
+                    1
+                };
+                count
+            }
             IssueType::Knowledge => {
                 let count = if let Some(issues) = self.knowledge_issues.get(node) {
                     issues.len()
@@ -179,6 +197,7 @@ impl DysfunctionDetection {
         let conn_scores = scores.communication_scores;
         let dkg_scores = scores.dkg_scores;
         let knowledge_scores = scores.knowledge_scores;
+        let probe_scores = scores.probe_scores;
 
         let mut pre_z_scores = BTreeMap::default();
         let mut scores_only = vec![];
@@ -195,11 +214,18 @@ impl DysfunctionDetection {
             let node_knowledge_score = *knowledge_scores.get(&name).unwrap_or(&1.0);
             let node_knowledge_score = node_knowledge_score * KNOWLEDGE_WEIGHTING;
 
-            let final_score = ops_score + node_conn_score + node_knowledge_score + node_dkg_score;
+            let node_probe_score = *probe_scores.get(&name).unwrap_or(&1.0);
+            let node_probe_score = node_probe_score * AE_PROBE_WEIGHTING;
+
+            let final_score = ops_score
+                + node_conn_score
+                + node_knowledge_score
+                + node_dkg_score
+                + node_probe_score;
             debug!(
                 "Node {name} has a final score of {final_score} |
                 (Conns score({node_conn_score}), Dkg score({node_dkg_score}), |
-                Knowledge score({node_knowledge_score}), Ops score({score}))"
+                Knowledge score({node_knowledge_score}), Ops score({score})), AeProbe score ({node_probe_score})"
             );
 
             scores_only.push(final_score);
@@ -499,6 +525,9 @@ mod tests {
                     IssueType::Dkg => {
                         assert_eq!(score_results.dkg_scores.len(), node_count);
                     },
+                    IssueType::AwaitingProbeResponse => {
+                        assert_eq!(score_results.probe_scores.len(), node_count);
+                    },
                     IssueType::Communication => {
                         assert_eq!(score_results.communication_scores.len(), node_count);
                     },
@@ -533,6 +562,9 @@ mod tests {
                 let scores = match issue_type {
                     IssueType::Dkg => {
                         score_results.dkg_scores
+                    },
+                    IssueType::AwaitingProbeResponse => {
+                        score_results.probe_scores
                     },
                     IssueType::Communication => {
                         score_results.communication_scores

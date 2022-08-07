@@ -138,6 +138,11 @@ impl Node {
                 proof_chain,
                 members,
             } => {
+                // mark that we've received an AE update from this node
+                // AEProbes are used in health checks for elders
+                self.dysfunction_tracking
+                    .ae_update_msg_received(&sender.name());
+
                 trace!("Handling msg: AE-Update from {}: {:?}", sender, msg_id,);
                 self.handle_anti_entropy_update_msg(
                     section_auth.into_state(),
@@ -237,12 +242,16 @@ impl Node {
                 )
                 .await
             }
+            // Respond to a probe msg
+            // We always respond to probe msgs. Health checks use this to see if a node is alive
+            // and repsonsive, as well as being a method of keeping nodes up to date.
             SystemMsg::AntiEntropyProbe(section_key) => {
+                let mut cmds = vec![];
                 trace!("Received Probe message from {}: {:?}", sender, msg_id);
                 let mut recipients = BTreeSet::new();
                 let _existed = recipients.insert(sender);
-                let cmd = self.send_ae_update_to_nodes(recipients, section_key);
-                Ok(vec![cmd])
+                cmds.push(self.send_ae_update_to_nodes(recipients, section_key));
+                Ok(cmds)
             }
             #[cfg(feature = "back-pressure")]
             SystemMsg::BackPressure(msgs_per_s) => {

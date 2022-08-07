@@ -52,8 +52,8 @@ const DATA_BATCH_INTERVAL: Duration = Duration::from_millis(50);
 const DYSFUNCTION_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 // 30 adult nodes checked per minute., so each node should be queried 10x in 10 mins
 // Which should hopefully trigger dysfunction if we're not getting responses back
-const ADULT_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(2);
-const ELDER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(5);
+const ADULT_HEALTH_CHECK_INTERVAL: Duration = Duration::from_millis(50);
+const ELDER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 // to prevent cpu racing
 const LOOP_SLEEP_INTERVAL: Duration = Duration::from_millis(10);
 
@@ -222,7 +222,7 @@ impl FlowCtrl {
             // track dysfunction
             if last_elder_health_check.elapsed() > ELDER_HEALTH_CHECK_INTERVAL {
                 last_elder_health_check = now;
-                if let Some(cmd) = Self::probe_the_section(self.node.clone()).await {
+                for cmd in Self::health_check_elders_in_section(self.node.clone()).await {
                     cmds.push(cmd);
                 }
             }
@@ -366,6 +366,32 @@ impl FlowCtrl {
         } else {
             None
         }
+    }
+
+    /// Generates a probe msg, which goes to all section elders in order to
+    /// passively maintain network knowledge over time and track dysfunction
+    /// Tracking dysfunction while awaiting a response
+    async fn health_check_elders_in_section(node: Arc<RwLock<Node>>) -> Vec<Cmd> {
+        let mut cmds = vec![];
+        let node = node.read().await;
+
+        // Send a probe message to an elder
+        debug!("Going to health check elders");
+
+        let elders = node.network_knowledge.elders();
+        for elder in elders {
+            // we track a knowledge issue
+            // whhich is countered when an AE-Update is
+            cmds.push(Cmd::TrackNodeIssueInDysfunction {
+                name: elder.name(),
+                issue: sn_dysfunction::IssueType::AwaitingProbeResponse,
+            });
+        }
+
+        // Send a probe message to an elder
+        cmds.push(node.generate_section_probe_msg());
+
+        cmds
     }
 
     /// Checks the interval since last vote received during a generation

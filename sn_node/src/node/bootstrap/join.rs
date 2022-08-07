@@ -142,6 +142,7 @@ impl<'a> Joiner<'a> {
         recipients: Vec<Peer>,
         mut join_timeout: Duration,
     ) -> Result<(NodeInfo, NetworkKnowledge)> {
+        debug!("Initiating join with {recipients:?}");
         // We first use genesis key as the target section key, we'll be getting
         // a response with the latest section key for us to retry with.
         // Once we are approved to join, we will make sure the SAP we receive can

@@ -31,7 +31,6 @@ use sn_interface::{
 };
 
 use bytes::Bytes;
-use itertools::Itertools;
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
@@ -163,6 +162,8 @@ impl Node {
                     }
                 }
 
+                // TODO: track clients for spam
+
                 // Then we perform AE checks
                 if let Some(cmd) =
                     self.check_for_entropy(original_bytes, &dst.section_key, dst_name, &origin)?
@@ -234,17 +235,11 @@ impl Node {
                 if let Some(ae_cmd) =
                     self.check_for_entropy(msg_bytes, &dst.section_key, dst.name, origin)?
                 {
-                    // we want to log issues with an elder who is out of sync here...
-                    let knowledge = self.network_knowledge.elders();
-                    let mut known_elders = knowledge.iter().map(|peer| peer.name());
-
-                    if known_elders.contains(&origin.name()) {
-                        // we track a dysfunction against our elder here
-                        cmds.push(Cmd::TrackNodeIssueInDysfunction {
-                            name: origin.name(),
-                            issue: sn_dysfunction::IssueType::Knowledge,
-                        });
-                    }
+                    // we want to log issues with any node repeatedly out of sync here...
+                    cmds.push(Cmd::TrackNodeIssueInDysfunction {
+                        name: origin.name(),
+                        issue: sn_dysfunction::IssueType::Knowledge,
+                    });
 
                     cmds.push(ae_cmd);
 
