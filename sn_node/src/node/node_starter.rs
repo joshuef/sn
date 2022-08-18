@@ -145,7 +145,7 @@ async fn bootstrap_node(
     root_storage_dir: &Path,
     join_timeout: Duration,
 ) -> Result<(Arc<RwLock<Node>>, CmdChannel, EventReceiver)> {
-    let (connection_event_tx, mut connection_event_rx) = mpsc::channel(1);
+    let (connection_event_tx, mut connection_event_rx) = mpsc::channel(100);
 
     let local_addr = config
         .local_addr

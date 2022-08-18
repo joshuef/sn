@@ -29,10 +29,16 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
     #[error("CmdCtrl has stopped.")]
     CmdCtrlStopped,
-    // We shortcircuit and ignore older len prefixes to avoid that
-    // during a split DKG messages are still ongoing post-split
-    // and are sent to the neighbouring section, which causes an AE loop as
-    // section keys are not in chain.
+    /// This should not be possible as the channel is stored in node, and used to process child commands
+    #[error("No more Cmds will be received or processed. CmdChannel senders have been dropped. ")]
+    CmdCtrlChannelDropped,
+    /// This should not be possible as the channel is stored in node, and used to process incoming msgs
+    #[error("No more Msgs will be received or processed. MsgSender has been dropped. ")]
+    MsgChannelDropped,
+    /// We shortcircuit and ignore older len prefixes to avoid that
+    /// during a split DKG messages are still ongoing post-split
+    /// and are sent to the neighbouring section, which causes an AE loop as
+    /// section keys are not in chain.
     #[error("Dkg prefix is shorter than our prefix, so dropping the message.")]
     InvalidDkgPrefix,
     #[error("No membership data exists when it is needed.")]
@@ -194,6 +200,9 @@ pub enum Error {
     /// Error occurred when minting the Genesis DBC.
     #[error("Genesis DBC error:: {0}")]
     GenesisDbcError(String),
+    /// Tokio JoinHandle failed for some reason; not the internal task itself
+    #[error("Tokio thread panicked:: {0:?}")]
+    TokioJoinError(#[from] tokio::task::JoinError),
 }
 
 impl From<qp2p::ClientEndpointError> for Error {

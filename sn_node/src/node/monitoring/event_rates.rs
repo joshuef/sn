@@ -16,7 +16,7 @@ use std::{
 use tokio::sync::RwLock;
 
 // TODO: real-time configurable by operator (or by section..?)
-const MAX_CPU_LOAD: f64 = 90.0; // unit: percent
+const MAX_CPU_LOAD: f64 = 15.0; // unit: percent
 
 const ORDER: Ordering = Ordering::SeqCst;
 

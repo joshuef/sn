@@ -12,7 +12,6 @@ concurrency:
 
 env:
   CARGO_INCREMENTAL: 0  # bookkeeping for incremental builds has overhead, not useful in CI.
-  RUSTFLAGS: "-D warnings"
   SAFE_AUTH_PASSPHRASE: "x"
   SAFE_AUTH_PASSWORD: "y"
   NODE_COUNT: 15
@@ -116,6 +115,9 @@ jobs:
       - shell: bash
         if: steps.sn_changes.outputs.src == 'true'
         run: cargo clippy --all-targets --all-features
+        env:
+          RUSTFLAGS: "-D warnings"
+
 
       - name: Check documentation
         if: steps.sn_changes.outputs.src == 'true'
@@ -127,6 +129,8 @@ jobs:
     if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
     name: Unit Tests
     runs-on: ${{ matrix.os }}
+    env:
+        RUSTFLAGS: "-D warnings"
     strategy:
       fail-fast: false
       matrix:

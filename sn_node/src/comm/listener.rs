@@ -57,9 +57,11 @@ impl MsgListener {
         let remote_address = conn.remote_address();
         let mut first = true;
 
+        debug!("doing some listen internal for {remote_address}");
         while let Some(result) = incoming_msgs.next().await.transpose() {
             match result {
                 Ok(msg_bytes) => {
+                    debug!("Bytes came innnn");
                     let wire_msg = match WireMsg::from(msg_bytes.clone()) {
                         Ok(wire_msg) => wire_msg,
                         Err(error) => {
@@ -70,8 +72,10 @@ impl MsgListener {
                     };
 
                     let src_name = wire_msg.auth().src_name();
+                    debug!("and msg decoded, from {src_name}");
 
                     if first {
+                        debug!("was first...");
                         first = false;
                         let _ = self
                             .add_connection
@@ -82,15 +86,19 @@ impl MsgListener {
                             .await;
                     }
 
-                    let _send_res = self
+                    if let Err(error) = self
                         .receive_msg
                         .send(MsgEvent::Received {
                             sender: Peer::new(src_name, remote_address),
                             wire_msg,
                             original_bytes: msg_bytes,
                         })
-                        .await;
+                        .await
+                    {
+                        error!("Error pushing msg onto internal msg channel... {error:?}");
+                    }
 
+                    debug!("Msg sent onto internal channel fine");
                     // count incoming msgs..
                     let _ = self.count_msg.send(());
                 }

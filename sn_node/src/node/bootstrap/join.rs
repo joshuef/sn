@@ -222,7 +222,7 @@ impl<'a> Joiner<'a> {
                     }
 
                     trace!(
-                        "This node has been approved to join the network at {:?}!",
+                        "=========>> This node has been approved to join the network at {:?}!",
                         section_auth.prefix,
                     );
 
