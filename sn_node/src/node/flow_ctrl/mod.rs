@@ -24,6 +24,7 @@ use crate::node::{flow_ctrl::cmds::Cmd, Error, Node, Result};
 
 use sn_interface::types::log_markers::LogMarker;
 
+use std::os::unix::process;
 use std::sync::Arc;
 use tokio::{
     sync::{
@@ -66,8 +67,8 @@ impl FlowCtrl {
         )
     }
 
-    /// Start Processing all pending cmds in order
-    async fn process_next_cmds_batch(&mut self) {
+    /// Process the next pending cmds
+    async fn process_next_cmd(&mut self) {
         if let Some(next_cmd_job) = self.cmd_ctrl.next_cmd() {
             if let Err(error) = self
                 .cmd_ctrl
@@ -164,9 +165,19 @@ impl FlowCtrl {
                 break;
             }
 
+            let mut process_batch_count = 0;
             // we go through all pending cmds in this loop
             while self.cmd_ctrl.has_items_queued() {
-                self.process_next_cmds_batch().await;
+                process_batch_count += 1;
+                self.process_next_cmd().await;
+
+                if process_batch_count > 5 {
+                    // let's start fresh,
+                    // topping up the queue with anything new that's come in
+                    // or been generated
+                    continue
+
+                }
             }
 
             self.enqueue_cmds_for_standard_periodic_checks(
