@@ -150,9 +150,9 @@ impl FlowCtrl {
         loop {
             // if we want to throttle cmd throughput, we do that here.
             // if there is nothing in the cmd queue, we wait here too.
-            // self.cmd_ctrl
-            //     .wait_if_not_processing_at_expected_rate()
-            //     .await;
+            self.cmd_ctrl
+                .wait_if_not_processing_at_expected_rate()
+                .await;
 
             if let Err(error) = self.enqueue_new_incoming_msgs().await {
                 error!("{error:?}");
