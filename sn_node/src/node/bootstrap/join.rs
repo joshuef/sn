@@ -499,7 +499,7 @@ async fn send_messages(
 ) -> Result<()> {
     while let Some((msg, peers)) = outgoing_msgs.recv().await {
         for peer in peers {
-            let dst = *msg.dst();
+            let dst = msg.dst();
             let msg_id = msg.msg_id();
 
             match comm.send(peer, msg.clone()).await {

@@ -221,7 +221,7 @@ impl WireMsg {
 
     /// Return the message id of this message
     pub fn msg_id(&self) -> MsgId {
-        self.header.msg_envelope.msg_id
+        self.header.msg_envelope.msg_id.clone()
     }
 
     /// Return the auth of this message
@@ -245,8 +245,8 @@ impl WireMsg {
     }
 
     /// Return the dst of this msg
-    pub fn dst(&self) -> &Dst {
-        &self.header.msg_envelope.dst
+    pub fn dst(&self) -> Dst {
+        self.header.msg_envelope.dst.clone()
     }
 
     /// Convenience function which creates a temporary `WireMsg` from the provided

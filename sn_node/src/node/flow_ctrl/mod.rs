@@ -24,7 +24,6 @@ use crate::node::{flow_ctrl::cmds::Cmd, Error, Node, Result};
 
 use sn_interface::types::log_markers::LogMarker;
 
-use std::os::unix::process;
 use std::sync::Arc;
 use tokio::{
     sync::{
@@ -175,8 +174,7 @@ impl FlowCtrl {
                     // let's start fresh,
                     // topping up the queue with anything new that's come in
                     // or been generated
-                    continue
-
+                    continue;
                 }
             }
 

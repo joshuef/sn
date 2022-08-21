@@ -6,9 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::FlowCtrl;
 #[cfg(feature = "back-pressure")]
 use super::CmdCtrl;
+use super::FlowCtrl;
 
 use crate::node::{flow_ctrl::cmds::Cmd, messaging::Peers, Node, Result};
 

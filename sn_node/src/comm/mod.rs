@@ -211,7 +211,7 @@ impl Comm {
     #[tracing::instrument(skip(self))]
     pub(crate) async fn send(&self, peer: Peer, msg: WireMsg) -> Result<()> {
         let msg_id = msg.msg_id();
-        let dst = *msg.dst();
+        let dst = msg.dst();
         let watcher = self.send_to_one(peer, msg).await;
 
         match watcher {
