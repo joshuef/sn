@@ -25,7 +25,7 @@ use serde::Deserialize;
 use itertools::Itertools;
 #[cfg(feature = "traceroute")]
 use std::fmt::{Debug as StdDebug, Display, Formatter};
-
+use std::io::Write;
 /// In order to send a message over the wire, it needs to be serialized
 /// along with a header (`WireMsgHeader`) which contains the information needed
 /// by the recipient to properly deserialize it.
@@ -145,17 +145,26 @@ impl WireMsg {
     pub fn serialize(&self) -> Result<Bytes> {
         // First we create a buffer with the capacity
         // needed to serialize the wire msg
-        let max_length = WireMsgHeader::max_size() as usize + self.payload.len();
-        let buffer = BytesMut::with_capacity(max_length);
+        // FIXME: don't multiplying the max size by a factor of 10 and calculate the correct size.
+        let max_length = 10 * (WireMsgHeader::max_size() as usize + self.payload.len());
+        let mut buffer = vec![0u8; max_length];
 
-        let (mut buffer, _bytes_written) = self.header.write(buffer)?;
+        let (mut buf_at_payload, bytes_written) = self.header.write(&mut buffer)?;
 
         // ...and finally we write the bytes of the serialized payload to the original buffer
-        buffer.extend_from_slice(&self.payload);
+        buf_at_payload.write_all(&self.payload).map_err(|err| {
+            Error::Serialisation(format!(
+                "message payload (size {}) couldn't be serialized: {}",
+                self.payload.len(),
+                err
+            ))
+        })?;
 
         // We can now return the buffer containing the written bytes
-        Ok(buffer.freeze())
+        buffer.truncate(bytes_written as usize + self.payload.len());
+        Ok(Bytes::from(buffer))
     }
+
 
     /// Deserialize the payload from this `WireMsg` returning a `MsgType` instance.
     pub fn into_msg(&self) -> Result<MsgType> {
