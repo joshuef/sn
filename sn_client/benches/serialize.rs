@@ -16,8 +16,8 @@ use rayon::current_num_threads;
 use sn_client::{Client, Error};
 use tokio::runtime::Runtime;
 use sn_interface::{
-    messaging::{
-
+    messaging::{ MsgId,
+        AuthKind, Dst, ServiceAuth,
         data::{CreateRegister, ServiceMsg, SignedRegisterCreate, DataCmd}
         , WireMsg,
     },
@@ -26,7 +26,9 @@ use sn_interface::{
         Chunk, Keypair, PublicKey, RegisterCmd, ReplicatedData,
     },
 };
+use xor_name::XorName;
 use std::collections::BTreeMap;
+
 
 fn public_policy(owner: User) -> Policy {
     let permissions = BTreeMap::new();
@@ -104,11 +106,7 @@ async fn upload_and_read_bytes(client: &Client, bytes: Bytes) -> Result<(), Erro
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("serialize");
-    // measure over around 9s in general
-    // group.measurement_time(std::time::Duration::from_secs(90));
-    // group.sampling_mode(SamplingMode::Flat);
     let runtime = Runtime::new().unwrap();
-    // group.sample_size(10);
 
     let client = match runtime.block_on(create_client()) {
         Ok(client) => client,
@@ -128,32 +126,50 @@ fn criterion_benchmark(c: &mut Criterion) {
             Ok(x) => x,
             Err(error) => panic!("error creating register {error:?}")
         };
-        // for cmd in batch {
 
-        //     let msg = ServiceMsg::Cmd(cmd.clone());
+        let client_pk = client.public_key();
 
-        //     return Ok(msg)
+        // batch[0].clone()
+        // let payload = ServiceMsg::Cmd(batch[0].clone());
+
+        let msg_id = MsgId::new();
+
+        let payload = {
+            let msg = ServiceMsg::Cmd(batch[0].clone());
+            WireMsg::serialize_msg_payload(&msg)?
+        };
+
+        let auth = ServiceAuth {
+            public_key: client_pk,
+            signature : client.sign(&payload)
+        };
 
 
-        //     // let _ = storage
-        //     //     .clone()
-        //     //     .store(&data_set[i], pk, keypair.clone())
-        //     //     .await;
+        // let elders_len = elders.len();
 
-        // }
-            batch[0].clone()
-        // panic!("No cmds created");
-        // return Err(Error::from("No cmds created"))
+        // debug!(
+        //     "Sending cmd w/id {msg_id:?}, from {}, to {elders_len} Elders w/ dst: {dst_address:?}",
+        //     endpoint.public_addr(),
+        // );
 
-        // batch[0]
+        // let signature = client.sign(&serialised_cmd);
+
+        // Dst at thiss point is nonsense
+        // it has no bearing on serialisation speed
+        let dst = Dst {
+            name: xor_name::rand::random(),
+            section_key: bls::SecretKey::random().public_key(),
+        };
+
+        let auth = AuthKind::Service(auth);
+
+        #[allow(unused_mut)]
+        let mut wire_msg = WireMsg::new_msg(msg_id, payload, auth, dst);
+
+        wire_msg
+
     }) ;
-    // {
-    //     Ok(client) => client,
-    //     Err(err) => {
-    //         println!("Failed to create msg with {:?}", err);
-    //         return;
-    //     }
-    // };
+
 
     let seed = random_vector(1024);
 
@@ -165,92 +181,19 @@ fn criterion_benchmark(c: &mut Criterion) {
         &(&msg, &client),
         |b, (msg, client)| {
             b.to_async(&runtime).iter(|| async {
-                // let bytes = grows_vec_to_bytes(seed, 3072);
 
-                // let name = xor_name::rand::random();
-                // let tag = 15000;
-                // let owner = User::Key(client.public_key());
-                // let policy = public_policy(owner);
 
-                // let (address, mut batch) = client.create_register(name, tag, policy).await?;
-                // for cmd in batch {
-
-                    // let msg = ServiceMsg::Cmd(cmd.clone());
-                    if let Err(err) = WireMsg::serialize_msg_payload(*msg) {
+                    if let Err(err) = msg.serialize() {
                         panic!("error serialising payload");
                     };
 
 
-                    // let _ = storage
-                    //     .clone()
-                    //     .store(&data_set[i], pk, keypair.clone())
-                    //     .await;
-
-                // }
-
                 Ok::<(), Box<dyn std::error::Error>>(())
-                // match upload_and_read_bytes(client, bytes).await {
-                //     Ok(_) => {}
-                //     Err(error) => println!("3072b upload and read bench failed with {:?}", error),
-                // }
+
             });
         },
     );
-    // group.bench_with_input(
-    //     "upload and read 1mb",
-    //     &(&seed, &client),
-    //     |b, (seed, client)| {
-    //         b.to_async(&runtime).iter(|| async {
-    //             let bytes = grows_vec_to_bytes(seed, 1024 * 1024);
-    //             match upload_and_read_bytes(client, bytes).await {
-    //                 Ok(_) => {}
-    //                 Err(error) => println!("1mb upload and read bench failed with {:?}", error),
-    //             }
-    //         });
-    //     },
-    // );
-    // group.bench_with_input(
-    //     "upload and read 10mb",
-    //     &(&seed, &client),
-    //     |b, (seed, client)| {
-    //         b.to_async(&runtime).iter(|| async {
-    //             let bytes = grows_vec_to_bytes(seed, 1024 * 1024 * 10);
-    //             match upload_and_read_bytes(client, bytes).await {
-    //                 Ok(_) => {}
-    //                 Err(error) => println!("10mb upload and read bench failed with {:?}", error),
-    //             }
-    //         });
-    //     },
-    // );
 
-    // // only upload
-    // group.bench_with_input("upload 3072b", &(&seed, &client), |b, (seed, client)| {
-    //     b.to_async(&runtime).iter(|| async {
-    //         let bytes = grows_vec_to_bytes(seed, 3072);
-    //         match client.upload(bytes).await {
-    //             Ok(_) => {}
-    //             Err(error) => println!("3072b upload bench failed with {:?}", error),
-    //         }
-    //     });
-    // });
-    // group.bench_with_input("upload 1mb", &(&seed, &client), |b, (seed, client)| {
-    //     b.to_async(&runtime).iter(|| async {
-    //         let bytes = grows_vec_to_bytes(seed, 1024 * 1024);
-    //         match client.upload(bytes).await {
-    //             Ok(_) => {}
-    //             Err(error) => println!("1mb upload bench failed with {:?}", error),
-    //         }
-    //     });
-    // });
-    // group.bench_with_input("upload 10mb", &(&seed, &client), |b, (seed, client)| {
-    //     b.to_async(&runtime).iter(|| async {
-    //         let bytes = grows_vec_to_bytes(seed, 1024 * 1024 * 10);
-    //         match client.upload(bytes).await {
-    //             Ok(_) => {}
-    //             Err(error) => println!("10mb upload bench failed with {:?}", error),
-    //         }
-    //     });
-    // });
     group.finish()
 }
 
