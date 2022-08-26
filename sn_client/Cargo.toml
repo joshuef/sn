@@ -14,6 +14,9 @@ version = "0.71.0"
 name = "upload_bytes"
 harness = false
 
+[[bench]]
+name = "sss"
+
 [[example]]
 name = "client_files"
 

@@ -94,7 +94,7 @@ fn bench_wire_msg_to_many(c: &mut Criterion) -> Result<()> {
     let pk = PublicKey::Bls(bls::SecretKey::random().public_key());
     let keypair = Keypair::new_ed25519();
 
-    let mut group = c.benchmark_group("write-sampling");
+    let mut group = c.benchmark_group("serial");
 
     let runtime = Runtime::new().unwrap();
     pub const NONSENSE_CHUNK_SIZE: usize = 1024; // data size should not be important for keys() tests
