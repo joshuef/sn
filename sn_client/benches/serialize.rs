@@ -36,35 +36,54 @@ fn public_policy(owner: User) -> Policy {
 }
 
 /// Generates a random vector using provided `length`.
-fn random_vector(length: usize) -> Vec<u8> {
-    use rayon::prelude::*;
-    let threads = current_num_threads();
+fn random_vectorof_dsts(length: usize) -> Vec<Dst> {
+    let mut dsts = vec![];
 
-    if threads > length {
-        let mut rng = OsRng;
-        return ::std::iter::repeat(())
-            .map(|()| rng.gen::<u8>())
-            .take(length)
-            .collect();
+    for i in 0..length {
+        dsts.push(Dst {
+            name: xor_name::rand::random(),
+            section_key: bls::SecretKey::random().public_key(),
+        });
     }
 
-    let per_thread = length / threads;
-    let remainder = length % threads;
+    // dsts
+    // use rayon::prelude::*;
+    // let threads = current_num_threads();
 
-    let mut bytes: Vec<u8> = (0..threads)
-        .par_bridge()
-        .map(|_| vec![0u8; per_thread])
-        .map(|mut bytes| {
-            let bytes = bytes.as_mut_slice();
-            rand::thread_rng().fill(bytes);
-            bytes.to_owned()
-        })
-        .flatten()
-        .collect();
+    // if threads > length {
+    //     let mut rng = OsRng;
+    //     return ::std::iter::repeat(())
+    //         .map(|()|
+    //         Dst {
+    //             name: xor_name::rand::random(),
+    //             section_key: bls::SecretKey::random().public_key(),
+    //         })
+    //         .take(length)
+    //         .collect();
+    // }
 
-    bytes.extend(vec![0u8; remainder]);
+    // let per_thread = length / threads;
+    // // let remainder = length % threads;
 
-    bytes
+    // let mut dsts: Vec<Dst> = (0..threads)
+    //     .par_bridge()
+    //     .map(|_| vec![0u8; per_thread])
+    //     .map(|mut bytes| {
+
+    //         Dst {
+    //             name: xor_name::rand::random(),
+    //             section_key: bls::SecretKey::random().public_key(),
+    //         }
+    //         // let bytes = bytes.as_mut_slice();
+    //         // rand::thread_rng().fill(bytes);
+    //         // bytes.to_owned()
+    //     })
+    //     .flatten()
+    //     .collect();
+
+    // bytes.extend(vec![0u8; remainder]);
+
+    dsts
 }
 
 /// Grows a seed vector into a Bytes with specified length.
@@ -174,18 +193,20 @@ fn criterion_benchmark(c: &mut Criterion) {
     }) ;
 
 
-    let seed = random_vector(1024);
+    let dsts = random_vectorof_dsts(1024);
 
     group.throughput(Throughput::Bytes(std::mem::size_of_val(&msg) as u64));
 
     // upload and read
     group.bench_with_input(
         "serial",
-        &(&msg, &client),
-        |b, (msg, client)| {
+        &(&msg,&dsts),
+        |b, (msg, dsts)| {
             b.to_async(&runtime).iter(|| async {
 
+                    for dst in dsts.iter() {
 
+                    };
                     if let Err(err) = msg.serialize() {
                         panic!("error serialising payload");
                     };
