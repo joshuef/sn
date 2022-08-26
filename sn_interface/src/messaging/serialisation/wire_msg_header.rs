@@ -42,8 +42,8 @@ pub struct WireMsgHeader {
 #[derive(CustomDebug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct MsgEnvelope {
     pub msg_id: MsgId,
-    pub auth: AuthKind,
     pub dst: Dst,
+    pub auth: AuthKind,
     #[cfg(feature = "traceroute")]
     // Remove if necessary to debug from WireMsg
     #[debug(skip)]
