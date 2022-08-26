@@ -15,7 +15,8 @@ name = "upload_bytes"
 harness = false
 
 [[bench]]
-name = "sss"
+name = "serialize"
+harness = false
 
 [[example]]
 name = "client_files"
