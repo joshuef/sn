@@ -136,7 +136,10 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         let payload = {
             let msg = ServiceMsg::Cmd(batch[0].clone());
-            WireMsg::serialize_msg_payload(&msg)?
+            match WireMsg::serialize_msg_payload(&msg) {
+                Ok(payload)=>payload,
+                Err(error) => panic!("failed to serialise msg payload: {error:?}")
+            }
         };
 
         let auth = ServiceAuth {
