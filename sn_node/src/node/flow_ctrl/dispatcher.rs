@@ -73,7 +73,7 @@ impl Dispatcher {
             } => {
                 let peer_msgs = {
                     let node = self.node.read().await;
-                    into_wire_msgs(
+                    into_wire_msgs_bytes(
                         &node,
                         msg,
                         msg_id,
@@ -85,7 +85,7 @@ impl Dispatcher {
 
                 let tasks = peer_msgs
                     .into_iter()
-                    .map(|(peer, msg)| self.comm.send(peer, msg));
+                    .map(|(peer, msg)| self.comm.send(peer, msg, msg_id));
                 let results = futures::future::join_all(tasks).await;
 
                 // Any failed sends are tracked via Cmd::HandlePeerFailedSend, which will log dysfunction for any peers
@@ -287,18 +287,20 @@ async fn sleep_facility(duration: Duration) {
 // Serializes and signs the msg,
 // and produces one [`WireMsg`] instance per recipient -
 // the last step before passing it over to comms module.
-fn into_wire_msgs(
+fn into_wire_msgs_bytes(
     node: &Node,
     msg: OutgoingMsg,
     msg_id: MsgId,
     recipients: Peers,
     #[cfg(feature = "traceroute")] traceroute: Traceroute,
-) -> Result<Vec<(Peer, WireMsg)>> {
+) -> Result<Vec<(Peer, Bytes)>> {
     let (auth, payload) = node.sign_msg(msg)?;
     let recipients = match recipients {
         Peers::Single(peer) => vec![peer],
         Peers::Multiple(peers) => peers.into_iter().collect(),
     };
+
+    let mut prior_msg_bytes = None;
 
     let msgs = recipients
         .into_iter()
@@ -309,15 +311,25 @@ fn into_wire_msgs(
                     entity: entity(node),
                     traceroute: traceroute.clone(),
                 };
-                let wire_msg = wire_msg(
-                    msg_id,
-                    payload.clone(),
-                    auth.clone(),
-                    dst,
-                    #[cfg(feature = "traceroute")]
-                    trace,
-                );
-                Some((peer, wire_msg))
+
+                let wire_msg_bytes = if let Some(bytes) = prior_msg_bytes.clone() {
+                    let x = WireMsg::update_dst_in_wire_msg_bytes(&bytes, dst).ok()?;
+                    x
+                } else {
+                    let wire_msg = wire_msg(
+                        msg_id,
+                        payload.clone(),
+                        auth.clone(),
+                        dst,
+                        #[cfg(feature = "traceroute")]
+                        trace,
+                    );
+                    let bytes = wire_msg.serialize().ok()?;
+                    prior_msg_bytes = Some(bytes.clone());
+                    bytes
+                };
+
+                Some((peer, wire_msg_bytes))
             }
             Err(error) => {
                 error!("Could not get route for {peer:?}: {error}");

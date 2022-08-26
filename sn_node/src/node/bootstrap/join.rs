@@ -11,14 +11,14 @@ use super::UsedRecipientSaps;
 use crate::comm::{Comm, MsgEvent};
 use crate::log_sleep;
 use crate::node::{messages::WireMsgUtils, Error, Result};
-
+use bytes::Bytes;
 use sn_interface::{
     messaging::{
         system::{
             JoinRejectionReason, JoinRequest, JoinResponse, MembershipState, ResourceProof,
             SectionAuth, SystemMsg,
         },
-        AuthKind, Dst, MsgType, NodeAuth, WireMsg,
+        AuthKind, Dst, MsgId, MsgType, NodeAuth, WireMsg,
     },
     network_knowledge::{NetworkKnowledge, NodeInfo, SectionTree, MIN_ADULT_AGE},
     types::{keys::ed25519, log_markers::LogMarker, Peer},
@@ -66,7 +66,7 @@ pub(crate) async fn join_network(
 
 struct Joiner<'a> {
     // Sender for outgoing messages.
-    outgoing_msgs: mpsc::Sender<(WireMsg, Vec<Peer>)>,
+    outgoing_msgs: mpsc::Sender<((MsgId, Bytes), Vec<Peer>)>,
     // Receiver for incoming messages.
     incoming_msgs: &'a mut mpsc::Receiver<MsgEvent>,
     node: NodeInfo,
@@ -79,7 +79,7 @@ struct Joiner<'a> {
 impl<'a> Joiner<'a> {
     fn new(
         node: NodeInfo,
-        outgoing_msgs: mpsc::Sender<(WireMsg, Vec<Peer>)>,
+        outgoing_msgs: mpsc::Sender<((MsgId, Bytes), Vec<Peer>)>,
         incoming_msgs: &'a mut mpsc::Receiver<MsgEvent>,
         network_contacts: SectionTree,
     ) -> Self {
@@ -430,7 +430,10 @@ impl<'a> Joiner<'a> {
 
         let _res = self
             .outgoing_msgs
-            .send((wire_msg, recipients.to_vec()))
+            .send((
+                (wire_msg.msg_id(), wire_msg.serialize()?),
+                recipients.to_vec(),
+            ))
             .await;
 
         Ok(())
@@ -494,21 +497,23 @@ impl<'a> Joiner<'a> {
 
 // Keep reading messages from `rx` and send them using `comm`.
 async fn send_messages(
-    mut outgoing_msgs: mpsc::Receiver<(WireMsg, Vec<Peer>)>,
+    mut outgoing_msgs: mpsc::Receiver<((MsgId, Bytes), Vec<Peer>)>,
     comm: &Comm,
 ) -> Result<()> {
-    while let Some((msg, peers)) = outgoing_msgs.recv().await {
+    while let Some(((msg_id, msg), peers)) = outgoing_msgs.recv().await {
         for peer in peers {
-            let dst = *msg.dst();
-            let msg_id = msg.msg_id();
+            // let dst = *msg.dst();
+            // let msg_id = msg.msg_id();
 
-            match comm.send(peer, msg.clone()).await {
-                Ok(()) => trace!("Msg {msg_id:?} sent on {dst:?}"),
+            match comm.send(peer, msg.clone(), msg_id).await {
+                Ok(()) => {
+                    // trace!("Msg {msg_id:?} sent on {dst:?}")
+                }
                 Err(Error::FailedSend(peer)) => {
-                    error!("Failed to send message {msg_id:?} to {peer:?}")
+                    // error!("Failed to send message {msg_id:?} to {peer:?}")
                 }
                 Err(error) => {
-                    warn!("Error in comms when sending msg {msg_id:?} to peer {peer:?}: {error}")
+                    // warn!("Error in comms when sending msg {msg_id:?} to peer {peer:?}: {error}")
                 }
             }
         }

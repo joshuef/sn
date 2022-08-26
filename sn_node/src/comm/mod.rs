@@ -209,15 +209,15 @@ impl Comm {
     }
 
     #[tracing::instrument(skip(self))]
-    pub(crate) async fn send(&self, peer: Peer, msg: WireMsg) -> Result<()> {
-        let msg_id = msg.msg_id();
-        let dst = *msg.dst();
-        let watcher = self.send_to_one(peer, msg).await;
+    pub(crate) async fn send(&self, peer: Peer, msg: Bytes, msg_id: MsgId) -> Result<()> {
+        // let msg_id = msg.msg_id();
+        // let dst = *msg.dst();
+        let watcher = self.send_to_one(peer, msg, msg_id).await;
 
         match watcher {
             Ok(watcher) => {
                 if Self::is_sent(watcher, msg_id, peer).await {
-                    trace!("Msg {msg_id:?} sent to {dst:?}");
+                    // trace!("Msg {msg_id:?} sent to {dst:?}");
                     Ok(())
                 } else {
                     Err(Error::FailedSend(peer))
@@ -335,24 +335,29 @@ impl Comm {
     }
 
     // Helper to send a message to a single recipient.
-    #[instrument(skip(self, wire_msg))]
-    async fn send_to_one(&self, recipient: Peer, wire_msg: WireMsg) -> Result<SendWatcher> {
-        let msg_id = wire_msg.msg_id();
+    #[instrument(skip(self, msg_bytes))]
+    async fn send_to_one(
+        &self,
+        recipient: Peer,
+        msg_bytes: Bytes,
+        msg_id: MsgId,
+    ) -> Result<SendWatcher> {
+        // let msg_id = wire_msg.msg_id();
 
-        let msg_bytes = match wire_msg.serialize() {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                // early return if we cannot serialise msg
-                return Err(Error::Messaging(error));
-            }
-        };
+        // let msg_bytes = match wire_msg.serialize() {
+        //     Ok(bytes) => bytes,
+        //     Err(error) => {
+        //         // early return if we cannot serialise msg
+        //         return Err(Error::Messaging(error));
+        //     }
+        // };
 
-        trace!(
-            "Sending message ({} bytes, msg_id: {:?}) to {:?}",
-            msg_bytes.len(),
-            msg_id,
-            recipient,
-        );
+        // trace!(
+        //     "Sending message ({} bytes, msg_id: {:?}) to {:?}",
+        //     msg_bytes.len(),
+        //     // msg_id,
+        //     recipient,
+        // );
         let peer = self.get_or_create(&recipient).await;
         peer.send(msg_id, msg_bytes).await
     }

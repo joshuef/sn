@@ -154,7 +154,7 @@ impl WireMsgHeader {
     // returning the created WireMsgHeader, as well as the remaining bytes which
     // correspond to the message payload. The caller shall then take care of
     // deserializing the payload using the information provided in the `WireMsgHeader`.
-    pub fn change_dst_in_bytes(bytes: Bytes, dst: Dst) -> Result<Bytes> {
+    pub fn change_dst_in_bytes(bytes: &Bytes, dst: Dst) -> Result<Bytes> {
         let bytes_len = bytes.len();
 
         // Parse the leading metadata
