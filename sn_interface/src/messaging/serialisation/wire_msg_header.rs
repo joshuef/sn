@@ -13,6 +13,7 @@ use bincode::{
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use lazy_static::lazy_static;
+use rand_07::AsByteSliceMut;
 use serde::{Deserialize, Serialize};
 use std::mem::size_of;
 
@@ -208,9 +209,9 @@ impl WireMsgHeader {
     }
 
     /// Write header metadata and msg envelope info into a provided buffer
-    pub fn write(&self) -> Result<BytesMut> {
+    pub fn write(&self, mut payload_bytes: BytesMut) -> Result<Bytes> {
 
-        let mut buffer = BytesMut::new();
+        // let buffer = BytesMut::new();
         // first serialise the msg envelope so we can figure out the total header size
         let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
             Error::Serialisation(format!(
@@ -225,33 +226,25 @@ impl WireMsgHeader {
             version: self.version,
         };
 
-        let meta_vec = rmp_serde::to_vec_named(&meta).map_err(|err| {
-            Error::Serialisation(format!(
-                "could not serialize message envelope with Msgpack: {}",
-                err
-            ))
-        })?;
-
-        buffer.extend_from_slice(&meta_vec);
-        // buffer.extend_from_slice(msg_envelope_vec);
         // let mut buffer_writer = buffer.writer();
         // Write the leading metadata
-        // BINCODE_OPTIONS
-        //     .serialize_into(&mut buffer_writer, &meta)
-        //     .map_err(|err| {
-        //         Error::Serialisation(format!(
-        //             "header metadata couldn't be serialized into the header: {}",
-        //             err
-        //         ))
-        //     })?;
+        let meta_bytes = BINCODE_OPTIONS
+            .serialize(&meta)
+            .map_err(|err| {
+                Error::Serialisation(format!(
+                    "header metadata couldn't be serialized into the header: {}",
+                    err
+                ))
+            })?;
 
-
+        // let bytes = payload_bytes.as_byte_slice_mut();
 
         // let mut buffer = buffer_writer.into_inner();
         // ...now write the message envelope
-        buffer.extend_from_slice(&msg_envelope_vec);
-
-        Ok(buffer)
+        payload_bytes[0..meta_bytes.len()].copy_from_slice(&meta_bytes);
+        payload_bytes[meta_bytes.len()..msg_envelope_vec.len()].copy_from_slice(&msg_envelope_vec);
+        // let bytes = bytes.to_owned();
+        Ok(payload_bytes.freeze())
     }
 
     // Message Pack uses type tags, but also variable length encoding, so we expect that serialized

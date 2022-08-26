@@ -98,15 +98,23 @@ impl WireMsg {
     /// obtain the serialized payload which is needed to create the `MsgKind`.
     /// Once the caller obtains both the serialized payload and `MsgKind`,
     /// it can invoke the `new_msg` function to instantiate a `WireMsg`.
-    pub fn serialize_msg_payload<T: Serialize>(msg: &T) -> Result<Bytes> {
+    /// Leaves space at start of vec for msg header...
+    pub fn serialize_msg_payload<T: Serialize>(msg: &T) -> Result<BytesMut> {
+
+
         let payload_vec = rmp_serde::to_vec_named(&msg).map_err(|err| {
             Error::Serialisation(format!(
                 "could not serialize message payload with Msgpack: {}",
                 err
             ))
         })?;
+        let max_length = WireMsgHeader::max_size() as usize + payload_vec.len();
 
-        Ok(Bytes::from(payload_vec))
+        let mut bytes = BytesMut::zeroed(max_length);
+
+        bytes[WireMsgHeader::max_size() as usize..].clone_from_slice(&payload_vec);
+
+        Ok(bytes)
     }
 
     /// Creates a new `WireMsg` with the provided serialized payload and `MsgKind`.
@@ -153,7 +161,7 @@ impl WireMsg {
 
     /// Return the serialized `WireMsg`, which contains the `WireMsgHeader` bytes,
     /// followed by the payload bytes, i.e. the serialized Message.
-    pub fn serialize(&self) -> Result<Bytes> {
+    pub fn serialize(&self, payload_bytes: BytesMut) -> Result<Bytes> {
         // First we create a buffer with the capacity
         // needed to serialize the wire msg
         // let max_length = WireMsgHeader::max_size() as usize + self.payload.len();
@@ -161,16 +169,18 @@ impl WireMsg {
         // let buffer = BytesMut::with_capacity(max_length);
         // println!("================ startttt");
 
+        // let payload_bytes = self.payload;
+
         // println!("supposed len: {:?}", max_length);
-        let mut buffer = self.header.write()?;
+        let bytes = self.header.write(payload_bytes.clone())?;
 
         // ...and finally we write the bytes of the serialized payload to the original buffer
-        buffer.extend_from_slice(&self.payload);
+        // buffer.extend_from_slice(&self.payload);
 
         // println!("bufferlen: {:?}", buffer.len());
 
         // We can now return the buffer containing the written bytes
-        Ok(buffer.freeze())
+        Ok(bytes)
     }
 
     /// Deserialize the payload from this `WireMsg` returning a `MsgType` instance.
