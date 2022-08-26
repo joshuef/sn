@@ -8,6 +8,8 @@
 
 use bytes::{Bytes, BytesMut};
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
+use criterion::{BatchSize, BenchmarkId, Throughput};
+
 use eyre::Result;
 use rand::{rngs::OsRng, Rng};
 use rayon::current_num_threads;
@@ -15,10 +17,11 @@ use sn_client::{Client, Error};
 use tokio::runtime::Runtime;
 use sn_interface::{
     messaging::{
-        data::{CreateRegister, ServiceMsg, SignedRegisterCreate}
+        data::{CreateRegister, ServiceMsg, SignedRegisterCreate, DataCmd}
         , WireMsg,
     },
     types::{
+        RegisterAddress,
         register::{Policy, User},
         Chunk, Keypair, PublicKey, RegisterCmd, ReplicatedData,
     },
@@ -114,26 +117,83 @@ fn criterion_benchmark(c: &mut Criterion) {
             return;
         }
     };
+
+    let msg = runtime.block_on(async{
+        let name = xor_name::rand::random();
+        let tag = 15000;
+        let owner = User::Key(client.public_key());
+        let policy = public_policy(owner);
+
+        let address = RegisterAddress { name, tag };
+
+        let op = CreateRegister { name, tag, policy };
+        let signature = client.keypair.sign(&bincode::serialize(&op)?);
+
+        let cmd = DataCmd::Register(RegisterCmd::Create {
+            cmd: SignedRegisterCreate {
+                op,
+                auth: sn_interface::messaging::ServiceAuth {
+                    public_key: self.keypair.public_key(),
+                    signature,
+                },
+            },
+            section_auth: section_auth(), // obtained after presenting a valid payment to the network
+        });
+
+        // return Ok(cmd)
+
+        Ok::<Cmd, Error>(cmd)
+        // debug!("Creating Reg
+
+        // let (address, mut batch) = client.create_register(name, tag, policy).await?;
+        // for cmd in batch {
+
+        //     let msg = ServiceMsg::Cmd(cmd.clone());
+
+        //     return Ok(msg)
+
+
+        //     // let _ = storage
+        //     //     .clone()
+        //     //     .store(&data_set[i], pk, keypair.clone())
+        //     //     .await;
+
+        // }
+
+        // panic!("No cmds created");
+        // return Err(Error::)
+    })
+    ;
+    //  {
+    //     Ok(client) => client,
+    //     Err(err) => {
+    //         println!("Failed to create msg with {:?}", err);
+    //         return;
+    //     }
+    // };
+
     let seed = random_vector(1024);
+
+    group.throughput(Throughput::Bytes(std::mem::size_of_val(&msg) as u64));
 
     // upload and read
     group.bench_with_input(
         "serial",
-        &(&seed, &client),
-        |b, (seed, client)| {
+        &(&msg, &client),
+        |b, (msg, client)| {
             b.to_async(&runtime).iter(|| async {
                 // let bytes = grows_vec_to_bytes(seed, 3072);
 
-                let name = xor_name::rand::random();
-                let tag = 15000;
-                let owner = User::Key(client.public_key());
-                let policy = public_policy(owner);
+                // let name = xor_name::rand::random();
+                // let tag = 15000;
+                // let owner = User::Key(client.public_key());
+                // let policy = public_policy(owner);
 
-                let (address, mut batch) = futures::executor::block_on(client.create_register(name, tag, policy))?;
-                for cmd in batch {
+                // let (address, mut batch) = client.create_register(name, tag, policy).await?;
+                // for cmd in batch {
 
-                    let msg = ServiceMsg::Cmd(cmd.clone());
-                    if let Err(err) = WireMsg::serialize_msg_payload(&msg) {
+                    // let msg = ServiceMsg::Cmd(cmd.clone());
+                    if let Err(err) = WireMsg::serialize_msg_payload(*msg) {
                         panic!("error serialising payload");
                     };
 
@@ -143,7 +203,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     //     .store(&data_set[i], pk, keypair.clone())
                     //     .await;
 
-                }
+                // }
 
                 Ok::<(), Box<dyn std::error::Error>>(())
                 // match upload_and_read_bytes(client, bytes).await {
