@@ -208,7 +208,9 @@ impl WireMsgHeader {
     }
 
     /// Write header metadata and msg envelope info into a provided buffer
-    pub fn write(&self, buffer: BytesMut) -> Result<(BytesMut, u16)> {
+    pub fn write(&self) -> Result<BytesMut> {
+
+        let buffer = BytesMut::new();
         // first serialise the msg envelope so we can figure out the total header size
         let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
             Error::Serialisation(format!(
@@ -238,7 +240,7 @@ impl WireMsgHeader {
         // ...now write the message envelope
         buffer.extend_from_slice(&msg_envelope_vec);
 
-        Ok((buffer, meta.header_len))
+        Ok(buffer)
     }
 
     // Message Pack uses type tags, but also variable length encoding, so we expect that serialized

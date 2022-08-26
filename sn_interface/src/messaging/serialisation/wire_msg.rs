@@ -156,13 +156,18 @@ impl WireMsg {
     pub fn serialize(&self) -> Result<Bytes> {
         // First we create a buffer with the capacity
         // needed to serialize the wire msg
-        let max_length = WireMsgHeader::max_size() as usize + self.payload.len();
-        let buffer = BytesMut::with_capacity(max_length);
+        // let max_length = WireMsgHeader::max_size() as usize + self.payload.len();
+        // let buffer = BytesMut::new();
+        // let buffer = BytesMut::with_capacity(max_length);
+        // println!("================ startttt");
 
-        let (mut buffer, _bytes_written) = self.header.write(buffer)?;
+        // println!("supposed len: {:?}", max_length);
+        let mut buffer = self.header.write(buffer)?;
 
         // ...and finally we write the bytes of the serialized payload to the original buffer
         buffer.extend_from_slice(&self.payload);
+
+        // println!("bufferlen: {:?}", buffer.len());
 
         // We can now return the buffer containing the written bytes
         Ok(buffer.freeze())
