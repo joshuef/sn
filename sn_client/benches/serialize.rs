@@ -17,11 +17,11 @@ use sn_client::{Client, Error};
 use tokio::runtime::Runtime;
 use sn_interface::{
     messaging::{
+
         data::{CreateRegister, ServiceMsg, SignedRegisterCreate, DataCmd}
         , WireMsg,
     },
     types::{
-        RegisterAddress,
         register::{Policy, User},
         Chunk, Keypair, PublicKey, RegisterCmd, ReplicatedData,
     },
@@ -124,28 +124,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         let owner = User::Key(client.public_key());
         let policy = public_policy(owner);
 
-        let address = RegisterAddress { name, tag };
-
-        let op = CreateRegister { name, tag, policy };
-        let signature = client.keypair.sign(&bincode::serialize(&op)?);
-
-        let cmd = DataCmd::Register(RegisterCmd::Create {
-            cmd: SignedRegisterCreate {
-                op,
-                auth: sn_interface::messaging::ServiceAuth {
-                    public_key: self.keypair.public_key(),
-                    signature,
-                },
-            },
-            section_auth: section_auth(), // obtained after presenting a valid payment to the network
-        });
-
-        // return Ok(cmd)
-
-        Ok::<Cmd, Error>(cmd)
-        // debug!("Creating Reg
-
-        // let (address, mut batch) = client.create_register(name, tag, policy).await?;
+        let (address, mut batch) = match client.create_register(name, tag, policy).await {
+            Ok(x) => x,
+            Err(error) => panic!("error creating register {error:?}")
+        };
         // for cmd in batch {
 
         //     let msg = ServiceMsg::Cmd(cmd.clone());
@@ -159,12 +141,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         //     //     .await;
 
         // }
-
+            batch[0].clone()
         // panic!("No cmds created");
-        // return Err(Error::)
-    })
-    ;
-    //  {
+        // return Err(Error::from("No cmds created"))
+
+        // batch[0]
+    }) ;
+    // {
     //     Ok(client) => client,
     //     Err(err) => {
     //         println!("Failed to create msg with {:?}", err);
