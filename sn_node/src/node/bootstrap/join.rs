@@ -502,7 +502,8 @@ async fn send_messages(
             let dst = *msg.dst();
             let msg_id = msg.msg_id();
 
-            match comm.send(peer, msg.clone()).await {
+            let bytes = msg.serialize()?;
+            match comm.send(peer, msg_id, bytes).await {
                 Ok(()) => trace!("Msg {msg_id:?} sent on {dst:?}"),
                 Err(Error::FailedSend(peer)) => {
                     error!("Failed to send message {msg_id:?} to {peer:?}")
@@ -1019,7 +1020,7 @@ mod tests {
 
         debug!("wire msg built");
 
-        let original_bytes = wire_msg.serialize()?;
+        let original_bytes = wire_msg.serialize_and_cache_bytes()?;
 
         recv_tx.try_send(MsgEvent::Received {
             sender: bootstrap_node.peer(),

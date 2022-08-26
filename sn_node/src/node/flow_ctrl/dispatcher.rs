@@ -73,7 +73,7 @@ impl Dispatcher {
             } => {
                 let peer_msgs = {
                     let node = self.node.read().await;
-                    into_wire_msgs(
+                    into_msg_bytes(
                         &node,
                         msg,
                         msg_id,
@@ -85,7 +85,7 @@ impl Dispatcher {
 
                 let tasks = peer_msgs
                     .into_iter()
-                    .map(|(peer, msg)| self.comm.send(peer, msg));
+                    .map(|(peer, msg)| self.comm.send(peer, msg_id, msg));
                 let results = futures::future::join_all(tasks).await;
 
                 // Any failed sends are tracked via Cmd::HandlePeerFailedSend, which will log dysfunction for any peers
@@ -133,13 +133,9 @@ impl Dispatcher {
 
                 Ok(vec![])
             }
-            Cmd::ValidateMsg {
-                origin,
-                wire_msg,
-                original_bytes,
-            } => {
+            Cmd::ValidateMsg { origin, wire_msg } => {
                 let node = self.node.read().await;
-                node.validate_msg(origin, wire_msg, original_bytes).await
+                node.validate_msg(origin, wire_msg).await
             }
             Cmd::HandleValidServiceMsg {
                 msg_id,
@@ -287,44 +283,85 @@ async fn sleep_facility(duration: Duration) {
 // Serializes and signs the msg,
 // and produces one [`WireMsg`] instance per recipient -
 // the last step before passing it over to comms module.
-fn into_wire_msgs(
+fn into_msg_bytes(
     node: &Node,
     msg: OutgoingMsg,
     msg_id: MsgId,
     recipients: Peers,
     #[cfg(feature = "traceroute")] traceroute: Traceroute,
-) -> Result<Vec<(Peer, WireMsg)>> {
+) -> Result<Vec<(Peer, (Bytes, Bytes, Bytes))>> {
     let (auth, payload) = node.sign_msg(msg)?;
     let recipients = match recipients {
         Peers::Single(peer) => vec![peer],
         Peers::Multiple(peers) => peers.into_iter().collect(),
     };
+    // we first generate the XorName
+    let dst = Dst {
+        name: xor_name::rand::random(),
+        section_key: bls::SecretKey::random().public_key(),
+    };
 
-    let msgs = recipients
-        .into_iter()
-        .filter_map(|peer| match node.network_knowledge.dst(&peer.name()) {
+    #[cfg(feature = "traceroute")]
+    let trace = Trace {
+        entity: entity(node),
+        traceroute: traceroute.clone(),
+    };
+
+    let mut initial_wire_msg = wire_msg(
+        msg_id,
+        payload.clone(),
+        auth.clone(),
+        dst,
+        #[cfg(feature = "traceroute")]
+        trace,
+    );
+
+    let _bytes = initial_wire_msg.serialize_and_cache_bytes()?;
+
+    let mut msgs = vec![];
+    for peer in recipients {
+        match node.network_knowledge.generate_dst(&peer.name()) {
             Ok(dst) => {
-                #[cfg(feature = "traceroute")]
-                let trace = Trace {
-                    entity: entity(node),
-                    traceroute: traceroute.clone(),
-                };
-                let wire_msg = wire_msg(
-                    msg_id,
-                    payload.clone(),
-                    auth.clone(),
-                    dst,
-                    #[cfg(feature = "traceroute")]
-                    trace,
-                );
-                Some((peer, wire_msg))
+                // TODO log errror here isntead of throwing
+                let all_the_bytes = initial_wire_msg.serialize_with_new_dst(&dst)?;
+                msgs.push((peer, all_the_bytes));
             }
             Err(error) => {
                 error!("Could not get route for {peer:?}: {error}");
-                None
             }
-        })
-        .collect();
+        }
+    }
+    // let msgs = recipients
+    //     .into_iter()
+    //     .filter_map(|peer| match node.network_knowledge.generate_dst(&peer.name()) {
+    //         Ok(dst) => {
+    //             // TODO: We can just use the same dst for all client recipients..?
+    //             // What would that do to healthchecks?
+
+    //             // #[cfg(feature = "traceroute")]
+    //             // let trace = Trace {
+    //             //     entity: entity(node),
+    //             //     traceroute: traceroute.clone(),
+    //             // };
+
+    //             let all_the_bytes = initial_wire_msg.serialize_with_new_dst(dst).ok?;
+
+    //             // let wire_msg = wire_msg(
+    //             //     msg_id,
+    //             //     payload.clone(),
+    //             //     auth.clone(),
+    //             //     dst,
+    //             //     #[cfg(feature = "traceroute")]
+    //             //     trace,
+    //             // );
+    //             Some((peer, all_the_bytes))
+    //         }
+    //         Err(error) => {
+    //             error!("Could not get route for {peer:?}: {error}");
+    //             None
+    //         }
+    //     })
+    //     .collect();
 
     Ok(msgs)
 }

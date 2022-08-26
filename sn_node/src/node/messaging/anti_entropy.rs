@@ -230,7 +230,9 @@ impl Node {
             }
         };
 
-        let (msg_to_resend, msg_id, dst) = match WireMsg::deserialize(bounced_msg)? {
+        let (header, dst, payload) = bounced_msg;
+
+        let (msg_to_resend, msg_id, dst) = match WireMsg::deserialize(header, dst, payload)? {
             MsgType::System {
                 msg, msg_id, dst, ..
             } => (msg, msg_id, dst),
@@ -304,7 +306,7 @@ impl Node {
     // bring the sender's knowledge about us up to date.
     pub(crate) fn check_for_entropy(
         &self,
-        original_bytes: Bytes,
+        wire_msg: &WireMsg,
         dst_section_key: &BlsPublicKey,
         dst_name: XorName,
         sender: &Peer,
@@ -322,7 +324,7 @@ impl Node {
             return match self.network_knowledge.closest_signed_sap(&dst_name) {
                 Some((signed_sap, section_dag)) => {
                     info!("Found a better matching prefix {:?}", signed_sap.prefix());
-                    let bounced_msg = original_bytes;
+                    let bounced_msg = wire_msg.serialize()?;
                     // Redirect to the closest section
                     let ae_msg = SystemMsg::AntiEntropy {
                         section_auth: signed_sap.value.to_msg(),
@@ -366,7 +368,7 @@ impl Node {
             return Ok(None);
         }
 
-        let bounced_msg = original_bytes;
+        let bounced_msg = wire_msg.serialize()?;
 
         let ae_msg = self.generate_ae_msg(
             Some(*dst_section_key),
@@ -383,7 +385,7 @@ impl Node {
     pub(crate) fn ae_redirect_to_our_elders(
         &self,
         sender: Peer,
-        bounced_msg: Bytes,
+        bounced_msg: (Bytes, Bytes, Bytes),
     ) -> Result<Cmd> {
         trace!("{} in ae_redirect ", LogMarker::AeSendRedirect);
 
@@ -444,7 +446,7 @@ mod tests {
                 let dst_section_key = env.node.network_knowledge().section_key();
 
                 let cmd = env.node.check_for_entropy(
-                    msg.serialize()?,
+                    msg.serialize_and_cache_bytes()?,
                     &dst_section_key,
                     dst_name,
                     &sender,
@@ -520,7 +522,7 @@ mod tests {
             let dst_section_key = other_pk;
             let dst_name = env.other_sap.prefix().name();
 
-            let original_bytes = msg.serialize()?;
+            let original_bytes = msg.serialize_and_cache_bytes()?;
             let cmd = env
                 .node
                 .check_for_entropy(
@@ -596,7 +598,7 @@ mod tests {
             let cmd = env
                 .node
                 .check_for_entropy(
-                    msg.serialize()?,
+                    msg.serialize_and_cache_bytes()?,
                     dst_section_key,
                     dst_name,
                     &sender,
@@ -638,7 +640,7 @@ mod tests {
             let cmd = env
                 .node
                 .check_for_entropy(
-                    msg.serialize()?,
+                    msg.serialize_and_cache_bytes()?,
                     dst_section_key,
                     dst_name,
                     &sender,

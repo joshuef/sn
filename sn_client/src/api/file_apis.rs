@@ -459,9 +459,10 @@ mod tests {
 
         debug!("======> Data uploaded");
 
-        let reader_count = 25;
-        let clients = create_clients(reader_count).await?;
-        assert_eq!(reader_count, clients.len());
+        let CONSECUTIVE_CLIENT_COUNT = 25;
+        let retry_count = 10;
+        let clients = create_clients(CONSECUTIVE_CLIENT_COUNT).await?;
+        assert_eq!(CONSECUTIVE_CLIENT_COUNT, clients.len());
 
         let mut tasks = vec![];
 
@@ -470,7 +471,7 @@ mod tests {
                 tokio::spawn(async move {
                     let mut last_try = true;
                     // get the data with many retries
-                    for i in 0..250 {
+                    for i in 0..retry_count {
                         match client.read_bytes(address).await {
                             Ok(_data) => {
                                 last_try = false;

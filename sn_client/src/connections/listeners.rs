@@ -98,9 +98,9 @@ impl Session {
         src: SocketAddr,
         incoming_msgs: &mut IncomingMsgs,
     ) -> Result<Option<MsgType>, Error> {
-        if let Some(msg) = incoming_msgs.next().await? {
+        if let Some((header, dst, payload)) = incoming_msgs.next().await? {
             trace!("Incoming msg from {:?}", src);
-            let wire_msg = WireMsg::from(msg)?;
+            let wire_msg = WireMsg::from(header, dst, payload)?;
             let msg_type = wire_msg.into_msg()?;
 
             #[cfg(feature = "traceroute")]
@@ -308,7 +308,7 @@ impl Session {
         target_sap: SectionAuthorityProvider,
         section_signed: KeyedSig,
         provided_section_chain: SecuredLinkedList,
-        bounced_msg: Bytes,
+        bounced_msg: (Bytes, Bytes, Bytes),
         src_peer: Peer,
     ) -> Result<(), Error> {
         debug!("Received Anti-Entropy from {src_peer}, with SAP: {target_sap:?}");
@@ -401,7 +401,7 @@ impl Session {
     /// or if it has already been dealt with
     #[instrument(skip_all, level = "debug")]
     async fn new_target_elders(
-        bounced_msg: Bytes,
+        bounced_msg: (Bytes, Bytes, Bytes),
         received_auth: &SectionAuthorityProvider,
     ) -> Result<
         Option<(
@@ -413,21 +413,23 @@ impl Session {
         )>,
         Error,
     > {
-        let (msg_id, service_msg, dst, auth) = match WireMsg::deserialize(bounced_msg.clone())? {
-            MsgType::Service {
-                msg_id,
-                msg,
-                auth,
-                dst,
-            } => (msg_id, msg, dst, auth),
-            other => {
-                warn!(
-                    "Unexpected non-serviceMsg returned in AE-Redirect response: {:?}",
-                    other
-                );
-                return Ok(None);
-            }
-        };
+        let (header, dst, payload) = bounced_msg;
+        let (msg_id, service_msg, dst, auth) =
+            match WireMsg::deserialize(header.clone(), dst.clone(), payload.clone())? {
+                MsgType::Service {
+                    msg_id,
+                    msg,
+                    auth,
+                    dst,
+                } => (msg_id, msg, dst, auth),
+                other => {
+                    warn!(
+                        "Unexpected non-serviceMsg returned in AE-Redirect response: {:?}",
+                        other
+                    );
+                    return Ok(None);
+                }
+            };
 
         trace!(
             "Bounced msg ({:?}) received in an AE response: {:?}",

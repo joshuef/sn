@@ -41,7 +41,8 @@ multibase = "~0.9.1"
 num_cpus = "1.13.0"
 priority-queue = "1.2.1"
 proptest = { version ="1.0.0", optional =true }
-qp2p = "~0.28.3"
+qp2p = {git="https://github.com/joshuef/qp2p", branch="Feat-RepresentativeUserMsg"}
+# qp2p = "~0.28.3"
 rand = "~0.8.5"
 rand-07 = { package = "rand", version = "0.7.3" } # required till ed25519-dalek upgrades to rand v0.8
 rayon = "1.5.1"

@@ -116,13 +116,7 @@ pub enum Cmd {
     CleanupPeerLinks,
     /// Validate `wire_msg` from `sender`.
     /// Holding the WireMsg that has been received from the network,
-    ValidateMsg {
-        origin: Peer,
-        wire_msg: WireMsg,
-        #[debug(skip)]
-        // original bytes to avoid reserializing for entropy checks
-        original_bytes: Bytes,
-    },
+    ValidateMsg { origin: Peer, wire_msg: WireMsg },
     /// Log a Node's Punishment, this pulls dysfunction and write locks out of some functions
     TrackNodeIssueInDysfunction { name: XorName, issue: IssueType },
     /// Adds peer to set of recipients of an already pending query,

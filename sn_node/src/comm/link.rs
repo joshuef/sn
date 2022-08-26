@@ -106,8 +106,13 @@ impl Link {
     /// belongs to. See [`send_with`](Self::send_with) if you want to send a message with specific
     /// configuration.
     #[allow(unused)]
-    pub(crate) async fn send(&mut self, msg: Bytes) -> Result<(), SendToOneError> {
-        self.send_with(msg, 0, None).await
+    pub(crate) async fn send(
+        &mut self,
+        header: Bytes,
+        dst: Bytes,
+        payload: Bytes,
+    ) -> Result<(), SendToOneError> {
+        self.send_with(header, dst, payload, 0, None).await
     }
 
     /// Send a message to the peer using the given configuration.
@@ -116,7 +121,9 @@ impl Link {
     #[instrument(skip_all)]
     pub(crate) async fn send_with(
         &mut self,
-        msg: Bytes,
+        header: Bytes,
+        dst: Bytes,
+        payload: Bytes,
         priority: i32,
         retry_config: Option<&RetryConfig>,
     ) -> Result<(), SendToOneError> {
@@ -126,7 +133,10 @@ impl Link {
             self.queue.len(),
             self.peer
         );
-        match conn.send_with(msg, priority, retry_config).await {
+        match conn
+            .send_with(header, dst, payload, priority, retry_config)
+            .await
+        {
             Ok(()) => {
                 #[cfg(feature = "back-pressure")]
                 self.listener.count_msg().await;

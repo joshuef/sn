@@ -19,7 +19,7 @@ use std::mem::size_of;
 #[cfg(feature = "traceroute")]
 use crate::messaging::Traceroute;
 use custom_debug::Debug as CustomDebug;
-
+use std::io::Write;
 // Current version of the messaging protocol.
 // At this point this implementation supports only this version.
 const MESSAGING_PROTO_VERSION: u16 = 1u16;
@@ -43,7 +43,6 @@ pub struct WireMsgHeader {
 pub struct MsgEnvelope {
     pub msg_id: MsgId,
     pub auth: AuthKind,
-    pub dst: Dst,
     #[cfg(feature = "traceroute")]
     // Remove if necessary to debug from WireMsg
     #[debug(skip)]
@@ -84,7 +83,7 @@ impl WireMsgHeader {
     pub fn new(
         msg_id: MsgId,
         auth: AuthKind,
-        dst: Dst,
+        // dst: Dst,
         #[cfg(feature = "traceroute")] traceroute: Traceroute,
     ) -> Self {
         Self {
@@ -93,7 +92,7 @@ impl WireMsgHeader {
             msg_envelope: MsgEnvelope {
                 msg_id,
                 auth,
-                dst,
+                // dst,
                 #[cfg(feature = "traceroute")]
                 traceroute,
             },
@@ -104,7 +103,7 @@ impl WireMsgHeader {
     // returning the created WireMsgHeader, as well as the remaining bytes which
     // correspond to the message payload. The caller shall then take care of
     // deserializing the payload using the information provided in the `WireMsgHeader`.
-    pub fn from(mut bytes: Bytes) -> Result<(Self, Bytes)> {
+    pub fn from(mut bytes: Bytes) -> Result<Self> {
         let bytes_len = bytes.len();
 
         // Parse the leading metadata
@@ -142,14 +141,11 @@ impl WireMsgHeader {
             msg_envelope,
         };
 
-        // Get a slice for the payload bytes, i.e. the bytes after the header bytes
-        let payload_bytes = bytes.split_off(meta.header_len());
-
-        Ok((header, payload_bytes))
+        Ok(header)
     }
 
     /// Write header metadata and msg envelope info into a provided buffer
-    pub fn write(&self, buffer: BytesMut) -> Result<(BytesMut, u16)> {
+    pub fn write(&self) -> Result<Bytes> {
         // first serialise the msg envelope so we can figure out the total header size
         let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
             Error::Serialisation(format!(
@@ -164,7 +160,7 @@ impl WireMsgHeader {
             version: self.version,
         };
 
-        let mut buffer_writer = buffer.writer();
+        let mut buffer_writer = BytesMut::new().writer();
         // Write the leading metadata
         BINCODE_OPTIONS
             .serialize_into(&mut buffer_writer, &meta)
@@ -175,11 +171,14 @@ impl WireMsgHeader {
                 ))
             })?;
 
-        let mut buffer = buffer_writer.into_inner();
+        // let mut buffer = buffer_writer.into_inner();
         // ...now write the message envelope
-        buffer.extend_from_slice(&msg_envelope_vec);
+        buffer_writer
+            .write(&msg_envelope_vec)
+            .map_err(|_| Error::Serialisation("ups".to_string()))?;
+        // buffer_writer.write(&payload);
 
-        Ok((buffer, meta.header_len))
+        Ok(buffer_writer.into_inner().freeze())
     }
 
     // Message Pack uses type tags, but also variable length encoding, so we expect that serialized

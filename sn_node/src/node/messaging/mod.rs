@@ -59,13 +59,8 @@ impl Peers {
 
 // Message handling
 impl Node {
-    #[instrument(skip(self, original_bytes))]
-    pub(crate) async fn validate_msg(
-        &self,
-        origin: Peer,
-        wire_msg: WireMsg,
-        original_bytes: Bytes,
-    ) -> Result<Vec<Cmd>> {
+    #[instrument(skip(self))]
+    pub(crate) async fn validate_msg(&self, origin: Peer, wire_msg: WireMsg) -> Result<Vec<Cmd>> {
         // Deserialize the payload of the incoming message
         let msg_id = wire_msg.msg_id();
         // payload needed for aggregation
@@ -101,15 +96,7 @@ impl Node {
                 // Check for entropy before we proceed further
                 // Anythign returned here means there's an issue and we should
                 // short-circuit below
-                let cmds = self
-                    .apply_ae(
-                        &origin,
-                        &msg,
-                        &wire_msg,
-                        &dst,
-                        original_bytes.clone(), // a cheap clone w/ Bytes
-                    )
-                    .await?;
+                let cmds = self.apply_ae(&origin, &msg, &wire_msg, &dst).await?;
 
                 if !cmds.is_empty() {
                     // short circuit and send those AE responses
@@ -148,7 +135,9 @@ impl Node {
 
                 if self.is_not_elder() {
                     trace!("Redirecting from adult to section elders");
-                    return Ok(vec![self.ae_redirect_to_our_elders(origin, original_bytes)?]);
+                    return Ok(vec![
+                        self.ae_redirect_to_our_elders(origin, wire_msg.serialize()?)?
+                    ]);
                 }
 
                 // First we check if it's query and we have too many on the go at the moment...
@@ -164,7 +153,7 @@ impl Node {
 
                 // Then we perform AE checks
                 if let Some(cmd) =
-                    self.check_for_entropy(original_bytes, &dst.section_key, dst_name, &origin)?
+                    self.check_for_entropy(&wire_msg, &dst.section_key, dst_name, &origin)?
                 {
                     // short circuit and send those AE responses
                     return Ok(vec![cmd]);
@@ -199,7 +188,6 @@ impl Node {
         msg: &SystemMsg,
         wire_msg: &WireMsg,
         dst: &Dst,
-        msg_bytes: Bytes,
     ) -> Result<Vec<Cmd>> {
         let mut cmds = vec![];
         // Adult nodes don't need to carry out entropy checking,
@@ -225,7 +213,7 @@ impl Node {
             }
             _ => {
                 if let Some(ae_cmd) =
-                    self.check_for_entropy(msg_bytes, &dst.section_key, dst.name, origin)?
+                    self.check_for_entropy(wire_msg, &dst.section_key, dst.name, origin)?
                 {
                     // we want to log issues with any node repeatedly out of sync here...
                     cmds.push(Cmd::TrackNodeIssueInDysfunction {

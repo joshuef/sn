@@ -34,10 +34,17 @@ use std::fmt::{Debug as StdDebug, Display, Formatter};
 pub struct WireMsg {
     /// Message header
     pub header: WireMsgHeader,
+    #[debug(skip)]
+    /// Serialized Message header
+    pub serialized_header: Option<Bytes>,
     /// Serialised message
     #[debug(skip)]
     pub payload: Bytes,
-
+    /// The target dst
+    pub dst: Dst,
+    #[debug(skip)]
+    /// Serialized Message header
+    pub serialized_dst: Option<Bytes>,
     /// Extra debug info if the relevant feature is enabled.
     // This is behind a feature because it's potentially expensive to carry around the message as
     // well as its serialization.
@@ -108,6 +115,25 @@ impl WireMsg {
 
         Ok(Bytes::from(payload_vec))
     }
+    /// Serializes the dst provided. This function shall be used to
+    /// obtain the serialized dst payload which is needed..........................
+    pub fn serialize_dst_payload(dst: &Dst) -> Result<Bytes> {
+        let dst_vec = rmp_serde::to_vec_named(dst).map_err(|err| {
+            Error::Serialisation(format!(
+                "could not serialize dst payload with Msgpack: {}",
+                err
+            ))
+        })?;
+
+        Ok(Bytes::from(dst_vec))
+    }
+    /// Serializes the dst provided. This function shall be used to
+    /// obtain the serialized dst payload which is needed..........................
+    pub fn serialize_msg_dst(&self) -> Result<Bytes> {
+        Self::serialize_dst_payload(&self.dst)
+
+        // Ok(Bytes::from(dst_vec))
+    }
 
     /// Creates a new `WireMsg` with the provided serialized payload and `MsgKind`.
     pub fn new_msg(msg_id: MsgId, payload: Bytes, auth: AuthKind, dst: Dst) -> Self {
@@ -115,11 +141,13 @@ impl WireMsg {
             header: WireMsgHeader::new(
                 msg_id,
                 auth,
-                dst,
                 #[cfg(feature = "traceroute")]
                 Traceroute(vec![]),
             ),
+            dst,
             payload,
+            serialized_dst: None,
+            serialized_header: None,
             #[cfg(feature = "test-utils")]
             payload_debug: None,
         }
@@ -127,34 +155,93 @@ impl WireMsg {
 
     /// Attempts to create an instance of `WireMsg` by deserialising the bytes provided.
     /// To succeed, the bytes should contain at least a valid `WireMsgHeader`.
-    pub fn from(bytes: Bytes) -> Result<Self> {
+    pub fn from(header_bytes: Bytes, dst_bytes: Bytes, payload: Bytes) -> Result<Self> {
         // Deserialize the header bytes first
-        let (header, payload) = WireMsgHeader::from(bytes)?;
+        let header = WireMsgHeader::from(header_bytes.clone())?;
+        let dst: Dst = rmp_serde::from_slice(&dst_bytes).map_err(|err| {
+            Error::FailedToParse(format!(
+                "Message dst couldn't be deserialized from the dst bytes: {}",
+                err
+            ))
+        })?;
 
         // We can now create a deserialized WireMsg using the read bytes
         Ok(Self {
             header,
+            dst,
             payload,
+            serialized_dst: Some(dst_bytes),
+            serialized_header: Some(header_bytes),
             #[cfg(feature = "test-utils")]
             payload_debug: None,
         })
     }
 
-    /// Return the serialized `WireMsg`, which contains the `WireMsgHeader` bytes,
-    /// followed by the payload bytes, i.e. the serialized Message.
-    pub fn serialize(&self) -> Result<Bytes> {
-        // First we create a buffer with the capacity
-        // needed to serialize the wire msg
-        let max_length = WireMsgHeader::max_size() as usize + self.payload.len();
-        let buffer = BytesMut::with_capacity(max_length);
+    /// Return the serialized `WireMsgHeader`, the Dst and the Payload bytes
+    pub fn serialize(&self) -> Result<(Bytes, Bytes, Bytes)> {
+        let header = if let Some(bytes) = &self.serialized_header {
+            bytes.clone()
+        } else {
+            // First we create a buffer with the capacity
+            // needed to serialize the wire msg
+            self.header.write()?
+        };
 
-        let (mut buffer, _bytes_written) = self.header.write(buffer)?;
-
-        // ...and finally we write the bytes of the serialized payload to the original buffer
-        buffer.extend_from_slice(&self.payload);
+        let dst = if let Some(bytes) = &self.serialized_dst {
+            bytes.clone()
+        } else {
+            self.serialize_msg_dst()?
+        };
 
         // We can now return the buffer containing the written bytes
-        Ok(buffer.freeze())
+        Ok((header, dst, self.payload.clone()))
+    }
+
+    /// Return the serialized `WireMsgHeader`, the Dst and the Payload bytes
+    /// This writes the bytes to the WireMsg itself
+    pub fn serialize_and_cache_bytes(&mut self) -> Result<(Bytes, Bytes, Bytes)> {
+        let header = if let Some(bytes) = &self.serialized_header {
+            bytes.clone()
+        } else {
+            // First we create a buffer with the capacity
+            // needed to serialize the wire msg
+            self.header.write()?
+        };
+
+        self.serialized_header = Some(header.clone());
+
+        let dst = if let Some(bytes) = &self.serialized_dst {
+            bytes.clone()
+        } else {
+            self.serialize_msg_dst()?
+        };
+
+        self.serialized_dst = Some(dst.clone());
+
+        // We can now return the buffer containing the written bytes
+        Ok((header, dst, self.payload.clone()))
+    }
+
+    /// Return the serialized `WireMsg`, which contains the `WireMsgHeader` bytes,
+    /// followed by the payload bytes, i.e. the serialized Message.
+    pub fn serialize_with_new_dst(&self, dst: &Dst) -> Result<(Bytes, Bytes, Bytes)> {
+        let header = if let Some(bytes) = &self.serialized_header {
+            // println!("header exists");
+            bytes.clone()
+        } else {
+            // First we create a buffer with the capacity
+            // needed to serialize the wire msg
+            let max_length = WireMsgHeader::max_size() as usize + self.payload.len();
+            // let buffer = BytesMut::with_capacity(max_length);
+
+            self.header.write()?
+        };
+
+        // println!("header exists");
+        let dst = Self::serialize_dst_payload(dst)?;
+
+        // We can now return the buffer containing the written bytes
+        Ok((header, dst, self.payload.clone()))
     }
 
     /// Deserialize the payload from this `WireMsg` returning a `MsgType` instance.
@@ -179,7 +266,7 @@ impl WireMsg {
                 Ok(MsgType::Service {
                     msg_id: self.header.msg_envelope.msg_id,
                     auth,
-                    dst: self.header.msg_envelope.dst,
+                    dst: self.dst,
                     msg,
                 })
             }
@@ -194,7 +281,7 @@ impl WireMsg {
                         node_signed,
                         &self.payload,
                     )?),
-                    dst: self.header.msg_envelope.dst,
+                    dst: self.dst,
                     msg,
                 })
             }
@@ -212,7 +299,7 @@ impl WireMsg {
                         bls_share_signed,
                         &self.payload,
                     )?),
-                    dst: self.header.msg_envelope.dst,
+                    dst: self.dst,
                     msg,
                 })
             }
@@ -231,7 +318,7 @@ impl WireMsg {
 
     /// Return the destination section `PublicKey` for this message
     pub fn dst_section_key(&self) -> bls::PublicKey {
-        self.header.msg_envelope.dst.section_key
+        self.dst.section_key
     }
 
     /// Return the source section `PublicKey` for this
@@ -246,13 +333,13 @@ impl WireMsg {
 
     /// Return the dst of this msg
     pub fn dst(&self) -> &Dst {
-        &self.header.msg_envelope.dst
+        &self.dst
     }
 
     /// Convenience function which creates a temporary `WireMsg` from the provided
     /// bytes, returning the deserialized message.
-    pub fn deserialize(bytes: Bytes) -> Result<MsgType> {
-        Self::from(bytes)?.into_msg()
+    pub fn deserialize(header: Bytes, dst: Bytes, payload: Bytes) -> Result<MsgType> {
+        Self::from(header, dst, payload)?.into_msg()
     }
 
     /// Convenience function which validates the signature on a `ServiceMsg`.
@@ -327,7 +414,7 @@ mod tests {
         let auth = AuthKind::Node(node_auth.clone().into_inner());
 
         let wire_msg = WireMsg::new_msg(msg_id, payload, auth, dst);
-        let serialized = wire_msg.serialize()?;
+        let serialized = wire_msg.serialize_and_cache_bytes()?;
 
         // test deserialisation of header
         let deserialized = WireMsg::from(serialized)?;
@@ -377,7 +464,7 @@ mod tests {
         let auth = AuthKind::Service(auth);
 
         let wire_msg = WireMsg::new_msg(msg_id, payload, auth, dst);
-        let serialized = wire_msg.serialize()?;
+        let serialized = wire_msg.serialize_and_cache_bytes()?;
 
         // test deserialisation of header
         let deserialized = WireMsg::from(serialized)?;

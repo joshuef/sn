@@ -30,6 +30,11 @@ impl Client {
         self.send_cmd_with_retry_count(cmd, 1).await
     }
 
+    /// Sign data using the client keypaid
+    pub fn sign(&self, data: &[u8]) -> Signature {
+        self.keypair.sign(data)
+    }
+
     // Send a Cmd to the network and await a response.
     // Cmds are automatically retried if an error is returned
     // This function is a private helper.
@@ -48,7 +53,7 @@ impl Client {
             let msg = ServiceMsg::Cmd(cmd);
             WireMsg::serialize_msg_payload(&msg)?
         };
-        let signature = self.keypair.sign(&serialised_cmd);
+        let signature = self.sign(&serialised_cmd);
 
         let op_limit = self.cmd_timeout;
 

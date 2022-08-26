@@ -79,13 +79,21 @@ impl PeerSession {
         }
     }
 
-    #[instrument(skip(self, msg_bytes))]
-    pub(crate) async fn send(&self, msg_id: MsgId, msg_bytes: Bytes) -> Result<SendWatcher> {
+    #[instrument(skip(self, header_bytes, dst_bytes, payload_bytes))]
+    pub(crate) async fn send(
+        &self,
+        msg_id: MsgId,
+        header_bytes: Bytes,
+        dst_bytes: Bytes,
+        payload_bytes: Bytes,
+    ) -> Result<SendWatcher> {
         let (watcher, reporter) = status_watching();
 
         let job = SendJob {
             msg_id,
-            msg_bytes,
+            header_bytes,
+            dst_bytes,
+            payload_bytes,
             retries: 0,
             reporter,
         };
@@ -202,7 +210,13 @@ impl PeerSessionWorker {
 
         let send_resp = self
             .link
-            .send_with(job.msg_bytes.clone(), 0, Some(&RetryConfig::default()))
+            .send_with(
+                job.header_bytes.clone(),
+                job.dst_bytes.clone(),
+                job.payload_bytes.clone(),
+                0,
+                Some(&RetryConfig::default()),
+            )
             .await;
 
         match send_resp {
@@ -265,7 +279,11 @@ impl MsgThroughput {
 pub(crate) struct SendJob {
     msg_id: MsgId,
     #[debug(skip)]
-    msg_bytes: Bytes,
+    header_bytes: Bytes,
+    #[debug(skip)]
+    dst_bytes: Bytes,
+    #[debug(skip)]
+    payload_bytes: Bytes,
     retries: usize, // TAI: Do we need this if we are using QP2P's retry
     reporter: StatusReporting,
 }
@@ -273,7 +291,9 @@ pub(crate) struct SendJob {
 impl PartialEq for SendJob {
     fn eq(&self, other: &Self) -> bool {
         self.msg_id == other.msg_id
-            && self.msg_bytes == other.msg_bytes
+            && self.header_bytes == other.header_bytes
+            && self.dst_bytes == other.dst_bytes
+            && self.payload_bytes == other.payload_bytes
             && self.retries == other.retries
     }
 }
@@ -283,7 +303,9 @@ impl Eq for SendJob {}
 impl std::hash::Hash for SendJob {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.msg_id.hash(state);
-        self.msg_bytes.hash(state);
+        self.header_bytes.hash(state);
+        self.dst_bytes.hash(state);
+        self.payload_bytes.hash(state);
         self.retries.hash(state);
     }
 }

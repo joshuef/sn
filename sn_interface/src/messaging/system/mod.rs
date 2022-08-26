@@ -46,11 +46,11 @@ pub enum AntiEntropyKind {
     /// This AE message is sent to a peer when a message with outdated section
     /// information was received, attaching the bounced message so
     /// the peer can resend it with up to date destination information.
-    Retry { bounced_msg: Bytes },
+    Retry { bounced_msg: (Bytes, Bytes, Bytes) },
     /// This AE message is sent to a peer when a message needs to be sent to a
     /// different and/or closest section, attaching the bounced message so the peer
     /// can resend it to the correct section with up to date destination information.
-    Redirect { bounced_msg: Bytes },
+    Redirect { bounced_msg: (Bytes, Bytes, Bytes) },
     /// This AE message is sent to update a peer when we notice they are behind
     Update { members: SectionPeers },
 }

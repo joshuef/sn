@@ -629,7 +629,8 @@ impl NetworkKnowledge {
         self.adults().iter().any(|a| a.name() == *name)
     }
 
-    pub fn dst(&self, recipient: &XorName) -> Result<Dst> {
+    // Generate dst for with correct `section_key` for a given XorName
+    pub fn generate_dst(&self, recipient: &XorName) -> Result<Dst> {
         Ok(Dst {
             name: *recipient,
             section_key: self.section_by_name(recipient)?.section_key(),

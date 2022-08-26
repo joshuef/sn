@@ -14,6 +14,10 @@ version = "0.71.1"
 name = "upload_bytes"
 harness = false
 
+[[bench]]
+name = "serialize"
+harness = false
+
 [[example]]
 name = "client_files"
 
@@ -60,7 +64,8 @@ lazy_static = "1"
 multibase = "~0.9.1"
 num_cpus = "1.13.0"
 priority-queue = "1.2.1"
-qp2p = "~0.28.3"
+qp2p = {git="https://github.com/joshuef/qp2p", branch="Feat-RepresentativeUserMsg"}
+# qp2p = "~0.28.3"
 rand = "~0.8.5"
 rayon = "1.5.1"
 rmp-serde = "1.0.0"

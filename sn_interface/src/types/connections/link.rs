@@ -109,10 +109,12 @@ impl Link {
     #[allow(unused)]
     pub async fn send<F: Fn(qp2p::Connection, IncomingMsgs)>(
         &self,
-        msg: Bytes,
+        header: Bytes,
+        dst: Bytes,
+        payload: Bytes,
         listen: F,
     ) -> Result<(), SendToOneError> {
-        self.send_with(msg, None, listen).await
+        self.send_with(header, dst, payload, None, listen).await
     }
 
     /// Send a message to the peer using the given configuration.
@@ -121,7 +123,9 @@ impl Link {
     #[instrument(skip_all)]
     pub async fn send_with<F: Fn(qp2p::Connection, IncomingMsgs)>(
         &self,
-        msg: Bytes,
+        header: Bytes,
+        dst: Bytes,
+        payload: Bytes,
         retry_config: Option<&RetryConfig>,
         listen: F,
     ) -> Result<(), SendToOneError> {
@@ -133,7 +137,10 @@ impl Link {
             queue_len,
             self.peer
         );
-        match conn.send_with(msg, default_priority, retry_config).await {
+        match conn
+            .send_with(header, dst, payload, default_priority, retry_config)
+            .await
+        {
             Ok(()) => {
                 self.remove_expired().await;
                 Ok(())
