@@ -200,7 +200,7 @@ impl WireMsgHeader {
         let mut updated_bytes = BytesMut::with_capacity(bytes.len());
 
         // set the original bytes
-        updated_bytes.copy_from_slice(&bytes);
+        updated_bytes.extend_from_slice(&bytes);
         // add updated header msg envelope
         updated_bytes[HeaderMeta::SIZE..meta.header_len()].clone_from_slice(&new_msg_envelope_vec);
 

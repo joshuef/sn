@@ -459,7 +459,7 @@ mod tests {
 
         debug!("======> Data uploaded");
 
-        let reader_count = 25;
+        let reader_count = 250;
         let clients = create_clients(reader_count).await?;
         assert_eq!(reader_count, clients.len());
 
