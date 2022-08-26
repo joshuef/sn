@@ -135,7 +135,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         }
     };
 
-    let msg = runtime.block_on(async{
+    let msgs = runtime.block_on(async{
         let name = xor_name::rand::random();
         let tag = 15000;
         let owner = User::Key(client.public_key());
@@ -178,38 +178,40 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         // Dst at thiss point is nonsense
         // it has no bearing on serialisation speed
-        let dst = Dst {
-            name: xor_name::rand::random(),
-            section_key: bls::SecretKey::random().public_key(),
-        };
+        // let dst = Dst {
+        //     name: xor_name::rand::random(),
+        //     section_key: bls::SecretKey::random().public_key(),
+        // };
 
         let auth = AuthKind::Service(auth);
 
-        #[allow(unused_mut)]
-        let mut wire_msg = WireMsg::new_msg(msg_id, payload, auth, dst);
+        // #[allow(unused_mut)]
+        // let mut wire_msg = WireMsg::new_msg(msg_id, payload, auth, dst);
 
-        wire_msg
-
+        // wire_msg
+        (auth, payload, msg_id)
     }) ;
 
 
     let dsts = random_vectorof_dsts(1024);
 
-    group.throughput(Throughput::Bytes(std::mem::size_of_val(&msg) as u64));
+    group.throughput(Throughput::Bytes(std::mem::size_of_val(&msgs) as u64));
 
     // upload and read
     group.bench_with_input(
         "serial",
-        &(&msg,&dsts),
-        |b, (msg, dsts)| {
+        &(&msgs,&dsts),
+        |b, ((auth, payload, msg_id), dsts)| {
             b.to_async(&runtime).iter(|| async {
 
                     for dst in dsts.iter() {
+                        // msg.d
+                        let msg = WireMsg::new_msg(*msg_id, payload.clone(), auth.clone(), *dst);
+                        if let Err(err) = msg.serialize() {
+                            panic!("error serialising payload");
+                        };
+                    };
 
-                    };
-                    if let Err(err) = msg.serialize() {
-                        panic!("error serialising payload");
-                    };
 
 
                 Ok::<(), Box<dyn std::error::Error>>(())
