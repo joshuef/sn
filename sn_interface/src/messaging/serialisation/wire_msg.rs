@@ -140,6 +140,17 @@ impl WireMsg {
         })
     }
 
+    /// Attempts to update the Dst bytes only in the provided wire_msg_bytes.
+    /// This avoids reserializing message bytes for sending to a new Dst
+    /// if the rest of the content is the same
+    pub fn update_dst_in_wire_msg_bytes(bytes: Bytes, new_dst: Dst) -> Result<Bytes> {
+        // Deserialize the header bytes first
+        let updated_bytes = WireMsgHeader::change_dst_in_bytes(bytes, new_dst)?;
+
+        // We now have a new msg going to a new dst without all the re-serializing
+        Ok(updated_bytes)
+    }
+
     /// Return the serialized `WireMsg`, which contains the `WireMsgHeader` bytes,
     /// followed by the payload bytes, i.e. the serialized Message.
     pub fn serialize(&self) -> Result<Bytes> {
