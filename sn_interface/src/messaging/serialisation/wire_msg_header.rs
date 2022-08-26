@@ -19,7 +19,7 @@ use std::mem::size_of;
 #[cfg(feature = "traceroute")]
 use crate::messaging::Traceroute;
 use custom_debug::Debug as CustomDebug;
-use std::io::Write;
+
 // Current version of the messaging protocol.
 // At this point this implementation supports only this version.
 const MESSAGING_PROTO_VERSION: u16 = 1u16;
@@ -42,8 +42,8 @@ pub struct WireMsgHeader {
 #[derive(CustomDebug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct MsgEnvelope {
     pub msg_id: MsgId,
-    pub dst: Dst,
     pub auth: AuthKind,
+    pub dst: Dst,
     #[cfg(feature = "traceroute")]
     // Remove if necessary to debug from WireMsg
     #[debug(skip)]
@@ -148,8 +148,67 @@ impl WireMsgHeader {
         Ok((header, payload_bytes))
     }
 
+    // Updates the provided bytes to change the target dst without the need
+    // for deserialising everything.
+
+    // returning the created WireMsgHeader, as well as the remaining bytes which
+    // correspond to the message payload. The caller shall then take care of
+    // deserializing the payload using the information provided in the `WireMsgHeader`.
+    pub fn change_dst_in_bytes(bytes: &Bytes, dst: Dst) -> Result<Bytes> {
+        let bytes_len = bytes.len();
+
+        // Parse the leading metadata
+        let meta: HeaderMeta = BINCODE_OPTIONS
+            .allow_trailing_bytes()
+            .deserialize(&bytes)
+            .map_err(|err| Error::FailedToParse(format!("invalid message header: {}", err)))?;
+
+        // We check that we have at least the claimed number of header bytes.
+        if meta.header_len() > bytes_len {
+            return Err(Error::FailedToParse(format!(
+                "not enough bytes received ({}) to deserialize wire message header",
+                bytes_len
+            )));
+        }
+
+        // Make sure we support this version
+        if meta.version != MESSAGING_PROTO_VERSION {
+            return Err(Error::UnsupportedVersion(meta.version));
+        }
+
+        // ...now we read the message envelope bytes
+        let msg_envelope_bytes = &bytes[HeaderMeta::SIZE..meta.header_len()];
+        let mut msg_envelope: MsgEnvelope =
+            rmp_serde::from_slice(msg_envelope_bytes).map_err(|err| {
+                Error::FailedToParse(format!(
+                    "source authority couldn't be deserialized from the header: {}",
+                    err
+                ))
+            })?;
+
+        // overwrite our dst
+        msg_envelope.dst = dst;
+
+        // and reencode the header bytes
+        let new_msg_envelope_vec = rmp_serde::to_vec_named(&msg_envelope).map_err(|err| {
+            Error::Serialisation(format!(
+                "could not serialize updated dst message envelope with Msgpack: {}",
+                err
+            ))
+        })?;
+
+        let mut updated_bytes = BytesMut::with_capacity(bytes.len());
+
+        // set the original bytes
+        updated_bytes.extend_from_slice(&bytes);
+        // add updated header msg envelope
+        updated_bytes[HeaderMeta::SIZE..meta.header_len()].clone_from_slice(&new_msg_envelope_vec);
+
+        Ok(updated_bytes.freeze())
+    }
+
     /// Write header metadata and msg envelope info into a provided buffer
-    pub fn write<'a>(&self, mut buffer: &'a mut [u8]) -> Result<(&'a mut [u8], u16)> {
+    pub fn write(&self, buffer: BytesMut) -> Result<(BytesMut, u16)> {
         // first serialise the msg envelope so we can figure out the total header size
         let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
             Error::Serialisation(format!(
@@ -164,9 +223,10 @@ impl WireMsgHeader {
             version: self.version,
         };
 
+        let mut buffer_writer = buffer.writer();
         // Write the leading metadata
         BINCODE_OPTIONS
-            .serialize_into(&mut buffer, &meta)
+            .serialize_into(&mut buffer_writer, &meta)
             .map_err(|err| {
                 Error::Serialisation(format!(
                     "header metadata couldn't be serialized into the header: {}",
@@ -174,13 +234,9 @@ impl WireMsgHeader {
                 ))
             })?;
 
+        let mut buffer = buffer_writer.into_inner();
         // ...now write the message envelope
-        buffer.write_all(&msg_envelope_vec).map_err(|err| {
-            Error::Serialisation(format!(
-                "message envelope couldn't be serialized into the header: {}",
-                err
-            ))
-        })?;
+        buffer.extend_from_slice(&msg_envelope_vec);
 
         Ok((buffer, meta.header_len))
     }
