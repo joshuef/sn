@@ -210,7 +210,7 @@ impl WireMsgHeader {
     /// Write header metadata and msg envelope info into a provided buffer
     pub fn write(&self) -> Result<BytesMut> {
 
-        let buffer = BytesMut::new();
+        let mut buffer = BytesMut::new();
         // first serialise the msg envelope so we can figure out the total header size
         let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
             Error::Serialisation(format!(
@@ -225,18 +225,29 @@ impl WireMsgHeader {
             version: self.version,
         };
 
-        let mut buffer_writer = buffer.writer();
-        // Write the leading metadata
-        BINCODE_OPTIONS
-            .serialize_into(&mut buffer_writer, &meta)
-            .map_err(|err| {
-                Error::Serialisation(format!(
-                    "header metadata couldn't be serialized into the header: {}",
-                    err
-                ))
-            })?;
+        let meta_vec = rmp_serde::to_vec_named(&meta).map_err(|err| {
+            Error::Serialisation(format!(
+                "could not serialize message envelope with Msgpack: {}",
+                err
+            ))
+        })?;
 
-        let mut buffer = buffer_writer.into_inner();
+        buffer.extend_from_slice(&meta_vec);
+        // buffer.extend_from_slice(msg_envelope_vec);
+        // let mut buffer_writer = buffer.writer();
+        // Write the leading metadata
+        // BINCODE_OPTIONS
+        //     .serialize_into(&mut buffer_writer, &meta)
+        //     .map_err(|err| {
+        //         Error::Serialisation(format!(
+        //             "header metadata couldn't be serialized into the header: {}",
+        //             err
+        //         ))
+        //     })?;
+
+
+
+        // let mut buffer = buffer_writer.into_inner();
         // ...now write the message envelope
         buffer.extend_from_slice(&msg_envelope_vec);
 

@@ -162,7 +162,7 @@ impl WireMsg {
         // println!("================ startttt");
 
         // println!("supposed len: {:?}", max_length);
-        let mut buffer = self.header.write(buffer)?;
+        let mut buffer = self.header.write()?;
 
         // ...and finally we write the bytes of the serialized payload to the original buffer
         buffer.extend_from_slice(&self.payload);
