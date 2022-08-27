@@ -213,7 +213,6 @@ impl WireMsgHeader {
 
         // let buffer = BytesMut::new();
 
-        let mut header_bytes = payload_bytes.split_off(WireMsgHeader::max_size() as usize );
         // first serialise the msg envelope so we can figure out the total header size
         let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
             Error::Serialisation(format!(
@@ -224,10 +223,11 @@ impl WireMsgHeader {
 
         let meta = HeaderMeta {
             // real header size based on the length of serialised msg envelope
-            header_len: (HeaderMeta::SIZE) as u16,
+            header_len: (HeaderMeta::SIZE + msg_envelope_vec.len()) as u16,
             version: self.version,
         };
 
+        let mut header_bytes = payload_bytes.split_off(meta.header_len() as usize );
         // let mut buffer_writer = header_bytes.writer();
         // Write the leading metadata
         let meta_bytes = BINCODE_OPTIONS
@@ -243,8 +243,18 @@ impl WireMsgHeader {
 
         // // let mut buffer = buffer_writer.into_inner();
         // // ...now write the message envelope
-        header_bytes[0..meta_bytes.len()].copy_from_slice(&meta_bytes);
-        header_bytes[meta_bytes.len()..].copy_from_slice(&msg_envelope_vec);
+
+        header_bytes.clear();
+
+        header_bytes.extend(&meta_bytes);
+        header_bytes.extend(&msg_envelope_vec);
+
+        // header_bytes[..meta_bytes.len()].copy_from_slice(&meta_bytes);
+
+        // println!("headerbyteslen: {:?}",header_bytes.len());
+        // println!("meta_bytes: {:?}",meta_bytes.len());
+        // println!("msg_envelope_vec: {:?}",msg_envelope_vec.len());
+        // header_bytes[meta_bytes.len()..msg_envelope_vec.len()].copy_from_slice(&msg_envelope_vec);
 
         payload_bytes.unsplit(header_bytes);
         // let bytes = bytes.to_owned();
