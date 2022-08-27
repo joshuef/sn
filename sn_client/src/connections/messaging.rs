@@ -328,7 +328,7 @@ impl Session {
         section_pk: bls::PublicKey,
         dst_address: XorName,
         auth: ServiceAuth,
-        payload: Bytes,
+        payload: BytesMut,
     ) -> Result<(), Error> {
         let endpoint = self.endpoint.clone();
         let msg_id = MsgId::new();

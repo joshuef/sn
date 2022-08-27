@@ -139,7 +139,7 @@ impl Client {
         &self,
         query: DataQuery,
         client_pk: PublicKey,
-        serialised_query: Bytes,
+        serialised_query: BytesMut,
         signature: Signature,
     ) -> Result<QueryResult, Error> {
         debug!("Sending Query: {:?}", query);

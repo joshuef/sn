@@ -30,7 +30,7 @@ use sn_interface::{
     types::{Chunk, Keypair, PublicKey, RegisterAddress},
 };
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::debug;
