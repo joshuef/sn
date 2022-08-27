@@ -136,7 +136,7 @@ async fn send_query(client: &Client, query: DataQuery) -> Result<QueryResponse> 
         .send_signed_query(
             query,
             client_pk,
-            serialised_query.clone(),
+            serialised_query,
             signature.clone(),
         )
         .await?

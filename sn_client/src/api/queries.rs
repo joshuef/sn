@@ -85,7 +85,7 @@ impl Client {
                 self.send_signed_query_to_section(
                     query.clone(),
                     client_pk,
-                    serialised_query.clone(),
+                    serialised_query,
                     signature.clone(),
                     Some((section_pk, elders.clone())),
                 ),
