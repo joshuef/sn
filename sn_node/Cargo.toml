@@ -23,7 +23,7 @@ name = "routing_minimal"
 name = "routing_stress"
 
 [features]
-default = ["traceroute"]
+default = []
 chaos = []
 back-pressure = ["sn_interface/back-pressure"]
 unstable-wiremsg-debuginfo = []

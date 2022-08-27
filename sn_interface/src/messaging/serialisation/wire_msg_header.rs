@@ -213,36 +213,36 @@ impl WireMsgHeader {
 
         // let buffer = BytesMut::new();
         // first serialise the msg envelope so we can figure out the total header size
-        let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
-            Error::Serialisation(format!(
-                "could not serialize message envelope with Msgpack: {}",
-                err
-            ))
-        })?;
+        // let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
+        //     Error::Serialisation(format!(
+        //         "could not serialize message envelope with Msgpack: {}",
+        //         err
+        //     ))
+        // })?;
 
-        let meta = HeaderMeta {
-            // real header size based on the length of serialised msg envelope
-            header_len: (HeaderMeta::SIZE + msg_envelope_vec.len()) as u16,
-            version: self.version,
-        };
+        // let meta = HeaderMeta {
+        //     // real header size based on the length of serialised msg envelope
+        //     header_len: (HeaderMeta::SIZE) as u16,
+        //     version: self.version,
+        // };
 
-        // let mut buffer_writer = buffer.writer();
-        // Write the leading metadata
-        let meta_bytes = BINCODE_OPTIONS
-            .serialize(&meta)
-            .map_err(|err| {
-                Error::Serialisation(format!(
-                    "header metadata couldn't be serialized into the header: {}",
-                    err
-                ))
-            })?;
+        // // let mut buffer_writer = buffer.writer();
+        // // Write the leading metadata
+        // let meta_bytes = BINCODE_OPTIONS
+        //     .serialize(&meta)
+        //     .map_err(|err| {
+        //         Error::Serialisation(format!(
+        //             "header metadata couldn't be serialized into the header: {}",
+        //             err
+        //         ))
+        //     })?;
 
-        // let bytes = payload_bytes.as_byte_slice_mut();
+        // // let bytes = payload_bytes.as_byte_slice_mut();
 
-        // let mut buffer = buffer_writer.into_inner();
-        // ...now write the message envelope
-        payload_bytes[0..meta_bytes.len()].copy_from_slice(&meta_bytes);
-        payload_bytes[meta_bytes.len()..msg_envelope_vec.len()].copy_from_slice(&msg_envelope_vec);
+        // // let mut buffer = buffer_writer.into_inner();
+        // // ...now write the message envelope
+        // payload_bytes[0..meta_bytes.len()].copy_from_slice(&meta_bytes);
+        // payload_bytes[meta_bytes.len()..msg_envelope_vec.len()].copy_from_slice(&msg_envelope_vec);
         // let bytes = bytes.to_owned();
         Ok(payload_bytes.freeze())
     }
