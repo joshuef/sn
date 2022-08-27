@@ -18,7 +18,7 @@ use sn_interface::{
 };
 
 use backoff::{backoff::Backoff, ExponentialBackoff};
-use bytes::Bytes;
+use bytes::BytesMut;
 use tokio::time::Duration;
 use xor_name::XorName;
 
@@ -113,7 +113,7 @@ impl Client {
         &self,
         dst_address: XorName,
         client_pk: PublicKey,
-        serialised_cmd: Bytes,
+        serialised_cmd: BytesMut,
         signature: Signature,
     ) -> Result<(), Error> {
         let auth = ServiceAuth {

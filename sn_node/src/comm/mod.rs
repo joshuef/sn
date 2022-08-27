@@ -499,11 +499,11 @@ mod tests {
                 comm.send(peer1, peer1_msg.clone()).await?;
 
                 if let Some(bytes) = rx0.recv().await {
-                    assert_eq!(WireMsg::from(bytes)?, peer0_msg);
+                    assert_eq!(WireMsg::get_type_from_bytes(bytes)?, peer0_msg);
                 }
 
                 if let Some(bytes) = rx1.recv().await {
-                    assert_eq!(WireMsg::from(bytes)?, peer1_msg);
+                    assert_eq!(WireMsg::get_type_from_bytes(bytes)?, peer1_msg);
                 }
 
                 Result::<()>::Ok(())
@@ -571,7 +571,7 @@ mod tests {
                 {
                     if let Some((_, mut incoming_msgs)) = incoming_connections.next().await {
                         if let Some(msg) = time::timeout(TIMEOUT, incoming_msgs.next()).await?? {
-                            assert_eq!(WireMsg::from(msg)?, msg0);
+                            assert_eq!(WireMsg::get_type_from_bytes(msg)?, msg0);
                             msg0_received = true;
                         }
                         // connection dropped here
@@ -586,7 +586,7 @@ mod tests {
 
                 if let Some((_, mut incoming_msgs)) = incoming_connections.next().await {
                     if let Some(msg) = time::timeout(TIMEOUT, incoming_msgs.next()).await?? {
-                        assert_eq!(WireMsg::from(msg)?, msg1);
+                        assert_eq!(WireMsg::get_type_from_bytes(msg)?, msg1);
                         msg1_received = true;
                     }
                 }

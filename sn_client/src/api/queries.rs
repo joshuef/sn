@@ -18,7 +18,7 @@ use sn_interface::{
     types::{Peer, PublicKey, Signature},
 };
 
-use bytes::Bytes;
+use bytes::BytesMut;
 use rand::Rng;
 use tracing::{debug, info_span};
 
@@ -153,7 +153,7 @@ impl Client {
         &self,
         query: DataQuery,
         client_pk: PublicKey,
-        serialised_query: Bytes,
+        serialised_query: BytesMut,
         signature: Signature,
         dst_section_info: Option<(bls::PublicKey, Vec<Peer>)>,
     ) -> Result<QueryResult, Error> {

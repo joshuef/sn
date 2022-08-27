@@ -14,21 +14,19 @@ use eyre::Result;
 use rand::{rngs::OsRng, Rng};
 use rayon::current_num_threads;
 use sn_client::{Client, Error};
-use tokio::runtime::Runtime;
 use sn_interface::{
-    messaging::{ MsgId,
-        AuthKind, Dst, ServiceAuth,
-        data::{CreateRegister, ServiceMsg, SignedRegisterCreate, DataCmd}
-        , WireMsg,
+    messaging::{
+        data::{CreateRegister, DataCmd, ServiceMsg, SignedRegisterCreate},
+        AuthKind, Dst, MsgId, ServiceAuth, WireMsg,
     },
     types::{
         register::{Policy, User},
         Chunk, Keypair, PublicKey, RegisterCmd, ReplicatedData,
     },
 };
-use xor_name::XorName;
 use std::collections::BTreeMap;
-
+use tokio::runtime::Runtime;
+use xor_name::XorName;
 
 fn public_policy(owner: User) -> Policy {
     let permissions = BTreeMap::new();
@@ -135,7 +133,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         }
     };
 
-    let msgs = runtime.block_on(async{
+    let msgs = runtime.block_on(async {
         let name = xor_name::rand::random();
         let tag = 15000;
         let owner = User::Key(client.public_key());
@@ -143,7 +141,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         let (address, mut batch) = match client.create_register(name, tag, policy).await {
             Ok(x) => x,
-            Err(error) => panic!("error creating register {error:?}")
+            Err(error) => panic!("error creating register {error:?}"),
         };
 
         let client_pk = client.public_key();
@@ -156,16 +154,15 @@ fn criterion_benchmark(c: &mut Criterion) {
         let payload = {
             let msg = ServiceMsg::Cmd(batch[0].clone());
             match WireMsg::serialize_msg_payload(&msg) {
-                Ok(payload)=>payload,
-                Err(error) => panic!("failed to serialise msg payload: {error:?}")
+                Ok(payload) => payload,
+                Err(error) => panic!("failed to serialise msg payload: {error:?}"),
             }
         };
 
         let auth = ServiceAuth {
             public_key: client_pk,
-            signature : client.sign(&payload)
+            signature: client.sign(&payload),
         };
-
 
         // let elders_len = elders.len();
 
@@ -190,8 +187,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         // wire_msg
         (auth, payload, msg_id)
-    }) ;
-
+    });
 
     let dsts = random_vectorof_dsts(1024);
 
@@ -200,22 +196,18 @@ fn criterion_benchmark(c: &mut Criterion) {
     // upload and read
     group.bench_with_input(
         "serial",
-        &(&msgs,&dsts),
+        &(&msgs, &dsts),
         |b, ((auth, payload, msg_id), dsts)| {
             b.to_async(&runtime).iter(|| async {
-
-                    for dst in dsts.iter() {
-                        // msg.d
-                        let msg = WireMsg::new_msg(*msg_id, payload.clone(), auth.clone(), *dst);
-                        if let Err(err) = msg.serialize() {
-                            panic!("error serialising payload");
-                        };
+                for dst in dsts.iter() {
+                    // msg.d
+                    let msg = WireMsg::new_msg(*msg_id, payload.clone(), auth.clone(), *dst);
+                    if let Err(err) = msg.serialize() {
+                        panic!("error serialising payload");
                     };
-
-
+                }
 
                 Ok::<(), Box<dyn std::error::Error>>(())
-
             });
         },
     );

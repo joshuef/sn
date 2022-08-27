@@ -81,7 +81,7 @@ impl Client {
         fn generate_probe_msg(
             client: &Client,
             pk: PublicKey,
-        ) -> Result<(XorName, ServiceAuth, Bytes), Error> {
+        ) -> Result<(XorName, ServiceAuth, BytesMut), Error> {
             // Generate a random query to send a dummy message
             let random_dst_addr = xor_name::rand::random();
             let serialised_cmd = {

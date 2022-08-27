@@ -100,17 +100,8 @@ impl Session {
     ) -> Result<Option<MsgType>, Error> {
         if let Some(msg) = incoming_msgs.next().await? {
             trace!("Incoming msg from {:?}", src);
-            let wire_msg = WireMsg::from(msg)?;
-            let msg_type = wire_msg.into_msg()?;
-
-            #[cfg(feature = "traceroute")]
-            {
-                info!(
-                    "Message {} with the Traceroute received at client:\n {:?}",
-                    msg_type,
-                    wire_msg.traceroute()
-                )
-            }
+            let msg_type = WireMsg::get_type_from_bytes(msg)?;
+            // let msg_type = wire_msg.into_msg()?;
 
             Ok(Some(msg_type))
         } else {

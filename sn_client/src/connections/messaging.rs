@@ -26,7 +26,7 @@ use sn_interface::{
 };
 
 use backoff::{backoff::Backoff, ExponentialBackoff};
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use futures::future::join_all;
 use qp2p::{Close, ConnectionError, SendError};
 use rand::{rngs::OsRng, seq::SliceRandom};
@@ -57,7 +57,7 @@ impl Session {
         &self,
         dst_address: XorName,
         auth: ServiceAuth,
-        payload: Bytes,
+        payload: BytesMut,
         #[cfg(feature = "traceroute")] client_pk: PublicKey,
     ) -> Result<()> {
         let endpoint = self.endpoint.clone();
@@ -163,7 +163,7 @@ impl Session {
         &self,
         query: DataQuery,
         auth: ServiceAuth,
-        payload: Bytes,
+        payload: BytesMut,
         #[cfg(feature = "traceroute")] client_pk: PublicKey,
         dst_section_info: Option<(bls::PublicKey, Vec<Peer>)>,
     ) -> Result<QueryResult> {

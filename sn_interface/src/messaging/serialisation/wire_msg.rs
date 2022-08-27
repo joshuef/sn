@@ -36,7 +36,7 @@ pub struct WireMsg {
     pub header: WireMsgHeader,
     /// Serialised message
     #[debug(skip)]
-    pub payload: Bytes,
+    pub payload: BytesMut,
 
     /// Extra debug info if the relevant feature is enabled.
     // This is behind a feature because it's potentially expensive to carry around the message as
@@ -118,7 +118,7 @@ impl WireMsg {
     }
 
     /// Creates a new `WireMsg` with the provided serialized payload and `MsgKind`.
-    pub fn new_msg(msg_id: MsgId, payload: Bytes, auth: AuthKind, dst: Dst) -> Self {
+    pub fn new_msg(msg_id: MsgId, payload: BytesMut, auth: AuthKind, dst: Dst) -> Self {
         Self {
             header: WireMsgHeader::new(
                 msg_id,
@@ -135,17 +135,32 @@ impl WireMsg {
 
     /// Attempts to create an instance of `WireMsg` by deserialising the bytes provided.
     /// To succeed, the bytes should contain at least a valid `WireMsgHeader`.
-    pub fn from(bytes: Bytes) -> Result<Self> {
+    pub fn get_type_from_bytes(bytes: Bytes) -> Result<MsgType> {
         // Deserialize the header bytes first
         let (header, payload) = WireMsgHeader::from(bytes)?;
 
-        // We can now create a deserialized WireMsg using the read bytes
-        Ok(Self {
-            header,
-            payload,
-            #[cfg(feature = "test-utils")]
-            payload_debug: None,
-        })
+        #[cfg(feature = "traceroute")]
+        let trace = header.msg_envelope.traceroute.clone();
+
+        let msg_type =  Self::convert_to_msg(header, payload)?;
+
+        #[cfg(feature = "traceroute")]
+        {
+            info!(
+                "Message {} with the Traceroute received at client:\n {:?}",
+                msg_type,
+                trace
+            )
+        }
+
+        Ok(msg_type)
+        // // We can now create a deserialized WireMsg using the read bytes
+        // Ok(Self {
+        //     header,
+        //     payload,
+        //     #[cfg(feature = "test-utils")]
+        //     payload_debug: None,
+        // })
     }
 
     /// Attempts to update the Dst bytes only in the provided wire_msg_bytes.
@@ -161,7 +176,7 @@ impl WireMsg {
 
     /// Return the serialized `WireMsg`, which contains the `WireMsgHeader` bytes,
     /// followed by the payload bytes, i.e. the serialized Message.
-    pub fn serialize(&self, payload_bytes: BytesMut) -> Result<Bytes> {
+    pub fn serialize(&self) -> Result<Bytes> {
         // First we create a buffer with the capacity
         // needed to serialize the wire msg
         // let max_length = WireMsgHeader::max_size() as usize + self.payload.len();
@@ -172,7 +187,7 @@ impl WireMsg {
         // let payload_bytes = self.payload;
 
         // println!("supposed len: {:?}", max_length);
-        let bytes = self.header.write(payload_bytes.clone())?;
+        let bytes = self.header.write(self.payload.clone())?;
 
         // ...and finally we write the bytes of the serialized payload to the original buffer
         // buffer.extend_from_slice(&self.payload);
@@ -185,47 +200,52 @@ impl WireMsg {
 
     /// Deserialize the payload from this `WireMsg` returning a `MsgType` instance.
     pub fn into_msg(&self) -> Result<MsgType> {
-        match self.header.msg_envelope.auth.clone() {
+        Self::convert_to_msg(self.header.clone(), self.payload.clone().freeze())
+    }
+
+    /// Deserialize the payload for this WireMsgHeader returning a `MsgType` instance.
+    pub fn convert_to_msg(header: WireMsgHeader, bytes: Bytes) -> Result<MsgType> {
+        match header.msg_envelope.auth.clone() {
             #[cfg(any(feature = "chunks", feature = "registers"))]
             AuthKind::Service(auth) => {
-                let msg: ServiceMsg = rmp_serde::from_slice(&self.payload).map_err(|err| {
+                let msg: ServiceMsg = rmp_serde::from_slice(&bytes).map_err(|err| {
                     Error::FailedToParse(format!("Data message payload as Msgpack: {}", err))
                 })?;
 
                 let auth = if let ServiceMsg::ServiceError(ServiceError {
-                    source_message: Some(payload),
+                    source_message: Some(bytes),
                     ..
                 }) = &msg
                 {
-                    AuthorityProof::verify(auth, payload)?
+                    AuthorityProof::verify(auth, bytes)?
                 } else {
-                    AuthorityProof::verify(auth, &self.payload)?
+                    AuthorityProof::verify(auth, &bytes)?
                 };
 
                 Ok(MsgType::Service {
-                    msg_id: self.header.msg_envelope.msg_id,
+                    msg_id: header.msg_envelope.msg_id,
                     auth,
-                    dst: self.header.msg_envelope.dst,
+                    dst: header.msg_envelope.dst,
                     msg,
                 })
             }
             AuthKind::Node(node_signed) => {
-                let msg: SystemMsg = rmp_serde::from_slice(&self.payload).map_err(|err| {
+                let msg: SystemMsg = rmp_serde::from_slice(&bytes).map_err(|err| {
                     Error::FailedToParse(format!("Node signed message payload as Msgpack: {}", err))
                 })?;
 
                 Ok(MsgType::System {
-                    msg_id: self.header.msg_envelope.msg_id,
+                    msg_id: header.msg_envelope.msg_id,
                     msg_authority: NodeMsgAuthority::Node(AuthorityProof::verify(
                         node_signed,
-                        &self.payload,
+                        &bytes,
                     )?),
-                    dst: self.header.msg_envelope.dst,
+                    dst: header.msg_envelope.dst,
                     msg,
                 })
             }
             AuthKind::NodeBlsShare(bls_share_signed) => {
-                let msg: SystemMsg = rmp_serde::from_slice(&self.payload).map_err(|err| {
+                let msg: SystemMsg = rmp_serde::from_slice(&bytes).map_err(|err| {
                     Error::FailedToParse(format!(
                         "Node message payload (BLS share signed) as Msgpack: {}",
                         err
@@ -233,12 +253,12 @@ impl WireMsg {
                 })?;
 
                 Ok(MsgType::System {
-                    msg_id: self.header.msg_envelope.msg_id,
+                    msg_id: header.msg_envelope.msg_id,
                     msg_authority: NodeMsgAuthority::BlsShare(AuthorityProof::verify(
                         bls_share_signed,
-                        &self.payload,
+                        &bytes,
                     )?),
-                    dst: self.header.msg_envelope.dst,
+                    dst: header.msg_envelope.dst,
                     msg,
                 })
             }
@@ -278,7 +298,7 @@ impl WireMsg {
     /// Convenience function which creates a temporary `WireMsg` from the provided
     /// bytes, returning the deserialized message.
     pub fn deserialize(bytes: Bytes) -> Result<MsgType> {
-        Self::from(bytes)?.into_msg()
+        Self::get_type_from_bytes(bytes)
     }
 
     /// Convenience function which validates the signature on a `ServiceMsg`.
@@ -356,7 +376,7 @@ mod tests {
         let serialized = wire_msg.serialize()?;
 
         // test deserialisation of header
-        let deserialized = WireMsg::from(serialized)?;
+        let deserialized = WireMsg::get_type_from_bytes(serialized)?;
         assert_eq!(deserialized, wire_msg);
         assert_eq!(deserialized.msg_id(), wire_msg.msg_id());
         assert_eq!(deserialized.dst(), &dst);
@@ -406,7 +426,7 @@ mod tests {
         let serialized = wire_msg.serialize()?;
 
         // test deserialisation of header
-        let deserialized = WireMsg::from(serialized)?;
+        let deserialized = WireMsg::get_type_from_bytes(serialized)?;
         assert_eq!(deserialized, wire_msg);
         assert_eq!(deserialized.msg_id(), wire_msg.msg_id());
         assert_eq!(deserialized.dst(), &dst);
