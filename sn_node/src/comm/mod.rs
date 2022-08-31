@@ -24,9 +24,10 @@ use self::{
 
 use crate::log_sleep;
 use crate::node::{Error, RateLimits, Result};
+use qp2p::UsrMsgBytes;
 
 use sn_interface::{
-    messaging::{system::MembershipState, MsgId, WireMsg, WireMsgBytes},
+    messaging::{system::MembershipState, MsgId, WireMsg},
     network_knowledge::NodeState,
     types::Peer,
 };
@@ -208,21 +209,19 @@ impl Comm {
     }
 
     #[tracing::instrument(skip(self))]
-    pub(crate) async fn send(&self, peer: Peer, msg_id: MsgId, bytes: WireMsgBytes) -> Result<()> {
-        // let msg_id = msg.msg_id();
-        // let dst = *msg.dst();
+    pub(crate) async fn send(&self, peer: Peer, msg_id: MsgId, bytes: UsrMsgBytes) -> Result<()> {
         let watcher = self.send_to_one(peer, msg_id, bytes).await;
 
         match watcher {
             Ok(watcher) => {
                 if Self::is_sent(watcher, msg_id, peer).await {
-                    // trace!("Msg {msg_id:?} sent to {dst:?}");
+                    trace!("Msg {msg_id:?} sent to {peer:?}");
                     Ok(())
                 } else {
                     Err(Error::FailedSend(peer))
                 }
             }
-            Err(_error) => {
+            Err(error) => {
                 // there is only one type of error returned: [`Error::InvalidState`]
                 // which should not happen (be reachable) if we only access PeerSession from Comm
                 // The error means we accessed a peer that we disconnected from.
@@ -231,13 +230,13 @@ impl Comm {
                     "Accessed a disconnected peer: {}. This is potentially a bug!",
                     peer
                 );
-                // error!(
-                //     "Sending message (msg_id: {:?}) to {:?} (name {:?}) failed as we have disconnected from the peer. (Error is: {})",
-                //     msg_id,
-                //     peer.addr(),
-                //     peer.name(),
-                //     error,
-                // );
+                error!(
+                    "Sending message (msg_id: {:?}) to {:?} (name {:?}) failed as we have disconnected from the peer. (Error is: {})",
+                    msg_id,
+                    peer.addr(),
+                    peer.name(),
+                    error,
+                );
                 Err(Error::FailedSend(peer))
             }
         }
@@ -339,28 +338,21 @@ impl Comm {
         &self,
         recipient: Peer,
         msg_id: MsgId,
-        bytes: WireMsgBytes,
+        bytes: UsrMsgBytes,
     ) -> Result<SendWatcher> {
-        // let msg_id = wire_msg.msg_id();
+        let bytes_len = {
+            let (h, d, p) = bytes.clone();
+            h.len() + d.len() + p.len()
+        };
 
-        let (header, dst, payload) = bytes;
-        //  {
-        //     Ok(bytes) => bytes,
-        //     Err(error) => {
-        //         // early return if we cannot serialise msg
-        //         return Err(Error::Messaging(error));
-        //     }
-        // };
-
-        // let bytes_len = header.len() + dst.len() + payload.len();
-        // trace!(
-        //     "Sending message ({} bytes) to {:?}",
-        //     bytes_len,
-        //     msg_id,
-        //     recipient,
-        // );
+        trace!(
+            "Sending message ({} bytes) w/ {:?} to {:?}",
+            bytes_len,
+            msg_id,
+            recipient,
+        );
         let peer = self.get_or_create(&recipient).await;
-        peer.send(msg_id, header, dst, payload).await
+        peer.send(msg_id, bytes).await
     }
 }
 

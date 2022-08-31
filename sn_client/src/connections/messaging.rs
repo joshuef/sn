@@ -545,7 +545,7 @@ impl Session {
         mut wire_msg: WireMsg,
         msg_id: MsgId,
     ) -> Result<()> {
-        let (header_bytes, dst_bytes, payload_bytes) = wire_msg.serialize_and_cache_bytes()?;
+        let bytes = wire_msg.serialize_and_cache_bytes()?;
 
         let mut last_error = None;
         drop(wire_msg);
@@ -557,9 +557,7 @@ impl Session {
 
         for peer in nodes.clone() {
             let session = self.clone();
-            let header_bytes = header_bytes.clone();
-            let dst_bytes = dst_bytes.clone();
-            let payload_bytes = payload_bytes.clone();
+            let bytes = bytes.clone();
             let peer_name = peer.name();
 
             let task_handle: JoinHandle<(XorName, Result<()>)> = tokio::spawn(async move {
@@ -572,15 +570,7 @@ impl Session {
                 let mut retries = 0;
 
                 let send_and_retry = || async {
-                    match link
-                        .send(
-                            header_bytes.clone(),
-                            dst_bytes.clone(),
-                            payload_bytes.clone(),
-                            listen,
-                        )
-                        .await
-                    {
+                    match link.send(bytes.clone(), listen).await {
                         Ok(()) => Ok(()),
                         Err(SendToOneError::Connection(err)) => {
                             Err(Error::QuicP2pConnection { peer, error: err })

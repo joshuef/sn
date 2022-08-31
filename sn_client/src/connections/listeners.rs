@@ -13,13 +13,13 @@ use crate::{
     Error, Result,
 };
 
+use qp2p::UsrMsgBytes;
 use sn_interface::{
     at_least_one_correct_elder,
     messaging::{
         data::{CmdError, ServiceMsg},
         system::{AntiEntropyKind, KeyedSig, NodeMsgAuthorityUtils, SectionAuth, SystemMsg},
         AuthKind, AuthorityProof, Dst, MsgId, MsgType, NodeMsgAuthority, ServiceAuth, WireMsg,
-        WireMsgBytes,
     },
     network_knowledge::{NetworkKnowledge, SectionAuthorityProvider},
     types::{log_markers::LogMarker, Peer},
@@ -308,7 +308,7 @@ impl Session {
         target_sap: SectionAuthorityProvider,
         section_signed: KeyedSig,
         provided_section_chain: SecuredLinkedList,
-        bounced_msg: WireMsgBytes,
+        bounced_msg: UsrMsgBytes,
         src_peer: Peer,
     ) -> Result<(), Error> {
         debug!("Received Anti-Entropy from {src_peer}, with SAP: {target_sap:?}");
@@ -401,7 +401,7 @@ impl Session {
     /// or if it has already been dealt with
     #[instrument(skip_all, level = "debug")]
     async fn new_target_elders(
-        bounced_msg: WireMsgBytes,
+        bounced_msg: UsrMsgBytes,
         received_auth: &SectionAuthorityProvider,
     ) -> Result<
         Option<(
@@ -414,22 +414,21 @@ impl Session {
         Error,
     > {
         let (header, dst, payload) = bounced_msg;
-        let (msg_id, service_msg, dst, auth) =
-            match WireMsg::deserialize(header.clone(), dst.clone(), payload.clone())? {
-                MsgType::Service {
-                    msg_id,
-                    msg,
-                    auth,
-                    dst,
-                } => (msg_id, msg, dst, auth),
-                other => {
-                    warn!(
-                        "Unexpected non-serviceMsg returned in AE-Redirect response: {:?}",
-                        other
-                    );
-                    return Ok(None);
-                }
-            };
+        let (msg_id, service_msg, dst, auth) = match WireMsg::deserialize(header, dst, payload)? {
+            MsgType::Service {
+                msg_id,
+                msg,
+                auth,
+                dst,
+            } => (msg_id, msg, dst, auth),
+            other => {
+                warn!(
+                    "Unexpected non-serviceMsg returned in AE-Redirect response: {:?}",
+                    other
+                );
+                return Ok(None);
+            }
+        };
 
         trace!(
             "Bounced msg ({:?}) received in an AE response: {:?}",

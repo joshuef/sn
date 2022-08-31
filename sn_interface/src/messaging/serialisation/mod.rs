@@ -11,8 +11,7 @@ mod wire_msg_header;
 
 pub use self::wire_msg::WireMsg;
 #[cfg(feature = "traceroute")]
-pub use self::wire_msg::{Entity, Traceroute, WireMsgBytes};
-
+pub use self::wire_msg::{Entity, Traceroute};
 use super::{AuthorityProof, BlsShareAuth, NodeAuth, SectionAuth};
 
 use crate::types::PublicKey;

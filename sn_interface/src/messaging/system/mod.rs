@@ -24,6 +24,7 @@ pub use node_state::{MembershipState, NodeState, RelocateDetails};
 pub use signed::{KeyedSig, SigShare};
 
 use super::{authority::SectionAuth as SectionAuthProof, AuthorityProof};
+use qp2p::UsrMsgBytes;
 
 use crate::messaging::{EndUser, MsgId, SectionAuthorityProvider};
 use crate::network_knowledge::SapCandidate;
@@ -31,7 +32,6 @@ use crate::network_knowledge::SapCandidate;
 use sn_consensus::{Generation, SignedVote};
 
 use bls_dkg::key_gen::message::Message as DkgMessage;
-use bytes::Bytes;
 use secured_linked_list::SecuredLinkedList;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -46,11 +46,11 @@ pub enum AntiEntropyKind {
     /// This AE message is sent to a peer when a message with outdated section
     /// information was received, attaching the bounced message so
     /// the peer can resend it with up to date destination information.
-    Retry { bounced_msg: (Bytes, Bytes, Bytes) },
+    Retry { bounced_msg: UsrMsgBytes },
     /// This AE message is sent to a peer when a message needs to be sent to a
     /// different and/or closest section, attaching the bounced message so the peer
     /// can resend it to the correct section with up to date destination information.
-    Redirect { bounced_msg: (Bytes, Bytes, Bytes) },
+    Redirect { bounced_msg: UsrMsgBytes },
     /// This AE message is sent to update a peer when we notice they are behind
     Update { members: SectionPeers },
 }

@@ -13,13 +13,14 @@ use crate::node::{
     Error, Event, MembershipEvent, Node, Result, StateSnapshot,
 };
 
+use qp2p::UsrMsgBytes;
 use sn_interface::messaging::system::AntiEntropyKind;
 #[cfg(feature = "traceroute")]
 use sn_interface::messaging::Traceroute;
 use sn_interface::{
     messaging::{
         system::{KeyedSig, NodeCmd, SectionAuth, SystemMsg},
-        MsgType, WireMsg, WireMsgBytes,
+        MsgType, WireMsg,
     },
     network_knowledge::SectionAuthorityProvider,
     types::{log_markers::LogMarker, Peer, PublicKey},
@@ -384,7 +385,7 @@ impl Node {
     pub(crate) fn ae_redirect_to_our_elders(
         &self,
         sender: Peer,
-        bounced_msg: WireMsgBytes,
+        bounced_msg: UsrMsgBytes,
     ) -> Result<Cmd> {
         trace!("{} in ae_redirect ", LogMarker::AeSendRedirect);
 

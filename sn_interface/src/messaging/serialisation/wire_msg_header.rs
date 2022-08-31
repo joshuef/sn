@@ -170,12 +170,9 @@ impl WireMsgHeader {
                 ))
             })?;
 
-        // let mut buffer = buffer_writer.into_inner();
-        // ...now write the message envelope
         buffer_writer
             .write(&msg_envelope_vec)
             .map_err(|_| Error::Serialisation("ups".to_string()))?;
-        // buffer_writer.write(&payload);
 
         Ok(buffer_writer.into_inner().freeze())
     }

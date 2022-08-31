@@ -16,9 +16,11 @@ use crate::node::{
 #[cfg(feature = "traceroute")]
 use sn_interface::{messaging::Entity, messaging::Traceroute, types::PublicKey};
 use sn_interface::{
-    messaging::{AuthKind, Dst, MsgId, WireMsg, WireMsgBytes},
+    messaging::{AuthKind, Dst, MsgId, WireMsg},
     types::Peer,
 };
+
+use qp2p::UsrMsgBytes;
 
 use bytes::Bytes;
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
@@ -289,7 +291,7 @@ fn into_msg_bytes(
     msg_id: MsgId,
     recipients: Peers,
     #[cfg(feature = "traceroute")] traceroute: Traceroute,
-) -> Result<Vec<(Peer, WireMsgBytes)>> {
+) -> Result<Vec<(Peer, UsrMsgBytes)>> {
     let (auth, payload) = node.sign_msg(msg)?;
     let recipients = match recipients {
         Peers::Single(peer) => vec![peer],
@@ -304,13 +306,13 @@ fn into_msg_bytes(
     #[cfg(feature = "traceroute")]
     let trace = Trace {
         entity: entity(node),
-        traceroute: traceroute.clone(),
+        traceroute,
     };
 
     let mut initial_wire_msg = wire_msg(
         msg_id,
-        payload.clone(),
-        auth.clone(),
+        payload,
+        auth,
         dst,
         #[cfg(feature = "traceroute")]
         trace,

@@ -3106,7 +3106,7 @@ dependencies = [
 [[package]]
 name = "qp2p"
 version = "0.28.7"
-source = "git+https://github.com/joshuef/qp2p?branch=Feat-RepresentativeUserMsg#bf3717af73231513b290d33e9b11f50fedc30adf"
+source = "git+https://github.com/joshuef/qp2p?branch=Feat-RepresentativeUserMsg#3265d39df19db4b8d63b39f6d014a93ccb711260"
 dependencies = [
  "backoff 0.3.0",
  "bincode",
