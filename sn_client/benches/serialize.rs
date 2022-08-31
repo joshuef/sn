@@ -7,26 +7,25 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use bytes::{Bytes, BytesMut};
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
-use criterion::{BatchSize, BenchmarkId, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Throughput};
 
 use eyre::Result;
 use rand::{rngs::OsRng, Rng};
-use rayon::current_num_threads;
+
 use sn_client::{Client, Error};
 use sn_interface::{
     messaging::{
-        data::{CreateRegister, DataCmd, ServiceMsg, SignedRegisterCreate},
+        data::{ServiceMsg},
         AuthKind, Dst, MsgId, ServiceAuth, WireMsg,
     },
     types::{
         register::{Policy, User},
-        Chunk, Keypair, PublicKey, RegisterCmd, ReplicatedData,
     },
 };
 use std::collections::BTreeMap;
 use tokio::runtime::Runtime;
-use xor_name::XorName;
+
 
 fn public_policy(owner: User) -> Policy {
     let permissions = BTreeMap::new();
@@ -37,49 +36,12 @@ fn public_policy(owner: User) -> Policy {
 fn random_vectorof_dsts(length: usize) -> Vec<Dst> {
     let mut dsts = vec![];
 
-    for i in 0..length {
+    for _i in 0..length {
         dsts.push(Dst {
             name: xor_name::rand::random(),
             section_key: bls::SecretKey::random().public_key(),
         });
     }
-
-    // dsts
-    // use rayon::prelude::*;
-    // let threads = current_num_threads();
-
-    // if threads > length {
-    //     let mut rng = OsRng;
-    //     return ::std::iter::repeat(())
-    //         .map(|()|
-    //         Dst {
-    //             name: xor_name::rand::random(),
-    //             section_key: bls::SecretKey::random().public_key(),
-    //         })
-    //         .take(length)
-    //         .collect();
-    // }
-
-    // let per_thread = length / threads;
-    // // let remainder = length % threads;
-
-    // let mut dsts: Vec<Dst> = (0..threads)
-    //     .par_bridge()
-    //     .map(|_| vec![0u8; per_thread])
-    //     .map(|mut bytes| {
-
-    //         Dst {
-    //             name: xor_name::rand::random(),
-    //             section_key: bls::SecretKey::random().public_key(),
-    //         }
-    //         // let bytes = bytes.as_mut_slice();
-    //         // rand::thread_rng().fill(bytes);
-    //         // bytes.to_owned()
-    //     })
-    //     .flatten()
-    //     .collect();
-
-    // bytes.extend(vec![0u8; remainder]);
 
     dsts
 }
@@ -139,7 +101,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let owner = User::Key(client.public_key());
         let policy = public_policy(owner);
 
-        let (address, mut batch) = match client.create_register(name, tag, policy).await {
+        let (_address, batch) = match client.create_register(name, tag, policy).await {
             Ok(x) => x,
             Err(error) => panic!("error creating register {error:?}"),
         };
@@ -164,24 +126,10 @@ fn criterion_benchmark(c: &mut Criterion) {
             signature: client.sign(&payload),
         };
 
-        // let elders_len = elders.len();
 
-        // debug!(
-        //     "Sending cmd w/id {msg_id:?}, from {}, to {elders_len} Elders w/ dst: {dst_address:?}",
-        //     endpoint.public_addr(),
-        // );
-
-        // let signature = client.sign(&serialised_cmd);
-
-        // Dst at thiss point is nonsense
-        // it has no bearing on serialisation speed
 
         let auth = AuthKind::Service(auth);
 
-        // #[allow(unused_mut)]
-        // let mut wire_msg = WireMsg::new_msg(msg_id, payload, auth, dst);
-
-        // wire_msg
         (auth, payload, msg_id)
     });
 
@@ -194,7 +142,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut the_wire_msg = WireMsg::new_msg(msg_id, payload.clone(), auth.clone(), dst);
     let (header, dst, payload) = match the_wire_msg.serialize_and_cache_bytes() {
         Ok(bytes) => bytes,
-        Err(erorr) => {
+        Err(_erorr) => {
             panic!("Could not form initial WireMsg");
         }
     };
@@ -211,17 +159,8 @@ fn criterion_benchmark(c: &mut Criterion) {
             b.to_async(&runtime).iter(|| async {
                 for dst in dsts.iter() {
                     if let Err(error) = the_wire_msg.serialize_with_new_dst(dst) {
-                        // if let Err(error) = the_wire_msg.serialize() {
                         panic!("faailed to serialise next dst {error:?}");
                     }
-                    // if let Err(error) = the_wire_msg.serialize_with_new_dst(dst) {
-                    //     panic!("faailed to serialise next dst {error:?}");
-                    // }
-                    // msg.d
-                    // let msg = WireMsg::new_msg(*msg_id, payload.clone(), auth.clone(), *dst);
-                    // if let Err(err) = msg.serialize() {
-                    //     panic!("error serialising payload");
-                    // };
                 }
 
                 Ok::<(), Box<dyn std::error::Error>>(())

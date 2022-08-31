@@ -577,7 +577,6 @@ impl Session {
                             header_bytes.clone(),
                             dst_bytes.clone(),
                             payload_bytes.clone(),
-                            None,
                             listen,
                         )
                         .await

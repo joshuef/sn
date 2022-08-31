@@ -228,7 +228,7 @@ impl Comm {
                     Err(Error::FailedSend(peer))
                 }
             }
-            Err(error) => {
+            Err(_error) => {
                 // there is only one type of error returned: [`Error::InvalidState`]
                 // which should not happen (be reachable) if we only access PeerSession from Comm
                 // The error means we accessed a peer that we disconnected from.
@@ -345,7 +345,7 @@ impl Comm {
         &self,
         recipient: Peer,
         msg_id: MsgId,
-        mut bytes: (Bytes, Bytes, Bytes),
+        bytes: (Bytes, Bytes, Bytes),
     ) -> Result<SendWatcher> {
         // let msg_id = wire_msg.msg_id();
 
