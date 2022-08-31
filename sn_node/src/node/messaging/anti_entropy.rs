@@ -19,7 +19,7 @@ use sn_interface::messaging::Traceroute;
 use sn_interface::{
     messaging::{
         system::{KeyedSig, NodeCmd, SectionAuth, SystemMsg},
-        MsgType, WireMsg,
+        MsgType, WireMsg, WireMsgBytes,
     },
     network_knowledge::SectionAuthorityProvider,
     types::{log_markers::LogMarker, Peer, PublicKey},
@@ -27,7 +27,6 @@ use sn_interface::{
 
 use backoff::{backoff::Backoff, ExponentialBackoff};
 use bls::PublicKey as BlsPublicKey;
-use bytes::Bytes;
 use secured_linked_list::SecuredLinkedList;
 use std::{collections::BTreeSet, time::Duration};
 use xor_name::{Prefix, XorName};
@@ -385,7 +384,7 @@ impl Node {
     pub(crate) fn ae_redirect_to_our_elders(
         &self,
         sender: Peer,
-        bounced_msg: (Bytes, Bytes, Bytes),
+        bounced_msg: WireMsgBytes,
     ) -> Result<Cmd> {
         trace!("{} in ae_redirect ", LogMarker::AeSendRedirect);
 

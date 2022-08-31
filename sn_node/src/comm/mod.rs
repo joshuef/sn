@@ -26,12 +26,11 @@ use crate::log_sleep;
 use crate::node::{Error, RateLimits, Result};
 
 use sn_interface::{
-    messaging::{system::MembershipState, MsgId, WireMsg},
+    messaging::{system::MembershipState, MsgId, WireMsg, WireMsgBytes},
     network_knowledge::NodeState,
     types::Peer,
 };
 
-use bytes::Bytes;
 use dashmap::DashMap;
 use qp2p::{Endpoint, IncomingConnections};
 use std::{collections::BTreeSet, net::SocketAddr, sync::Arc, time::Duration};
@@ -209,12 +208,7 @@ impl Comm {
     }
 
     #[tracing::instrument(skip(self))]
-    pub(crate) async fn send(
-        &self,
-        peer: Peer,
-        msg_id: MsgId,
-        bytes: (Bytes, Bytes, Bytes),
-    ) -> Result<()> {
+    pub(crate) async fn send(&self, peer: Peer, msg_id: MsgId, bytes: WireMsgBytes) -> Result<()> {
         // let msg_id = msg.msg_id();
         // let dst = *msg.dst();
         let watcher = self.send_to_one(peer, msg_id, bytes).await;
@@ -345,7 +339,7 @@ impl Comm {
         &self,
         recipient: Peer,
         msg_id: MsgId,
-        bytes: (Bytes, Bytes, Bytes),
+        bytes: WireMsgBytes,
     ) -> Result<SendWatcher> {
         // let msg_id = wire_msg.msg_id();
 

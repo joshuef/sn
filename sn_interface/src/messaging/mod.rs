@@ -53,7 +53,7 @@ pub use self::{
     msg_id::{MsgId, MESSAGE_ID_LEN},
     msg_type::MsgType,
     sap::SectionAuthorityProvider,
-    serialisation::{NodeMsgAuthority, WireMsg},
+    serialisation::{NodeMsgAuthority, WireMsg, WireMsgBytes},
 };
 
 use serde::{Deserialize, Serialize};

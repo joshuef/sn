@@ -12,7 +12,7 @@ use crate::messaging::{
     system::SystemMsg,
     AuthKind, AuthorityProof, Dst, Error, MsgId, MsgType, NodeMsgAuthority, Result, ServiceAuth,
 };
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use custom_debug::Debug;
 use serde::Serialize;
 
@@ -26,6 +26,7 @@ use itertools::Itertools;
 #[cfg(feature = "traceroute")]
 use std::fmt::{Debug as StdDebug, Display, Formatter};
 
+pub type WireMsgBytes = (Bytes, Bytes, Bytes);
 /// In order to send a message over the wire, it needs to be serialized
 /// along with a header (`WireMsgHeader`) which contains the information needed
 /// by the recipient to properly deserialize it.
@@ -178,13 +179,13 @@ impl WireMsg {
     }
 
     /// Return the serialized `WireMsgHeader`, the Dst and the Payload bytes
-    pub fn serialize(&self) -> Result<(Bytes, Bytes, Bytes)> {
+    pub fn serialize(&self) -> Result<WireMsgBytes> {
         let header = if let Some(bytes) = &self.serialized_header {
             bytes.clone()
         } else {
             // First we create a buffer with the capacity
             // needed to serialize the wire msg
-            self.header.write()?
+            self.header.serialize()?
         };
 
         let dst = if let Some(bytes) = &self.serialized_dst {
@@ -199,13 +200,14 @@ impl WireMsg {
 
     /// Return the serialized `WireMsgHeader`, the Dst and the Payload bytes
     /// This writes the bytes to the WireMsg itself
-    pub fn serialize_and_cache_bytes(&mut self) -> Result<(Bytes, Bytes, Bytes)> {
+    pub fn serialize_and_cache_bytes(&mut self) -> Result<WireMsgBytes> {
+        // if we've already serialized, grab those header bytes
         let header = if let Some(bytes) = &self.serialized_header {
             bytes.clone()
         } else {
             // First we create a buffer with the capacity
             // needed to serialize the wire msg
-            self.header.write()?
+            self.header.serialize()?
         };
 
         self.serialized_header = Some(header.clone());
@@ -224,17 +226,12 @@ impl WireMsg {
 
     /// Return the serialized `WireMsg`, which contains the `WireMsgHeader` bytes,
     /// followed by the payload bytes, i.e. the serialized Message.
-    pub fn serialize_with_new_dst(&self, dst: &Dst) -> Result<(Bytes, Bytes, Bytes)> {
+    pub fn serialize_with_new_dst(&self, dst: &Dst) -> Result<WireMsgBytes> {
+        // if we've already serialized, grab those header bytes
         let header = if let Some(bytes) = &self.serialized_header {
-            // println!("header exists");
             bytes.clone()
         } else {
-            // First we create a buffer with the capacity
-            // needed to serialize the wire msg
-            let max_length = WireMsgHeader::max_size() as usize + self.payload.len();
-            // let buffer = BytesMut::with_capacity(max_length);
-
-            self.header.write()?
+            self.header.serialize()?
         };
 
         // println!("header exists");

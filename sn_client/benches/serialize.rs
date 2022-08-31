@@ -7,25 +7,19 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use bytes::{Bytes, BytesMut};
+use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, Criterion};
-use criterion::{Throughput};
 
 use eyre::Result;
 use rand::{rngs::OsRng, Rng};
 
 use sn_client::{Client, Error};
 use sn_interface::{
-    messaging::{
-        data::{ServiceMsg},
-        AuthKind, Dst, MsgId, ServiceAuth, WireMsg,
-    },
-    types::{
-        register::{Policy, User},
-    },
+    messaging::{data::ServiceMsg, AuthKind, Dst, MsgId, ServiceAuth, WireMsg},
+    types::register::{Policy, User},
 };
 use std::collections::BTreeMap;
 use tokio::runtime::Runtime;
-
 
 fn public_policy(owner: User) -> Policy {
     let permissions = BTreeMap::new();
@@ -125,8 +119,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             public_key: client_pk,
             signature: client.sign(&payload),
         };
-
-
 
         let auth = AuthKind::Service(auth);
 

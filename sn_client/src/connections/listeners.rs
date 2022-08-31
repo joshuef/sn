@@ -19,13 +19,13 @@ use sn_interface::{
         data::{CmdError, ServiceMsg},
         system::{AntiEntropyKind, KeyedSig, NodeMsgAuthorityUtils, SectionAuth, SystemMsg},
         AuthKind, AuthorityProof, Dst, MsgId, MsgType, NodeMsgAuthority, ServiceAuth, WireMsg,
+        WireMsgBytes,
     },
     network_knowledge::{NetworkKnowledge, SectionAuthorityProvider},
     types::{log_markers::LogMarker, Peer},
 };
 
 use bls::PublicKey as BlsPublicKey;
-use bytes::Bytes;
 use itertools::Itertools;
 use qp2p::{Close, ConnectionError, ConnectionIncoming as IncomingMsgs, SendError};
 use rand::{rngs::OsRng, seq::SliceRandom};
@@ -308,7 +308,7 @@ impl Session {
         target_sap: SectionAuthorityProvider,
         section_signed: KeyedSig,
         provided_section_chain: SecuredLinkedList,
-        bounced_msg: (Bytes, Bytes, Bytes),
+        bounced_msg: WireMsgBytes,
         src_peer: Peer,
     ) -> Result<(), Error> {
         debug!("Received Anti-Entropy from {src_peer}, with SAP: {target_sap:?}");
@@ -401,7 +401,7 @@ impl Session {
     /// or if it has already been dealt with
     #[instrument(skip_all, level = "debug")]
     async fn new_target_elders(
-        bounced_msg: (Bytes, Bytes, Bytes),
+        bounced_msg: WireMsgBytes,
         received_auth: &SectionAuthorityProvider,
     ) -> Result<
         Option<(

@@ -11,7 +11,7 @@ mod wire_msg_header;
 
 pub use self::wire_msg::WireMsg;
 #[cfg(feature = "traceroute")]
-pub use self::wire_msg::{Entity, Traceroute};
+pub use self::wire_msg::{Entity, Traceroute, WireMsgBytes};
 
 use super::{AuthorityProof, BlsShareAuth, NodeAuth, SectionAuth};
 

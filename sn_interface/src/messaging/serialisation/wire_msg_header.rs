@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::messaging::{AuthKind, Dst, Error, MsgId, Result};
+use crate::messaging::{AuthKind, Error, MsgId, Result};
 use bincode::{
     config::{BigEndian, FixintEncoding, WithOtherEndian, WithOtherIntEncoding},
     Options,
@@ -103,7 +103,7 @@ impl WireMsgHeader {
     // returning the created WireMsgHeader, as well as the remaining bytes which
     // correspond to the message payload. The caller shall then take care of
     // deserializing the payload using the information provided in the `WireMsgHeader`.
-    pub fn from(mut bytes: Bytes) -> Result<Self> {
+    pub fn from(bytes: Bytes) -> Result<Self> {
         let bytes_len = bytes.len();
 
         // Parse the leading metadata
@@ -136,7 +136,6 @@ impl WireMsgHeader {
             })?;
 
         let header = Self {
-            //header_size,
             version: meta.version,
             msg_envelope,
         };
@@ -145,7 +144,7 @@ impl WireMsgHeader {
     }
 
     /// Write header metadata and msg envelope info into a provided buffer
-    pub fn write(&self) -> Result<Bytes> {
+    pub fn serialize(&self) -> Result<Bytes> {
         // first serialise the msg envelope so we can figure out the total header size
         let msg_envelope_vec = rmp_serde::to_vec_named(&self.msg_envelope).map_err(|err| {
             Error::Serialisation(format!(

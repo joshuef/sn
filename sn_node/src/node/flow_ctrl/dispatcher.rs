@@ -16,7 +16,7 @@ use crate::node::{
 #[cfg(feature = "traceroute")]
 use sn_interface::{messaging::Entity, messaging::Traceroute, types::PublicKey};
 use sn_interface::{
-    messaging::{AuthKind, Dst, MsgId, WireMsg},
+    messaging::{AuthKind, Dst, MsgId, WireMsg, WireMsgBytes},
     types::Peer,
 };
 
@@ -289,7 +289,7 @@ fn into_msg_bytes(
     msg_id: MsgId,
     recipients: Peers,
     #[cfg(feature = "traceroute")] traceroute: Traceroute,
-) -> Result<Vec<(Peer, (Bytes, Bytes, Bytes))>> {
+) -> Result<Vec<(Peer, WireMsgBytes)>> {
     let (auth, payload) = node.sign_msg(msg)?;
     let recipients = match recipients {
         Peers::Single(peer) => vec![peer],
@@ -331,37 +331,6 @@ fn into_msg_bytes(
             }
         }
     }
-    // let msgs = recipients
-    //     .into_iter()
-    //     .filter_map(|peer| match node.network_knowledge.generate_dst(&peer.name()) {
-    //         Ok(dst) => {
-    //             // TODO: We can just use the same dst for all client recipients..?
-    //             // What would that do to healthchecks?
-
-    //             // #[cfg(feature = "traceroute")]
-    //             // let trace = Trace {
-    //             //     entity: entity(node),
-    //             //     traceroute: traceroute.clone(),
-    //             // };
-
-    //             let all_the_bytes = initial_wire_msg.serialize_with_new_dst(dst).ok?;
-
-    //             // let wire_msg = wire_msg(
-    //             //     msg_id,
-    //             //     payload.clone(),
-    //             //     auth.clone(),
-    //             //     dst,
-    //             //     #[cfg(feature = "traceroute")]
-    //             //     trace,
-    //             // );
-    //             Some((peer, all_the_bytes))
-    //         }
-    //         Err(error) => {
-    //             error!("Could not get route for {peer:?}: {error}");
-    //             None
-    //         }
-    //     })
-    //     .collect();
 
     Ok(msgs)
 }
