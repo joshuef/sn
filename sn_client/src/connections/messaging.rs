@@ -8,7 +8,7 @@
 
 use super::{QueryResult, Session};
 
-use crate::{connections::CmdResponse, Error, Result};
+use crate::{Error, Result};
 
 #[cfg(feature = "traceroute")]
 use sn_interface::{
@@ -84,71 +84,84 @@ impl Session {
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
         // The insertion of channel will be executed AFTER the completion of the `send_message`.
-        let (sender, mut receiver) = channel::<CmdResponse>(elders_len);
-        let _ = self.pending_cmds.insert(msg_id, sender);
-        trace!("Inserted channel for cmd {:?}", msg_id);
-
         self.send_msg(elders, wire_msg, msg_id, force_new_link)
             .await?;
+        trace!("Cmd msg {:?} sent", msg_id);
 
         let expected_acks = elders_len;
 
         // We are not wait for the receive of majority of cmd Acks.
         // This could be further strict to wait for ALL the Acks get received.
         // The period is expected to have AE completed, hence no extra wait is required.
-        let mut received_acks = 0;
-        let mut received_err = 0;
-        let mut attempts = 0;
-        let interval = Duration::from_millis(50);
-        let expected_cmd_ack_wait_attempts =
-            std::cmp::max(200, self.cmd_ack_wait.as_millis() / interval.as_millis());
-        loop {
-            match receiver.try_recv() {
-                Ok((src, None)) => {
-                    received_acks += 1;
-                    trace!("received CmdAck of {msg_id:?} from {src:?}, so far {received_acks} / {expected_acks}");
 
-                    if received_acks >= expected_acks {
-                        let _ = self.pending_cmds.remove(&msg_id);
-                        break;
+        let mut ack_checks = 0;
+        let max_ack_checks = 100;
+        let interval = Duration::from_millis(50);
+
+        loop {
+            if let Some(acks_we_have) = self.pending_cmds.get(&msg_id) {
+                let acks = acks_we_have.value();
+
+                let received_response_count = acks.len();
+
+                let mut error_count = 0;
+                let mut return_error = None;
+
+                // track received errors
+                for refmulti in acks.iter() {
+                    let (ack_src, error) = refmulti.key();
+                    if return_error.is_none() {
+                        return_error = error.clone();
+                    }
+
+                    if error.is_some() {
+                        error!(
+                            "received error response {:?} of cmd {:?} from {:?}, so far {} respones and {} of them are errors",
+                            error, msg_id, ack_src, received_response_count, error_count
+                        );
+                        error_count += 1;
                     }
                 }
-                Ok((src, Some(error))) => {
-                    received_err += 1;
+
+                // first exit if too many errors:
+                if error_count >= expected_acks {
                     error!(
-                        "received error response {:?} of cmd {:?} from {:?}, so far {} acks vs. {} errors",
-                        error, msg_id, src, received_acks, received_err
+                        "Received majority of error response for cmd {:?}: {:?}",
+                        msg_id, return_error
                     );
-                    if received_err >= expected_acks {
-                        error!("Received majority of error response for cmd {:?}", msg_id);
-                        let _ = self.pending_cmds.remove(&msg_id);
-                        return Err(Error::ErrorCmd {
-                            source: error,
-                            msg_id,
-                        });
+                    // attempt to cleanup... though more acks may come in..
+                    let _ = self.pending_cmds.remove(&msg_id);
+
+                    if let Some(CmdError::Data(source)) = return_error {
+                        return Err(Error::ErrorCmd { source, msg_id });
                     }
+
+                    // return Err(Error::ErrorCmd {
+                    //     source: error,
+                    //     msg_id,
+                    // });
                 }
-                Err(_err) => {
-                    // this is not an error..the channel is just empty atm
+
+                let actual_ack_count = received_response_count - error_count;
+
+                if actual_ack_count >= expected_acks {
+                    break;
                 }
+
+                debug!("insufficient acks returned so far: {actual_ack_count}/{expected_acks}");
             }
-            attempts += 1;
-            if attempts >= expected_cmd_ack_wait_attempts {
-                warn!(
-                    "Terminated with insufficient CmdAcks for {:?}, {} / {} acks received",
-                    msg_id, received_acks, expected_acks
-                );
-                break;
+
+            if ack_checks >= max_ack_checks {
+                return Err(Error::InsufficientAcksReceived);
             }
-            trace!(
-                "current ack waiting loop count {}/{}",
-                attempts,
-                expected_cmd_ack_wait_attempts
-            );
+
+            ack_checks += 1;
+
+            trace!("{:?} current ack waiting loop count {}", msg_id, ack_checks,);
             tokio::time::sleep(interval).await;
         }
 
-        trace!("Wait for any cmd response/reaction (AE msgs eg), is over)");
+        trace!("Wait for any cmd response/reaction (AE msgs eg), is over. We've had sufficient success.)");
         Ok(())
     }
 
@@ -522,15 +535,13 @@ impl Session {
     pub(super) async fn send_msg(
         &self,
         nodes: Vec<Peer>,
-        mut wire_msg: WireMsg,
+        wire_msg: WireMsg,
         msg_id: MsgId,
         force_new_link: bool,
     ) -> Result<()> {
-        let bytes = wire_msg.serialize_and_cache_bytes()?;
+        let bytes = wire_msg.serialize()?;
 
         let mut last_error = None;
-        drop(wire_msg);
-
         // Send message to all Elders concurrently
         let mut tasks = Vec::default();
 
@@ -632,7 +643,11 @@ impl Session {
         }
 
         if failures > successful_sends {
-            warn!("More errors when sending a message than successes");
+            warn!(
+                "More errors when sending a message than successes, last_error: {:?}",
+                last_error
+            );
+
             if let Some(error) = last_error {
                 warn!("The relevant error is: {error}");
                 return Err(error);
@@ -653,10 +668,7 @@ mod tests {
 
     use eyre::{eyre, Result};
     use qp2p::Config;
-    use std::{
-        net::{Ipv4Addr, SocketAddr},
-        time::Duration,
-    };
+    use std::net::{Ipv4Addr, SocketAddr};
     use xor_name::Prefix;
 
     fn prefix(s: &str) -> Result<Prefix> {
@@ -686,7 +698,6 @@ mod tests {
         let session = Session::new(
             Config::default(),
             SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)),
-            Duration::from_secs(10),
             network_contacts,
         )?;
 

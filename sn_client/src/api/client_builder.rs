@@ -156,7 +156,6 @@ impl ClientBuilder {
         let max_retries = self.max_retries.unwrap_or(DEFAULT_MAX_QUERY_CMD_RETRIES);
         let query_timeout = self.query_timeout.unwrap_or(DEFAULT_QUERY_CMD_TIMEOUT);
         let cmd_timeout = self.cmd_timeout.unwrap_or(DEFAULT_QUERY_CMD_TIMEOUT);
-        let cmd_ack_wait = self.cmd_ack_wait.unwrap_or(DEFAULT_ACK_WAIT);
 
         let network_contacts = match self.network_contacts {
             Some(pm) => pm,
@@ -178,7 +177,6 @@ impl ClientBuilder {
             qp2p,
             self.local_addr
                 .unwrap_or_else(|| SocketAddr::from(DEFAULT_LOCAL_ADDR)),
-            cmd_ack_wait,
             network_contacts,
         )?;
 

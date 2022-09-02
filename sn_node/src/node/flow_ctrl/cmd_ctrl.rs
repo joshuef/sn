@@ -100,6 +100,8 @@ impl CmdCtrl {
         let id = job.id();
         let cmd = job.clone().into_cmd();
 
+        trace!("Processing cmd: {cmd:?}");
+
         let cmd_string = cmd.clone().to_string();
         let priority = job.priority();
 
@@ -114,6 +116,7 @@ impl CmdCtrl {
             }))
             .await;
 
+        trace!("about to spawn for processing cmd: {cmd:?}");
         let dispatcher = self.dispatcher.clone();
         let _ = tokio::task::spawn_local(async move {
             dispatcher
@@ -125,6 +128,7 @@ impl CmdCtrl {
             match dispatcher.process_cmd(cmd).await {
                 Ok(cmds) => {
                     for cmd in cmds {
+                        monitoring.increment_cmds().await;
                         match cmd_process_api.send((cmd, Some(id))).await {
                             Ok(_) => {
                                 //no issues

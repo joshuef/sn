@@ -19,9 +19,9 @@ use sn_interface::{
     types::PeerLinks,
 };
 
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use qp2p::{Config as QuicP2pConfig, Endpoint};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, RwLock};
 
 // Here we dont track the msg_id across the network, but just use it as a local identifier to remove the correct listener
@@ -29,7 +29,10 @@ type PendingQueryResponses = Arc<DashMap<OperationId, Vec<(MsgId, QueryResponseS
 type QueryResponseSender = Sender<QueryResponse>;
 
 type CmdResponse = (SocketAddr, Option<ErrorMsg>);
-type PendingCmdAcks = Arc<DashMap<MsgId, Sender<CmdResponse>>>;
+
+/// As we receive ACKs, we write the ACKd peer here for checking.
+/// TODO: This could be a mem leak for long running clients.
+type PendingCmdAcks = Arc<DashMap<MsgId, Arc<DashSet<CmdResponse>>>>;
 
 #[derive(Debug)]
 pub struct QueryResult {
@@ -54,8 +57,6 @@ pub(super) struct Session {
     pending_cmds: PendingCmdAcks,
     /// All elders we know about from AE messages
     pub(super) network: Arc<RwLock<SectionTree>>,
-    /// Standard time to await potential AE messages:
-    cmd_ack_wait: Duration,
     /// Links to nodes
     peer_links: PeerLinks,
 }
@@ -66,7 +67,6 @@ impl Session {
     pub(crate) fn new(
         qp2p_config: QuicP2pConfig,
         local_addr: SocketAddr,
-        cmd_ack_wait: Duration,
         network_contacts: SectionTree,
     ) -> Result<Self> {
         let endpoint = Endpoint::new_client(local_addr, qp2p_config)?;
@@ -77,7 +77,6 @@ impl Session {
             pending_cmds: Arc::new(DashMap::default()),
             endpoint,
             network: Arc::new(RwLock::new(network_contacts)),
-            cmd_ack_wait,
             peer_links,
         };
 
