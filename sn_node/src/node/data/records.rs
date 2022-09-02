@@ -87,7 +87,6 @@ impl Node {
             target_adult: target.name(),
         }];
 
-        // here we conflate adults targetted!!
         if let Some(peers) = self
             .pending_data_queries
             .get(&(operation_id, target.name()))

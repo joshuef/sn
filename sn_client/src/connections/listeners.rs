@@ -13,6 +13,7 @@ use crate::{
     Error, Result,
 };
 
+use dashmap::DashSet;
 use qp2p::UsrMsgBytes;
 use sn_interface::{
     at_least_one_correct_elder,
@@ -31,6 +32,7 @@ use qp2p::{Close, ConnectionError, ConnectionIncoming as IncomingMsgs, SendError
 use rand::{rngs::OsRng, seq::SliceRandom};
 use secured_linked_list::SecuredLinkedList;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tracing::Instrument;
 
 impl Session {
@@ -197,19 +199,18 @@ impl Session {
         src: SocketAddr,
         error: Option<CmdError>,
     ) {
-        if let Some(sender) = cmds.get(&correlation_id) {
-            trace!(
-                "Sending cmd response from {:?} for cmd w/{:?} via channel.",
-                src,
-                correlation_id
-            );
-            let result = sender.try_send((src, error));
-            if result.is_err() {
-                trace!("Error sending cmd response on a channel for cmd_id {:?}: {:?}. (It has likely been removed)", correlation_id, result)
-            }
+        if error.is_some() {
+            debug!("CmdError was received for {correlation_id:?}: {:?}", error);
+        }
+
+        if let Some(mut received_acks) = cmds.get_mut(&correlation_id) {
+            let acks = received_acks.value_mut();
+
+            let _prior = acks.insert((src, error));
         } else {
-            // Likely the channel is removed when received majority of Acks
-            trace!("No channel found for cmd Ack of {:?}", correlation_id);
+            let received = DashSet::new();
+            let _nonexistent = received.insert((src, error));
+            let _non_prior = cmds.insert(correlation_id, Arc::new(received));
         }
     }
 
@@ -280,7 +281,6 @@ impl Session {
                     correlation_id,
                     ..
                 } => {
-                    warn!("CmdError was received for {correlation_id:?}: {:?}", error);
                     Self::send_cmd_response(cmds, correlation_id, src_peer.addr(), Some(error));
                 }
                 ServiceMsg::CmdAck { correlation_id } => {

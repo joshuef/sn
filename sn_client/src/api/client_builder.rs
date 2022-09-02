@@ -40,7 +40,7 @@ pub const ENV_AE_WAIT: &str = "SN_AE_WAIT";
 /// Bind by default to all network interfaces on a OS assigned port
 pub const DEFAULT_LOCAL_ADDR: (Ipv4Addr, u16) = (Ipv4Addr::UNSPECIFIED, 0);
 /// Default timeout to use before timing out queries and commands
-pub const DEFAULT_QUERY_CMD_TIMEOUT: Duration = Duration::from_secs(30);
+pub const DEFAULT_QUERY_CMD_TIMEOUT: Duration = Duration::from_secs(45);
 /// Max retries to be attempted in the DEFAULT_QUERY_CMD_TIMEOUT; DEFAULT_QUERY_CMD_TIMEOUT / DEFAULT_MAX_QUERY_CMD_RETRIES ~ tries per second
 /// (though exponential backoff exists)
 pub const DEFAULT_MAX_QUERY_CMD_RETRIES: usize = 15;
@@ -156,7 +156,6 @@ impl ClientBuilder {
         let max_retries = self.max_retries.unwrap_or(DEFAULT_MAX_QUERY_CMD_RETRIES);
         let query_timeout = self.query_timeout.unwrap_or(DEFAULT_QUERY_CMD_TIMEOUT);
         let cmd_timeout = self.cmd_timeout.unwrap_or(DEFAULT_QUERY_CMD_TIMEOUT);
-        let cmd_ack_wait = self.cmd_ack_wait.unwrap_or(DEFAULT_ACK_WAIT);
 
         let network_contacts = match self.network_contacts {
             Some(pm) => pm,
@@ -178,7 +177,6 @@ impl ClientBuilder {
             qp2p,
             self.local_addr
                 .unwrap_or_else(|| SocketAddr::from(DEFAULT_LOCAL_ADDR)),
-            cmd_ack_wait,
             network_contacts,
         )?;
 

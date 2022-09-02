@@ -221,11 +221,7 @@ impl Cmd {
     pub(crate) fn priority(&self) -> i32 {
         use Cmd::*;
         match self {
-            SendMsg { msg, .. } => match msg {
-                OutgoingMsg::System(_) => 20,
-                _ => 19,
-            },
-
+            SendMsg { .. } => 20,
             HandleAgreement { .. } => 10,
             HandleNewEldersAgreement { .. } => 10,
             HandleDkgOutcome { .. } => 10,

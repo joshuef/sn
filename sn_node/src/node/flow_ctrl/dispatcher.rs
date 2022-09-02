@@ -63,6 +63,8 @@ impl Dispatcher {
 
     /// Handles a single cmd.
     pub(crate) async fn process_cmd(&self, cmd: Cmd) -> Result<Vec<Cmd>> {
+        trace!("doing actual processing cmd: {cmd:?}");
+
         match cmd {
             Cmd::CleanupPeerLinks => {
                 let members = { self.node.read().await.network_knowledge.section_members() };

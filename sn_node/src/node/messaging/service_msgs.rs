@@ -45,6 +45,7 @@ impl Node {
         msg_id: MsgId,
         #[cfg(feature = "traceroute")] traceroute: Traceroute,
     ) -> Cmd {
+        debug!("Sending cmd ack to {target} for {msg_id:?}");
         let the_ack_msg = ServiceMsg::CmdAck {
             correlation_id: msg_id,
         };
@@ -63,6 +64,9 @@ impl Node {
         recipients: Peers,
         #[cfg(feature = "traceroute")] traceroute: Traceroute,
     ) -> Cmd {
+        let new_msg_id = MsgId::new();
+
+        debug!("SendMSg formed for {:?}", new_msg_id);
         Cmd::SendMsg {
             msg: OutgoingMsg::Service(msg),
             msg_id: MsgId::new(),

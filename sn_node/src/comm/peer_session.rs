@@ -29,7 +29,7 @@ use tokio::{sync::mpsc, time::Instant};
 
 /// These retries are how may _new_ connection attempts do we make.
 /// If we fail all of these, HandlePeerFailedSend will be triggered
-/// for section nodes, which in turn kicks off a ConnectivityTest
+/// for section nodes, which in turn kicks off Dysfunction tracking
 const MAX_SENDJOB_RETRIES: usize = 3;
 const DEFAULT_DESIRED_RATE: f64 = 10.0; // 10 msgs / s
 
@@ -94,6 +94,7 @@ impl PeerSession {
             error!("Error while sending Send command {e:?}");
         }
 
+        trace!("Send job sent: {msg_id:?}");
         Ok(watcher)
     }
 
@@ -187,6 +188,10 @@ impl PeerSessionWorker {
     }
 
     async fn send(&mut self, mut job: SendJob) -> SessionStatus {
+        let id = job.msg_id;
+
+        trace!("Performing sendjob: {id:?}");
+
         if job.retries > MAX_SENDJOB_RETRIES {
             job.reporter.send(SendStatus::MaxRetriesReached);
             return SessionStatus::Ok;
@@ -216,14 +221,14 @@ impl PeerSessionWorker {
                 return SessionStatus::Terminating;
             }
             Err(err) => {
-                warn!("Transient error while attempting to send, re-enqueing job {err:?}");
+                warn!("Transient error while attempting to send, re-enqueing job {id:?} {err:?}");
                 job.reporter
                     .send(SendStatus::TransientError(format!("{err:?}")));
 
                 job.retries += 1;
 
                 if let Err(e) = self.queue.send(SessionCmd::Send(job)).await {
-                    warn!("Failed to re-enqueue job after transient error {e:?}");
+                    warn!("Failed to re-enqueue job {id:?} after transient error {e:?}");
                     return SessionStatus::Terminating;
                 }
             }
