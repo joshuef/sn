@@ -78,6 +78,9 @@ impl Dispatcher {
                 #[cfg(feature = "traceroute")]
                 traceroute,
             } => {
+                let is_service_msg = matches!(msg, OutgoingMsg::Service(_));
+
+                trace!("Sending msg: {msg_id:?}");
                 let peer_msgs = {
                     let node = self.node.read().await;
                     into_msg_bytes(
@@ -100,7 +103,14 @@ impl Dispatcher {
                 let cmds = results
                     .into_iter()
                     .filter_map(|result| match result {
-                        Err(Error::FailedSend(peer)) => Some(Cmd::HandlePeerFailedSend(peer)),
+                        Err(Error::FailedSend(peer)) => {
+                            if is_service_msg {
+                                warn!("Service msg send failed to: {peer}, for {msg_id:?}");
+                                None
+                            } else {
+                                Some(Cmd::HandlePeerFailedSend { peer, msg_id })
+                            }
+                        }
                         _ => None,
                     })
                     .collect();
@@ -232,7 +242,8 @@ impl Dispatcher {
                 let mut node = self.node.write().await;
                 node.handle_new_elders_agreement(new_elders, sig).await
             }
-            Cmd::HandlePeerFailedSend(peer) => {
+            Cmd::HandlePeerFailedSend { peer, msg_id } => {
+                warn!("Message sending failed to {peer}, for {msg_id:?}");
                 let mut node = self.node.write().await;
                 node.handle_failed_send(&peer.addr());
                 Ok(vec![])

@@ -148,7 +148,7 @@ pub(crate) enum Cmd {
     /// Handle a timeout previously scheduled with `ScheduleDkgTimeout`.
     HandleDkgTimeout(u64),
     /// Handle peer that's been detected as lost.
-    HandlePeerFailedSend(Peer),
+    HandlePeerFailedSend { peer: Peer, msg_id: MsgId },
     /// Handle agreement on a proposal.
     HandleAgreement { proposal: Proposal, sig: KeyedSig },
     /// Handle a membership decision.
@@ -229,7 +229,7 @@ impl Cmd {
             HandleDkgTimeout(_) => 10,
             ProposeVoteNodesOffline(_) => 10,
 
-            HandlePeerFailedSend(_) => 9,
+            HandlePeerFailedSend { .. } => 9,
             TrackNodeIssueInDysfunction { .. } => 9,
             HandleMembershipDecision(_) => 9,
             EnqueueDataForReplication { .. } => 9,
@@ -255,7 +255,7 @@ impl Cmd {
             Cmd::CleanupPeerLinks => State::Comms,
             Cmd::SendMsg { .. } => State::Comms,
             Cmd::Comm(_) => State::Comms,
-            Cmd::HandlePeerFailedSend(_) => State::Comms,
+            Cmd::HandlePeerFailedSend { .. } => State::Comms,
             Cmd::ValidateMsg { .. } => State::Validation,
             Cmd::HandleValidSystemMsg { msg, .. } => msg.statemap_states(),
             Cmd::HandleValidServiceMsg { .. } => State::ServiceMsg,
@@ -301,7 +301,9 @@ impl fmt::Display for Cmd {
             Cmd::HandleValidServiceMsg { msg_id, msg, .. } => {
                 write!(f, "HandleValidServiceMsg {:?}: {:?}", msg_id, msg)
             }
-            Cmd::HandlePeerFailedSend(peer) => write!(f, "HandlePeerFailedSend({:?})", peer.name()),
+            Cmd::HandlePeerFailedSend { peer, msg_id } => {
+                write!(f, "HandlePeerFailedSend({:?}, {:?})", peer.name(), msg_id)
+            }
             Cmd::HandleAgreement { .. } => write!(f, "HandleAgreement"),
             Cmd::HandleNewEldersAgreement { .. } => write!(f, "HandleNewEldersAgreement"),
             Cmd::HandleMembershipDecision(_) => write!(f, "HandleMembershipDecision"),
