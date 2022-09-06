@@ -302,12 +302,17 @@ impl Comm {
     /// Get a PeerSession if it already exists, otherwise create and insert
     #[instrument(skip(self))]
     async fn get_or_create(&self, peer: &Peer) -> PeerSession {
+        trace!("fetching entry of peer {:?} among the seesions", peer);
         if let Some(entry) = self.sessions.get(peer) {
+            trace!("get existing entry of peer {:?}", peer);
             return entry.value().clone();
         }
+        trace!("creating a new link of peer {:?}", peer);
         let link = Link::new(*peer, self.our_endpoint.clone(), self.msg_listener.clone());
+        trace!("new link created of peer {:?}", peer);
         let session = PeerSession::new(link);
         let _ = self.sessions.insert(*peer, session.clone());
+        trace!("new session of peer {:?} inserted into sessions", peer);
         session
     }
 
@@ -351,6 +356,7 @@ impl Comm {
             recipient,
         );
         let peer = self.get_or_create(&recipient).await;
+        trace!("get peer of {:?} for msg_id: {:?}", recipient, msg_id,);
         peer.send(msg_id, bytes).await
     }
 }
