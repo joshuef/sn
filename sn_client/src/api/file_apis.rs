@@ -153,12 +153,26 @@ impl Client {
     /// Directly writes [`Bytes`] to the network in the
     /// form of immutable chunks, without any batching.
     /// It also attempts to verify that all the data was uploaded to the network before returning.
+    /// It does this via repeatedly running `read_bytes` until we hit `query_timeout`.
     #[instrument(skip_all, level = "trace")]
     pub async fn upload_and_verify(&self, bytes: Bytes) -> Result<(XorName, Bytes)> {
         let address = self.upload(bytes).await?;
 
-        // let's now try to retrieve it
-        let bytes = self.read_bytes(address).await?;
+        // each individual `read_bytes` could return earlier than
+        // query_timeout with `DataNotFound` eg,
+        // but this could just mean that the data has not yet
+        // reached adults...
+        //
+        // and so, we loop until the timeout _over_ our
+        let bytes = tokio::time::timeout(self.query_timeout, async {
+            let mut last_response = self.read_bytes(address).await;
+            while last_response.is_err() {
+                last_response = self.read_bytes(address).await;
+            }
+            last_response
+        })
+        .await
+        .map_err(|_| Error::NoResponsesForUploadValidation)??;
 
         Ok((address, bytes))
     }

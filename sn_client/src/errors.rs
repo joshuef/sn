@@ -88,6 +88,9 @@ pub enum Error {
         /// Maximum number of bytes for a `SmallFile`
         maximum: usize,
     },
+    /// Failed to obtain any response
+    #[error("No responses were returned for file upload validation")]
+    NoResponsesForUploadValidation,
     /// Failed to obtain a response from Elders.
     #[error("Failed to obtain any response from: {0:?}")]
     NoResponse(Vec<Peer>),
