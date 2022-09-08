@@ -38,5 +38,5 @@ else
 
     echo "Render the statemap SVG with"
     echo ""
-    echo "    $statemap_cmd > save.svg"
+    echo "    $statemap_cmd > safe.svg"
 fi
