@@ -96,20 +96,6 @@ impl Link {
         self.connections.clear();
     }
 
-    /// Send a message to the peer with default retry configuration.
-    ///
-    /// The message will be sent on a unidirectional QUIC stream, meaning the application is
-    /// responsible for correlating any anticipated responses from incoming streams.
-    ///
-    /// The priority will be `0` and retry behaviour will be determined by the
-    /// [`Config`](crate::Config) that was used to construct the [`Endpoint`] this connection
-    /// belongs to. See [`send_with`](Self::send_with) if you want to send a message with specific
-    /// configuration.
-    #[allow(unused)]
-    pub(crate) async fn send(&mut self, bytes: UsrMsgBytes) -> Result<(), SendToOneError> {
-        self.send_with(bytes, 0, None).await
-    }
-
     /// Send a message to the peer using the given configuration.
     ///
     /// See [`send`](Self::send) if you want to send with the default configuration.
@@ -119,8 +105,9 @@ impl Link {
         bytes: UsrMsgBytes,
         priority: i32,
         retry_config: Option<&RetryConfig>,
+        should_establish_new_connection: bool,
     ) -> Result<(), SendToOneError> {
-        let conn = self.get_or_connect().await?;
+        let conn = self.get_or_connect(should_establish_new_connection).await?;
         trace!(
             "We have {} open connections to node {:?}.",
             self.queue.len(),
@@ -143,10 +130,19 @@ impl Link {
         }
     }
 
-    async fn get_or_connect(&mut self) -> Result<qp2p::Connection, SendToOneError> {
+    async fn get_or_connect(
+        &mut self,
+        should_establish_new_connection: bool,
+    ) -> Result<qp2p::Connection, SendToOneError> {
         // get the most recently used connection
         match self.queue.peek_max().map(|(id, _prio)| id.clone()) {
-            None => self.create_connection().await,
+            None => {
+                if should_establish_new_connection {
+                    self.create_connection().await
+                } else {
+                    Err(SendToOneError::NoConnection)
+                }
+            }
             Some(id) => self.read_conn(id).await,
         }
     }
@@ -285,6 +281,8 @@ pub(crate) enum SendToOneError {
     Connection(qp2p::ConnectionError),
     ///
     Send(qp2p::SendError),
+    /// No Connection Exists to send on, as required by should_establish_new_connection
+    NoConnection,
 }
 
 impl SendToOneError {
@@ -297,6 +295,7 @@ impl SendToOneError {
                 | SendToOneError::Send(qp2p::SendError::ConnectionLost(
                     qp2p::ConnectionError::Closed(qp2p::Close::Local)
                 ))
+                | SendToOneError::NoConnection
         )
     }
 }

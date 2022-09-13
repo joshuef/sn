@@ -83,9 +83,10 @@ impl Dispatcher {
                     )?
                 };
 
-                let tasks = peer_msgs
-                    .into_iter()
-                    .map(|(peer, msg)| self.comm.send(peer, msg_id, msg));
+                let tasks = peer_msgs.into_iter().map(|(peer, msg)| {
+                    self.comm
+                        .send_out_bytes(peer, msg_id, msg, is_msg_for_client)
+                });
                 let results = futures::future::join_all(tasks).await;
 
                 // Any failed sends are tracked via Cmd::HandlePeerFailedSend, which will log dysfunction for any peers

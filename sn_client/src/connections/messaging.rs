@@ -99,7 +99,7 @@ impl Session {
         // We are not wait for the receive of majority of cmd Acks.
         // This could be further strict to wait for ALL the Acks get received.
         // The period is expected to have AE completed, hence no extra wait is required.
-        let mut received_ack = 0;
+        let mut received_acks = 0;
         let mut received_err = 0;
         let mut attempts = 0;
         let interval = Duration::from_millis(50);
@@ -108,10 +108,10 @@ impl Session {
         loop {
             match receiver.try_recv() {
                 Ok((src, None)) => {
-                    received_ack += 1;
-                    trace!("received CmdAck of {msg_id:?} from {src:?}, so far {received_ack} / {expected_acks}");
+                    received_acks += 1;
+                    trace!("received CmdAck of {msg_id:?} from {src:?}, so far {received_acks} / {expected_acks}");
 
-                    if received_ack >= expected_acks {
+                    if received_acks >= expected_acks {
                         let _ = self.pending_cmds.remove(&msg_id);
                         break;
                     }
@@ -120,7 +120,7 @@ impl Session {
                     received_err += 1;
                     error!(
                         "received error response {:?} of cmd {:?} from {:?}, so far {} acks vs. {} errors",
-                        error, msg_id, src, received_ack, received_err
+                        error, msg_id, src, received_acks, received_err
                     );
                     if received_err >= expected_acks {
                         error!("Received majority of error response for cmd {:?}", msg_id);
@@ -139,7 +139,7 @@ impl Session {
             if attempts >= expected_cmd_ack_wait_attempts {
                 warn!(
                     "Terminated with insufficient CmdAcks for {:?}, {} / {} acks received",
-                    msg_id, received_ack, expected_acks
+                    msg_id, received_acks, expected_acks
                 );
                 break;
             }

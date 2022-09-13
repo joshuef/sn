@@ -164,17 +164,29 @@ impl Comm {
     }
 
     #[tracing::instrument(skip(self, bytes))]
-    pub(crate) async fn send(&self, peer: Peer, msg_id: MsgId, bytes: UsrMsgBytes) -> Result<()> {
-        let watcher = self.send_to_one(peer, msg_id, bytes).await;
+    pub(crate) async fn send_out_bytes(
+        &self,
+        peer: Peer,
+        msg_id: MsgId,
+        bytes: UsrMsgBytes,
+        is_msg_for_client: bool,
+    ) -> Result<()> {
+        let watcher = self
+            .send_to_one(peer, msg_id, bytes, is_msg_for_client)
+            .await;
 
         match watcher {
-            Ok(watcher) => {
+            Ok(Some(watcher)) => {
                 if Self::is_sent(watcher, msg_id, peer).await {
                     trace!("Msg {msg_id:?} sent to {peer:?}");
                     Ok(())
                 } else {
                     Err(Error::FailedSend(peer))
                 }
+            }
+            Ok(None) => {
+                Ok(())
+                // no watcher......
             }
             Err(error) => {
                 // there is only one type of error returned: [`Error::InvalidState`]
@@ -186,12 +198,12 @@ impl Comm {
                     peer
                 );
                 error!(
-                    "Sending message (msg_id: {:?}) to {:?} (name {:?}) failed as we have disconnected from the peer. (Error is: {})",
-                    msg_id,
-                    peer.addr(),
-                    peer.name(),
-                    error,
-                );
+                        "Sending message (msg_id: {:?}) to {:?} (name {:?}) failed as we have disconnected from the peer. (Error is: {})",
+                        msg_id,
+                        peer.addr(),
+                        peer.name(),
+                        error,
+                    );
                 Err(Error::FailedSend(peer))
             }
         }
@@ -257,14 +269,14 @@ impl Comm {
 
     /// Get a PeerSession if it already exists, otherwise create and insert
     #[instrument(skip(self))]
-    async fn get_or_create(&self, peer: &Peer) -> PeerSession {
+    async fn get_or_create(&self, peer: &Peer) -> Option<PeerSession> {
         if let Some(entry) = self.sessions.get(peer) {
-            return entry.value().clone();
+            return Some(entry.value().clone());
         }
         let link = Link::new(*peer, self.our_endpoint.clone(), self.msg_listener.clone());
         let session = PeerSession::new(link);
         let _ = self.sessions.insert(*peer, session.clone());
-        session
+        Some(session)
     }
 
     /// Any number of incoming qp2p:Connections can be added.
@@ -294,20 +306,29 @@ impl Comm {
         recipient: Peer,
         msg_id: MsgId,
         bytes: UsrMsgBytes,
-    ) -> Result<SendWatcher> {
+        is_msg_for_client: bool,
+    ) -> Result<Option<SendWatcher>> {
         let bytes_len = {
             let (h, d, p) = bytes.clone();
             h.len() + d.len() + p.len()
         };
 
         trace!(
-            "Sending message ({} bytes) w/ {:?} to {:?}",
+            "Sending message (client?: {is_msg_for_client}) ({} bytes) w/ {:?} to {:?}",
             bytes_len,
             msg_id,
-            recipient,
+            recipient
         );
-        let peer = self.get_or_create(&recipient).await;
-        peer.send(msg_id, bytes).await
+
+        if let Some(peer) = self.get_or_create(&recipient).await {
+            Ok(Some(
+                peer.send_using_session(msg_id, bytes, is_msg_for_client)
+                    .await?,
+            ))
+        } else {
+            debug!("No client conn exists to send this msg on.... {msg_id:?}");
+            Ok(None)
+        }
     }
 }
 
@@ -418,9 +439,9 @@ mod tests {
                 let peer0_msg = new_test_msg(dst(peer0))?;
                 let peer1_msg = new_test_msg(dst(peer1))?;
 
-                comm.send(peer0, peer0_msg.msg_id(), peer0_msg.serialize()?)
+                comm.send_out_bytes(peer0, peer0_msg.msg_id(), peer0_msg.serialize()?)
                     .await?;
-                comm.send(peer1, peer1_msg.msg_id(), peer1_msg.serialize()?)
+                comm.send_out_bytes(peer1, peer1_msg.msg_id(), peer1_msg.serialize()?)
                     .await?;
 
                 if let Some(bytes) = rx0.recv().await {
@@ -459,7 +480,7 @@ mod tests {
                 let invalid_peer = get_invalid_peer().await?;
                 let invalid_addr = invalid_peer.addr();
                 let msg = new_test_msg(dst(invalid_peer))?;
-                let result = comm.send(invalid_peer, msg.msg_id(), msg.serialize()?).await;
+                let result = comm.send_out_bytes(invalid_peer, msg.msg_id(), msg.serialize()?).await;
 
                 assert_matches!(result, Err(Error::FailedSend(peer)) => assert_eq!(peer.addr(), invalid_addr));
 
@@ -487,7 +508,7 @@ mod tests {
                 let msg0 = new_test_msg(dst(peer))?;
 
                 send_comm
-                    .send(peer, msg0.msg_id(), msg0.serialize()?)
+                    .send_out_bytes(peer, msg0.msg_id(), msg0.serialize()?)
                     .await?;
 
                 let mut msg0_received = false;
@@ -506,7 +527,7 @@ mod tests {
 
                 let msg1 = new_test_msg(dst(peer))?;
                 send_comm
-                    .send(peer, msg1.msg_id(), msg1.serialize()?)
+                    .send_out_bytes(peer, msg1.msg_id(), msg1.serialize()?)
                     .await?;
 
                 let mut msg1_received = false;
@@ -542,7 +563,9 @@ mod tests {
                 let peer = Peer::new(xor_name::rand::random(), addr0);
                 let msg = new_test_msg(dst(peer))?;
                 // Send a message to establish the connection
-                comm1.send(peer, msg.msg_id(), msg.serialize()?).await?;
+                comm1
+                    .send_out_bytes(peer, msg.msg_id(), msg.serialize()?)
+                    .await?;
 
                 assert_matches!(rx0.recv().await, Some(MsgEvent::Received { .. }));
 
