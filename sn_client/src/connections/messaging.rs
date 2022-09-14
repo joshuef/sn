@@ -44,9 +44,6 @@ pub(crate) const NODES_TO_CONTACT_PER_STARTUP_BATCH: usize = 3;
 // Duration of wait for the node to have chance to pickup network knowledge at the beginning
 const INITIAL_WAIT: u64 = 1;
 
-// Number of retries for sending a message due to a connection issue.
-const CLIENT_SEND_RETRIES: usize = 3; // nodes will clean up connections reasonably often, so we try a few times here.
-
 impl Session {
     #[instrument(
         skip(self, auth, payload, client_pk),
@@ -58,6 +55,7 @@ impl Session {
         dst_address: XorName,
         auth: ServiceAuth,
         payload: Bytes,
+        force_new_link: bool,
         #[cfg(feature = "traceroute")] client_pk: PublicKey,
     ) -> Result<()> {
         let endpoint = self.endpoint.clone();
@@ -92,7 +90,8 @@ impl Session {
         let _ = self.pending_cmds.insert(msg_id, sender);
         trace!("Inserted channel for cmd {:?}", msg_id);
 
-        self.send_msg(elders, wire_msg, msg_id).await?;
+        self.send_msg(elders, wire_msg, msg_id, force_new_link)
+            .await?;
 
         let expected_acks = elders_len * 2 / 3 + 1;
 
@@ -168,6 +167,7 @@ impl Session {
         payload: Bytes,
         #[cfg(feature = "traceroute")] client_pk: PublicKey,
         dst_section_info: Option<(bls::PublicKey, Vec<Peer>)>,
+        force_new_link: bool,
     ) -> Result<QueryResult> {
         let endpoint = self.endpoint.clone();
 
@@ -226,7 +226,8 @@ impl Session {
         #[cfg(feature = "traceroute")]
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
-        self.send_msg(elders.clone(), wire_msg, msg_id).await?;
+        self.send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
+            .await?;
 
         // TODO:
         // We are now simply accepting the very first valid response we receive,
@@ -355,7 +356,7 @@ impl Session {
             .take(NODES_TO_CONTACT_PER_STARTUP_BATCH)
             .collect();
 
-        self.send_msg(initial_contacts, wire_msg.clone(), msg_id)
+        self.send_msg(initial_contacts, wire_msg.clone(), msg_id, false)
             .await?;
 
         let mut knowledge_checks = 0;
@@ -423,7 +424,7 @@ impl Session {
                 };
 
                 trace!("Sending out another batch of initial contact msgs to new nodes");
-                self.send_msg(next_contacts, wire_msg.clone(), msg_id)
+                self.send_msg(next_contacts, wire_msg.clone(), msg_id, false)
                     .await?;
 
                 let next_wait = backoff.next_backoff();
@@ -454,11 +455,12 @@ impl Session {
         Ok(())
     }
 
+    /// Get DataSection elders details. Resort to own section if DataSection is not available.
+    /// Takes a random subset (NUM_OF_ELDERS_SUBSET_FOR_QUERIES) of the avialable elders as targets
     pub(crate) async fn get_query_elders(
         &self,
         dst: XorName,
     ) -> Result<(bls::PublicKey, Vec<Peer>)> {
-        // Get DataSection elders details. Resort to own section if DataSection is not available.
         let sap = self.network.read().await.closest(&dst, None).cloned();
         let (section_pk, mut elders) = if let Some(sap) = &sap {
             (sap.section_key(), sap.elders_vec())
@@ -524,6 +526,7 @@ impl Session {
         nodes: Vec<Peer>,
         mut wire_msg: WireMsg,
         msg_id: MsgId,
+        force_new_link: bool,
     ) -> Result<()> {
         let bytes = wire_msg.serialize_and_cache_bytes()?;
 
@@ -541,35 +544,24 @@ impl Session {
             let peer_name = peer.name();
 
             let task_handle: JoinHandle<(XorName, Result<()>)> = tokio::spawn(async move {
-                let link = session.peer_links.get_or_create(&peer).await;
-
                 let listen = |conn, incoming_msgs| {
                     Self::spawn_msg_listener_thread(session.clone(), peer, conn, incoming_msgs);
                 };
 
-                let mut retries = 0;
+                let session_clone = session.clone();
 
-                let send_and_retry = || async {
-                    match link.send(bytes.clone(), listen).await {
-                        Ok(()) => Ok(()),
-                        Err(SendToOneError::Connection(err)) => {
-                            Err(Error::QuicP2pConnection { peer, error: err })
-                        }
-                        Err(SendToOneError::Send(err)) => {
-                            Err(Error::QuicP2pSend { peer, error: err })
-                        }
+                let link = session_clone
+                    .peer_links
+                    .get_or_create_link(&peer, force_new_link)
+                    .await;
+
+                let result = match link.send(bytes.clone(), listen).await {
+                    Ok(()) => Ok(()),
+                    Err(SendToOneError::Connection(err)) => {
+                        Err(Error::QuicP2pConnection { peer, error: err })
                     }
+                    Err(SendToOneError::Send(err)) => Err(Error::QuicP2pSend { peer, error: err }),
                 };
-                let mut result = send_and_retry().await;
-
-                while result.is_err() && retries < CLIENT_SEND_RETRIES {
-                    warn!(
-                        "Attempting to send msg again {msg_id:?}, attempt #{:?}",
-                        retries.clone()
-                    );
-                    retries += 1;
-                    result = send_and_retry().await;
-                }
 
                 (peer_name, result)
             });

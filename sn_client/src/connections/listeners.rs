@@ -337,7 +337,7 @@ impl Session {
 
                 debug!("Resending original message on AE-Redirect with updated details. Expecting an AE-Retry next");
 
-                self.send_msg(vec![elder], wire_msg, msg_id).await?;
+                self.send_msg(vec![elder], wire_msg, msg_id, false).await?;
             } else {
                 error!("No elder determined for resending AE message");
             }

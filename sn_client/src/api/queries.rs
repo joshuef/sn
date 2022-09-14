@@ -69,7 +69,8 @@ impl Client {
         let _ = span.enter();
         let mut attempts = 1;
         let dst = query.variant.dst_name();
-
+        // should we force a fresh connection to the nodes?
+        let mut force_new_link = false;
         let mut data_not_found_count = BTreeSet::default();
         loop {
             let msg = ServiceMsg::Query(query.clone());
@@ -92,6 +93,7 @@ impl Client {
                     serialised_query.clone(),
                     signature.clone(),
                     Some((section_pk, elders.clone())),
+                    force_new_link,
                 ),
             )
             .await;
@@ -138,7 +140,12 @@ impl Client {
                         last_error: Box::new(Error::NoResponse(elders)),
                     });
                 }
-                _ => {}
+                _ => {
+                    if attempts > self.max_retries / 3 {
+                        // any further attempts should use fresh links in case of issues
+                        force_new_link = true;
+                    }
+                }
             }
 
             attempts += 1;
@@ -163,8 +170,15 @@ impl Client {
         signature: Signature,
     ) -> Result<QueryResult, Error> {
         debug!("Sending Query: {:?}", query);
-        self.send_signed_query_to_section(query, client_pk, serialised_query, signature, None)
-            .await
+        self.send_signed_query_to_section(
+            query,
+            client_pk,
+            serialised_query,
+            signature,
+            None,
+            false,
+        )
+        .await
     }
 
     // Private helper to send a signed query, with the option to define the destination section.
@@ -176,6 +190,7 @@ impl Client {
         serialised_query: Bytes,
         signature: Signature,
         dst_section_info: Option<(bls::PublicKey, Vec<Peer>)>,
+        force_new_link: bool,
     ) -> Result<QueryResult, Error> {
         let auth = ServiceAuth {
             public_key: client_pk,
@@ -190,6 +205,7 @@ impl Client {
                 #[cfg(feature = "traceroute")]
                 self.public_key(),
                 dst_section_info,
+                force_new_link,
             )
             .await
     }

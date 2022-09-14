@@ -167,6 +167,7 @@ impl Client {
         let bytes = tokio::time::timeout(self.query_timeout, async {
             let mut last_response = self.read_bytes(address).await;
             while last_response.is_err() {
+                error!("Error when attempting to verify bytes were uploaded: {:?}", last_response);
                 last_response = self.read_bytes(address).await;
             }
             last_response

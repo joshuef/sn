@@ -41,7 +41,7 @@ pub const ENV_AE_WAIT: &str = "SN_AE_WAIT";
 pub const DEFAULT_LOCAL_ADDR: (Ipv4Addr, u16) = (Ipv4Addr::UNSPECIFIED, 0);
 /// Default timeout to use before timing out queries and commands
 pub const DEFAULT_QUERY_CMD_TIMEOUT: Duration = Duration::from_secs(30);
-/// Max retries to be attempted in the DEFAULT_QUERY_CMD_TIMEOUT; DEFAULT_QUERY_CMD_TIMEOUT / DEFAULT_MAX_QUERY_CMD_RETRIES ~ tries per second
+/// Max retries to be attempted in the DEFAULT_QUERY_CMD_TIMEOUT; DEFAULT_QUERY_CMD_TIMEOUT / DEFAULT_MAX_QUERY_CMD_RETRIES ~ second per try
 /// (though exponential backoff exists)
 pub const DEFAULT_MAX_QUERY_CMD_RETRIES: usize = 15;
 /// Default timeout for waiting for potential Anti-Entropy messages

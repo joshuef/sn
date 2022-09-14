@@ -72,6 +72,7 @@ impl Client {
         let _ = span.enter();
 
         let mut attempt = 1;
+        let mut force_new_link = false;
         loop {
             debug!("Attempting {:?} (attempt #{})", debug_cmd, attempt);
 
@@ -81,8 +82,11 @@ impl Client {
                     client_pk,
                     serialised_cmd.clone(),
                     signature.clone(),
+                    force_new_link,
                 )
                 .await;
+
+            force_new_link = true;
 
             if let Ok(cmd_result) = res {
                 debug!("{debug_cmd} sent okay");
@@ -115,6 +119,7 @@ impl Client {
         client_pk: PublicKey,
         serialised_cmd: Bytes,
         signature: Signature,
+        force_new_link: bool,
     ) -> Result<(), Error> {
         let auth = ServiceAuth {
             public_key: client_pk,
@@ -126,6 +131,7 @@ impl Client {
                 dst_address,
                 auth,
                 serialised_cmd,
+                force_new_link,
                 #[cfg(feature = "traceroute")]
                 self.public_key(),
             )

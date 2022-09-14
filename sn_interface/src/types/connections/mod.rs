@@ -82,7 +82,13 @@ impl PeerLinks {
 
     /// This method is tailored to the use-case of connecting on send.
     /// I.e. it will not connect here, but on calling send on the returned link.
-    pub async fn get_or_create(&self, peer: &Peer) -> Link {
+    pub async fn get_or_create_link(&self, peer: &Peer, force_new_link: bool) -> Link {
+        if force_new_link {
+            let link = Link::new(*peer, self.endpoint.clone());
+            let _ = self.links.write().await.insert(*peer, link.clone());
+            return link;
+        }
+
         if let Some(link) = self.get(peer).await {
             return link;
         }
