@@ -230,57 +230,57 @@ impl Session {
         let queries = session.pending_queries.clone();
         let cmds = session.pending_cmds;
 
-        // let _handle = tokio::spawn(async move {
-        match msg {
-            ServiceMsg::QueryResponse {
-                response,
-                correlation_id,
-            } => {
-                trace!(
+        let _handle = tokio::spawn(async move {
+            match msg {
+                ServiceMsg::QueryResponse {
+                    response,
+                    correlation_id,
+                } => {
+                    trace!(
                     "ServiceMsg with id {:?} is QueryResponse regarding {:?} with response {:?}",
                     msg_id,
                     correlation_id,
                     response,
                 );
 
-                if let Ok(op_id) = response.operation_id() {
-                    if let Some(entry) = queries.get_mut(&op_id) {
-                        let received = entry.value();
+                    if let Ok(op_id) = response.operation_id() {
+                        if let Some(entry) = queries.get_mut(&op_id) {
+                            let received = entry.value();
 
-                        let _prior = received.insert((src_peer.addr(), response));
+                            let _prior = received.insert((src_peer.addr(), response));
+                        } else {
+                            let received = DashSet::new();
+                            let _prior = received.insert((src_peer.addr(), response));
+                            let _prev = queries.insert(op_id, Arc::new(received));
+                        }
                     } else {
-                        let received = DashSet::new();
-                        let _prior = received.insert((src_peer.addr(), response));
-                        let _prev = queries.insert(op_id, Arc::new(received));
+                        warn!(
+                            "Ignoring query response without operation id: {:?} {:?}",
+                            msg_id, response
+                        );
                     }
-                } else {
-                    warn!(
-                        "Ignoring query response without operation id: {:?} {:?}",
-                        msg_id, response
-                    );
                 }
-            }
-            ServiceMsg::CmdError {
-                error,
-                correlation_id,
-                ..
-            } => {
-                Self::write_cmd_response(cmds, correlation_id, src_peer.addr(), Some(error));
-            }
-            ServiceMsg::CmdAck { correlation_id } => {
-                debug!(
-                    "CmdAck was received for Message{:?} w/ID: {:?} from {:?}",
-                    msg_id,
+                ServiceMsg::CmdError {
+                    error,
                     correlation_id,
-                    src_peer.addr()
-                );
-                Self::write_cmd_response(cmds, correlation_id, src_peer.addr(), None);
-            }
-            _ => {
-                warn!("Ignoring unexpected msg type received: {:?}", msg);
-            }
-        };
-        // });
+                    ..
+                } => {
+                    Self::write_cmd_response(cmds, correlation_id, src_peer.addr(), Some(error));
+                }
+                ServiceMsg::CmdAck { correlation_id } => {
+                    debug!(
+                        "CmdAck was received for Message{:?} w/ID: {:?} from {:?}",
+                        msg_id,
+                        correlation_id,
+                        src_peer.addr()
+                    );
+                    Self::write_cmd_response(cmds, correlation_id, src_peer.addr(), None);
+                }
+                _ => {
+                    warn!("Ignoring unexpected msg type received: {:?}", msg);
+                }
+            };
+        });
 
         Ok(())
     }

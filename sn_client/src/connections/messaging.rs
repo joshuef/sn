@@ -236,8 +236,10 @@ impl Session {
         #[cfg(feature = "traceroute")]
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
+        debug!("pre send");
         self.send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
             .await?;
+        debug!("post send");
 
         // TODO:
         // We are now simply accepting the very first valid response we receive,
@@ -253,10 +255,12 @@ impl Session {
         let mut error_response = None;
         let mut valid_response = None;
         let response = loop {
+            debug!("looping send responses");
             if let Some(entry) = self.pending_queries.get(&operation_id) {
                 let responses = entry.value();
 
                 // lets see if we have a positive response...
+                debug!("response so far: {:?}", responses);
 
                 for refmulti in responses.iter() {
                     let (_socket, response) = refmulti.key().clone();
@@ -264,6 +268,7 @@ impl Session {
                         continue;
                     }
 
+                    debug!("before matching response");
                     match response {
                         QueryResponse::GetChunk(Ok(chunk)) => {
                             if let Some(chunk_addr) = chunk_addr {
@@ -301,6 +306,10 @@ impl Session {
                 }
             }
 
+            debug!("bottom of things");
+
+            //stop mad looping
+            tokio::time::sleep(Duration::from_millis(50)).await;
             if discarded_responses == elders_len {
                 break error_response;
             }
@@ -321,7 +330,7 @@ impl Session {
                     "Removing pending query map for {:?}",
                     (msg_id, &operation_id)
                 );
-                let _prev = self.pending_queries.remove(&operation_id);
+                // let _prev = self.pending_queries.remove(&operation_id);
                 Ok(QueryResult {
                     response,
                     operation_id,
