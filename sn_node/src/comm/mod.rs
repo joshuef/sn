@@ -177,7 +177,22 @@ impl Comm {
 
         match watcher {
             Ok(Some(watcher)) => {
-                if Self::is_sent(watcher, msg_id, peer).await {
+                let send_was_successful = match Self::is_sent(watcher, msg_id, peer).await {
+                    Ok(result) => result,
+                    Err(error) => match error {
+                        Error::PeerLinkDropped => {
+                            // remove the peer link
+                            let perhaps_session = self.sessions.remove(&peer);
+                            if let Some((_peer, session)) = perhaps_session {
+                                session.disconnect().await;
+                            }
+                            return Err(Error::PeerLinkDropped);
+                        }
+                        _ => return Err(error),
+                    },
+                };
+
+                if send_was_successful {
                     trace!("Msg {msg_id:?} sent to {peer:?}");
                     Ok(())
                 } else {
@@ -197,6 +212,8 @@ impl Comm {
                     "Accessed a disconnected peer: {}. This is potentially a bug!",
                     peer
                 );
+
+                let _peer = self.sessions.remove(&peer);
                 error!(
                         "Sending message (msg_id: {:?}) to {:?} (name {:?}) failed as we have disconnected from the peer. (Error is: {})",
                         msg_id,
@@ -209,13 +226,13 @@ impl Comm {
         }
     }
 
-    async fn is_sent(mut watcher: SendWatcher, msg_id: MsgId, peer: Peer) -> bool {
+    async fn is_sent(mut watcher: SendWatcher, msg_id: MsgId, peer: Peer) -> Result<bool> {
         // here we can monitor the sending
         // and we now watch the status of the send
         loop {
             match &mut watcher.await_change().await {
                 SendStatus::Sent => {
-                    return true;
+                    return Ok(true);
                 }
                 SendStatus::Enqueued => {
                     // this block should be unreachable, as Enqueued is the initial state
@@ -231,7 +248,7 @@ impl Comm {
                         peer.addr(),
                         peer.name(),
                     );
-                    return false;
+                    return Err(Error::PeerLinkDropped);
                 }
                 SendStatus::WatcherDropped => {
                     // the send job is dropped for some reason,
@@ -243,7 +260,7 @@ impl Comm {
                         peer.addr(),
                         peer.name(),
                     );
-                    return false;
+                    return Ok(false);
                 }
                 SendStatus::TransientError(error) => {
                     // An individual connection can for example have been lost when we tried to send. This
@@ -261,7 +278,7 @@ impl Comm {
                         peer.addr(),
                         peer.name(),
                     );
-                    return false;
+                    return Ok(false);
                 }
             }
         }
@@ -321,6 +338,7 @@ impl Comm {
         );
 
         if let Some(peer) = self.get_or_create(&recipient).await {
+            debug!("Peer session retrieved");
             Ok(Some(
                 peer.send_using_session(msg_id, bytes, is_msg_for_client)
                     .await?,

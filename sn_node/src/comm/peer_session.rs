@@ -87,9 +87,10 @@ impl PeerSession {
             is_msg_for_client,
         };
 
-        if let Err(e) = self.channel.send(SessionCmd::Send(job)).await {
-            error!("Error while sending SendJob command {e:?}");
-        }
+        self.channel
+            .send(SessionCmd::Send(job))
+            .await
+            .map_err(|_| Error::PeerSessionChannel)?;
 
         trace!("Send job sent: {msg_id:?}");
         Ok(watcher)
