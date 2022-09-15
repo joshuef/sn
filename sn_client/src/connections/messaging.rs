@@ -55,15 +55,13 @@ impl Session {
         dst_address: XorName,
         auth: ServiceAuth,
         payload: Bytes,
+        msg_id: MsgId,
         force_new_link: bool,
         #[cfg(feature = "traceroute")] client_pk: PublicKey,
     ) -> Result<()> {
         let endpoint = self.endpoint.clone();
         // TODO: Consider other approach: Keep a session per section!
-
         let (section_pk, elders) = self.get_cmd_elders(dst_address).await?;
-
-        let msg_id = MsgId::new();
 
         let elders_len = elders.len();
 
@@ -93,7 +91,7 @@ impl Session {
         self.send_msg(elders, wire_msg, msg_id, force_new_link)
             .await?;
 
-        let expected_acks = elders_len * 2 / 3 + 1;
+        let expected_acks = elders_len;
 
         // We are not wait for the receive of majority of cmd Acks.
         // This could be further strict to wait for ALL the Acks get received.

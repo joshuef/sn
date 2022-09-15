@@ -12,7 +12,7 @@ use crate::Error;
 use sn_interface::{
     messaging::{
         data::{DataCmd, ServiceMsg},
-        ServiceAuth, WireMsg,
+        MsgId, ServiceAuth, WireMsg,
     },
     types::{PublicKey, Signature},
 };
@@ -65,6 +65,8 @@ impl Client {
             ..Default::default()
         };
 
+        let msg_id = MsgId::new();
+
         // this seems needed for custom settings to take effect
         backoff.reset();
 
@@ -80,6 +82,7 @@ impl Client {
                 .send_signed_cmd(
                     dst_name,
                     client_pk,
+                    msg_id,
                     serialised_cmd.clone(),
                     signature.clone(),
                     force_new_link,
@@ -117,6 +120,7 @@ impl Client {
         &self,
         dst_address: XorName,
         client_pk: PublicKey,
+        msg_id: MsgId,
         serialised_cmd: Bytes,
         signature: Signature,
         force_new_link: bool,
@@ -131,6 +135,7 @@ impl Client {
                 dst_address,
                 auth,
                 serialised_cmd,
+                msg_id,
                 force_new_link,
                 #[cfg(feature = "traceroute")]
                 self.public_key(),
