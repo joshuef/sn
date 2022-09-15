@@ -651,13 +651,6 @@ impl Session {
                 nodes.len(),
                 nodes,
             );
-        }
-
-        if failures > successful_sends {
-            warn!(
-                "More errors when sending a message than successes, last_error: {:?}",
-                last_error
-            );
 
             if let Some(error) = last_error {
                 warn!("The relevant error is: {error}");

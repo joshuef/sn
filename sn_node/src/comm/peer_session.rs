@@ -8,7 +8,7 @@
 
 use super::Link;
 
-use crate::node::{Result, Error};
+use crate::node::{Error, Result};
 
 use qp2p::RetryConfig;
 use qp2p::UsrMsgBytes;

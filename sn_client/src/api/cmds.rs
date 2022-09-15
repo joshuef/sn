@@ -74,7 +74,7 @@ impl Client {
         let _ = span.enter();
 
         let mut attempt = 1;
-        let mut force_new_link = false;
+        let force_new_link = false;
         loop {
             debug!("Attempting {:?} (attempt #{})", debug_cmd, attempt);
 
