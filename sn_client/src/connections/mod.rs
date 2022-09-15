@@ -22,11 +22,10 @@ use sn_interface::{
 use dashmap::{DashMap, DashSet};
 use qp2p::{Config as QuicP2pConfig, Endpoint};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::{mpsc::Sender, RwLock};
+use tokio::sync::RwLock;
 
 // Here we dont track the msg_id across the network, but just use it as a local identifier to remove the correct listener
-type PendingQueryResponses = Arc<DashMap<OperationId, Vec<(MsgId, QueryResponseSender)>>>;
-type QueryResponseSender = Sender<QueryResponse>;
+type PendingQueryResponses = Arc<DashMap<OperationId, Arc<DashSet<(SocketAddr, QueryResponse)>>>>;
 
 type CmdResponse = (SocketAddr, Option<ErrorMsg>);
 

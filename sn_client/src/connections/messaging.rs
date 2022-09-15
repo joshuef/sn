@@ -32,7 +32,7 @@ use qp2p::{Close, ConnectionError, SendError};
 use rand::{rngs::OsRng, seq::SliceRandom};
 use std::collections::BTreeSet;
 use std::time::Duration;
-use tokio::{sync::mpsc::channel, task::JoinHandle};
+use tokio::task::JoinHandle;
 use tracing::{debug, error, trace, warn};
 use xor_name::XorName;
 
@@ -219,22 +219,10 @@ impl Session {
             elders
         );
 
-        let (sender, mut receiver) = channel::<QueryResponse>(7);
-
-        if let Ok(op_id) = query.variant.operation_id() {
-            // Insert the response sender
-            trace!("Inserting channel for op_id {:?}", (msg_id, op_id));
-            if let Some(mut entry) = self.pending_queries.get_mut(&op_id) {
-                let senders_vec = entry.value_mut();
-                senders_vec.push((msg_id, sender))
-            } else {
-                let _nonexistant_entry = self.pending_queries.insert(op_id, vec![(msg_id, sender)]);
-            }
-
-            trace!("Inserted channel for {:?}", op_id);
-        } else {
-            warn!("No op_id found for query");
-        }
+        let operation_id = query
+            .variant
+            .operation_id()
+            .map_err(|_| Error::UnknownOperationId)?;
 
         let dst = Dst {
             name: dst,
@@ -262,49 +250,63 @@ impl Session {
         // from byzantine nodes, however for mutable data (non-Chunk responses) we will
         // have to review the approach.
         let mut discarded_responses: usize = 0;
-
+        let mut error_response = None;
+        let mut valid_response = None;
         let response = loop {
-            let mut error_response = None;
-            match (receiver.recv().await, chunk_addr) {
-                (Some(QueryResponse::GetChunk(Ok(chunk))), Some(chunk_addr)) => {
-                    // We are dealing with Chunk query responses, thus we validate its hash
-                    // matches its xorname, if so, we don't need to await for more responses
-                    debug!("Chunk QueryResponse received is: {:#?}", chunk);
+            if let Some(entry) = self.pending_queries.get(&operation_id) {
+                let responses = entry.value();
 
-                    if chunk_addr.name() == chunk.name() {
-                        trace!("Valid Chunk received for {:?}", msg_id);
-                        break Some(QueryResponse::GetChunk(Ok(chunk)));
-                    } else {
-                        // the Chunk content doesn't match its XorName,
-                        // this is suspicious and it could be a byzantine node
-                        warn!("We received an invalid Chunk response from one of the nodes");
-                        discarded_responses += 1;
+                // lets see if we have a positive response...
+
+                for refmulti in responses.iter() {
+                    let (_socket, response) = refmulti.key().clone();
+                    if valid_response.is_some() {
+                        continue;
+                    }
+
+                    match response {
+                        QueryResponse::GetChunk(Ok(chunk)) => {
+                            if let Some(chunk_addr) = chunk_addr {
+                                // We are dealing with Chunk query responses, thus we validate its hash
+                                // matches its xorname, if so, we don't need to await for more responses
+                                debug!("Chunk QueryResponse received is: {:#?}", chunk);
+
+                                if chunk_addr.name() == chunk.name() {
+                                    trace!("Valid Chunk received for {:?}", msg_id);
+                                    valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
+                                } else {
+                                    // the Chunk content doesn't match its XorName,
+                                    // this is suspicious and it could be a byzantine node
+                                    warn!("We received an invalid Chunk response from one of the nodes");
+                                    discarded_responses += 1;
+                                }
+                            }
+                        }
+                        QueryResponse::GetRegister((Err(_), _))
+                        | QueryResponse::GetRegisterPolicy((Err(_), _))
+                        | QueryResponse::GetRegisterOwner((Err(_), _))
+                        | QueryResponse::GetRegisterUserPermissions((Err(_), _))
+                        | QueryResponse::GetChunk(Err(_)) => {
+                            // if let Some(chunk_addr) = chunk_addr {
+                            debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
+                            error_response = Some(response);
+                            discarded_responses += 1;
+                            // }
+                        }
+                        response => {
+                            // we got a valid response
+                            valid_response = Some(response)
+                        }
                     }
                 }
-                // Erring on the side of positivity. \
-                // Saving error, but not returning until we have more responses in
-                // (note, this will overwrite prior errors, so we'll just return whichever was last received)
-                (response @ Some(QueryResponse::GetChunk(Err(_))), Some(_))
-                | (response @ Some(QueryResponse::GetRegister((Err(_), _))), None)
-                | (response @ Some(QueryResponse::GetRegisterPolicy((Err(_), _))), None)
-                | (response @ Some(QueryResponse::GetRegisterOwner((Err(_), _))), None)
-                | (response @ Some(QueryResponse::GetRegisterUserPermissions((Err(_), _))), None) =>
-                {
-                    debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
-                    error_response = response;
-                    discarded_responses += 1;
-                }
-                (Some(response), _) => {
-                    debug!("QueryResponse received is: {:#?}", response);
-                    break Some(response);
-                }
-                (None, _) => {
-                    debug!("QueryResponse channel closed.");
-                    break None;
-                }
             }
+
             if discarded_responses == elders_len {
                 break error_response;
+            }
+
+            if valid_response.is_some() {
+                break valid_response;
             }
         };
 
@@ -313,29 +315,13 @@ impl Session {
             msg_id, response
         );
 
-        if let Some(query) = &response {
-            if let Ok(query_op_id) = query.operation_id() {
-                // Remove the response sender
-                trace!("Removing channel for {:?}", (msg_id, &query_op_id));
-                if let Some(mut entry) = self.pending_queries.get_mut(&query_op_id) {
-                    let listeners_for_op = entry.value_mut();
-                    if let Some(index) = listeners_for_op
-                        .iter()
-                        .position(|(id, _sender)| *id == msg_id)
-                    {
-                        let _old_listener = listeners_for_op.swap_remove(index);
-                    }
-                } else {
-                    warn!("No listeners found for our op_id: {:?}", query_op_id)
-                }
-            }
-        }
-
         match response {
             Some(response) => {
-                let operation_id = response
-                    .operation_id()
-                    .map_err(|_| Error::UnknownOperationId(response.clone()))?;
+                trace!(
+                    "Removing pending query map for {:?}",
+                    (msg_id, &operation_id)
+                );
+                let _prev = self.pending_queries.remove(&operation_id);
                 Ok(QueryResult {
                     response,
                     operation_id,
