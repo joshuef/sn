@@ -270,6 +270,8 @@ jobs:
 
       - name: Run client tests
         uses: maidsafe/cargo-nextest@main
+        env:
+          RUST_LOG: "sn_client=trace"
         with:
           test-run-name: e2e-client-${{ matrix.os }}
           profile: ci
@@ -593,6 +595,8 @@ jobs:
 
       - name: Run API tests
         uses: maidsafe/cargo-nextest@main
+        env:
+          RUST_LOG: "sn_client=trace"
         with:
           test-run-name: api-${{ matrix.os }}
           profile: ci
@@ -716,6 +720,8 @@ jobs:
 
       - name: Run CLI tests
         uses: maidsafe/cargo-nextest@main
+        env:
+          RUST_LOG: "sn_client=trace"
         with:
           test-run-name: cli-${{ matrix.os }}
           profile: ci
