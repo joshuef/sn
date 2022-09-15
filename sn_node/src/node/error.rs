@@ -26,6 +26,12 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, Error)]
 #[allow(missing_docs)]
 pub enum Error {
+    /// This Peer SendJob could not be sent. We should remove this peer
+    #[error("Peer channel errored")]
+    PeerSessionChannel,
+    /// This sendjob channel is closed, this peer needs cleaned up
+    #[error("Peer link has been dropped, and should be removed. ")]
+    PeerLinkDropped,
     /// This should not be possible as the channel is stored in node, and used to process child commands
     #[error("No more Cmds will be received or processed. CmdChannel senders have been dropped. ")]
     CmdCtrlChannelDropped,

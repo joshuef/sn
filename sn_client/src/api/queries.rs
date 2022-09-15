@@ -142,7 +142,7 @@ impl Client {
                 _ => {
                     if attempts > self.max_retries / 3 {
                         // any further attempts should use fresh links in case of issues
-                        force_new_link = true;
+                        // force_new_link = true;
                     }
                 }
             }

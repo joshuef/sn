@@ -30,6 +30,7 @@ use bytes::Bytes;
 use futures::future::join_all;
 use qp2p::{Close, ConnectionError, SendError};
 use rand::{rngs::OsRng, seq::SliceRandom};
+use std::collections::BTreeSet;
 use std::time::Duration;
 use tokio::{sync::mpsc::channel, task::JoinHandle};
 use tracing::{debug, error, trace, warn};
@@ -84,7 +85,7 @@ impl Session {
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
         // The insertion of channel will be executed AFTER the completion of the `send_message`.
-        self.send_msg(elders, wire_msg, msg_id, force_new_link)
+        self.send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
             .await?;
         trace!("Cmd msg {:?} sent", msg_id);
 
@@ -97,6 +98,7 @@ impl Session {
         let mut ack_checks = 0;
         let max_ack_checks = 100;
         let interval = Duration::from_millis(50);
+        let mut received_responses_from = BTreeSet::default();
 
         loop {
             if let Some(acks_we_have) = self.pending_cmds.get(&msg_id) {
@@ -113,6 +115,8 @@ impl Session {
                     if return_error.is_none() {
                         return_error = error.clone();
                     }
+
+                    let _preexisting = received_responses_from.insert(*ack_src);
 
                     if error.is_some() {
                         error!(
@@ -152,6 +156,13 @@ impl Session {
             }
 
             if ack_checks >= max_ack_checks {
+                let missing_responses: Vec<Peer> = elders
+                    .iter()
+                    .cloned()
+                    .filter(|p| !received_responses_from.contains(&p.addr()))
+                    .collect();
+
+                warn!("Missing Responses from: {:?}", missing_responses);
                 return Err(Error::InsufficientAcksReceived);
             }
 

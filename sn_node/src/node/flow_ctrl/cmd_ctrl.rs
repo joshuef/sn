@@ -128,7 +128,6 @@ impl CmdCtrl {
             match dispatcher.process_cmd(cmd).await {
                 Ok(cmds) => {
                     for cmd in cmds {
-                        monitoring.increment_cmds().await;
                         match cmd_process_api.send((cmd, Some(id))).await {
                             Ok(_) => {
                                 //no issues
