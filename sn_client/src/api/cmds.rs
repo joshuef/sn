@@ -89,7 +89,7 @@ impl Client {
                 )
                 .await;
 
-            force_new_link = true;
+            // force_new_link = true;
 
             if let Ok(cmd_result) = res {
                 debug!("{debug_cmd} sent okay");
