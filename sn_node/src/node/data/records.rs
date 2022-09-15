@@ -29,7 +29,7 @@ use tracing::info;
 use xor_name::XorName;
 
 impl Node {
-    // Locate ideal holders for this data, instruct them to store the data
+    // Instruct targets to store the data
     pub(crate) fn replicate_data(
         &self,
         data: ReplicatedData,
@@ -184,7 +184,7 @@ impl Node {
             .collect::<BTreeSet<_>>();
 
         trace!(
-            "Chunk holders of {:?} are non-full adults: {:?} and full adults: {:?}",
+            "Data holders of {:?} are non-full adults: {:?} and full adults: {:?}",
             target,
             candidates,
             full_adults

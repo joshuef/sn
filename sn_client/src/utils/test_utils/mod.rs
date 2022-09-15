@@ -44,7 +44,10 @@ macro_rules! retry_loop_for_pattern {
             let result = $async_func.await;
             match &result {
                 $pattern $(if $cond)? => break result,
-                Ok(_) | Err(_) => tokio::time::sleep(std::time::Duration::from_secs(2)).await,
+                Ok(_) | Err(_) => {
+                    debug!("waiting before retying.....");
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await}
+                    ,
             }
         }
     };

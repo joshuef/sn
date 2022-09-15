@@ -78,9 +78,9 @@ impl Session {
 
                     },
                     Err(Error::QuicP2p(qp2p_err)) => {
-                          // TODO: Can we recover here?
-                          info!("Error from Qp2p received, closing listener loop. {:?}", qp2p_err);
-                          break;
+                        // TODO: Can we recover here?
+                        info!("Error from Qp2p received, closing listener loop. {:?}", qp2p_err);
+                        break;
                     },
                     Err(error) => {
                         error!("Error while processing incoming msg: {:?}. Listening for next msg...", error);
@@ -88,6 +88,7 @@ impl Session {
                 }
             }
 
+            session.peer_links.remove(&peer).await;
             // once the msg loop breaks, we know the connection is closed
             trace!("{} to {} (id: {})", LogMarker::ConnectionClosed, addr, connection_id);
 
@@ -127,7 +128,7 @@ impl Session {
     ) -> Result<(), Error> {
         match msg.clone() {
             MsgType::Service { msg_id, msg, .. } => {
-                Self::handle_client_msg(session, msg_id, msg, src_peer)
+                Self::handle_service_msg(session, msg_id, msg, src_peer)
             }
             MsgType::System {
                 msg, msg_authority, ..
@@ -192,7 +193,7 @@ impl Session {
     }
 
     #[instrument(skip(cmds), level = "debug")]
-    fn send_cmd_response(
+    fn write_cmd_response(
         cmds: PendingCmdAcks,
         correlation_id: MsgId,
         src: SocketAddr,
@@ -215,7 +216,7 @@ impl Session {
 
     // Handle msgs intended for client consumption (re: queries + cmds)
     #[instrument(skip(session), level = "debug")]
-    fn handle_client_msg(
+    fn handle_service_msg(
         session: Self,
         msg_id: MsgId,
         msg: ServiceMsg,
@@ -236,43 +237,34 @@ impl Session {
                     correlation_id,
                 } => {
                     trace!(
-                        "ServiceMsg with id {:?} is QueryResponse regarding {:?} with response {:?}",
-                        msg_id,
-                        correlation_id,
-                        response,
-                    );
-                    // Note that this doesn't remove the sender from here since multiple
-                    // responses corresponding to the same msg ID might arrive.
-                    // Once we are satisfied with the response this is channel is discarded in
-                    // ConnectionManager::send_query
+                    "ServiceMsg with id {:?} is QueryResponse regarding {:?} with response {:?}",
+                    msg_id,
+                    correlation_id,
+                    response,
+                );
 
                     if let Ok(op_id) = response.operation_id() {
-                        if let Some(entry) = queries.get(&op_id) {
-                            let all_senders = entry.value();
-                            // Only valid response shall get broadcast to all
-                            for (ori_msg_id, sender) in all_senders {
-                                let res = if response.is_success() || ori_msg_id == &correlation_id
-                                {
-                                    sender.try_send(response.clone())
-                                } else {
-                                    continue;
-                                };
-                                if res.is_err() {
-                                    trace!("Error relaying query response internally on a channel for {:?} op_id {:?}: {:?}. (It has likely been removed)", msg_id, op_id, res)
-                                }
-                            }
+                        debug!("OpId of {msg_id:?} is {op_id:?}");
+                        if let Some(entry) = queries.get_mut(&op_id) {
+                            debug!("op id: {op_id:?} exists in pending queries...");
+                            let received = entry.value();
+
+                            debug!("inserting response : {response:?}");
+
+                            let _prior = received.insert((src_peer.addr(), response));
+
+                            debug!("received now looks like: {:?}", received);
                         } else {
-                            // TODO: The trace is only needed when we have an identified case of not finding a channel, but expecting one.
-                            // When expecting one, we can log "No channel found for operation", (and then probably at warn or error level).
-                            // But when we have received enough responses, we aren't really expecting a channel there, so there is no reason to log anything.
-                            // Right now, if we have already received enough responses for a query,
-                            // we drop the channels and drop any further responses for that query.
-                            // but we should not drop it immediately, but clean it up after a while
-                            // and then not log that "no channel was found" when we already had enough responses.
-                            //trace!("No channel found for operation {}", op_id);
+                            debug!("op id: {op_id:?} does not exist in pending queries...");
+                            let received = DashSet::new();
+                            let _prior = received.insert((src_peer.addr(), response));
+                            let _prev = queries.insert(op_id, Arc::new(received));
                         }
                     } else {
-                        warn!("Ignoring query response without operation id");
+                        warn!(
+                            "Ignoring query response without operation id: {:?} {:?}",
+                            msg_id, response
+                        );
                     }
                 }
                 ServiceMsg::CmdError {
@@ -280,7 +272,7 @@ impl Session {
                     correlation_id,
                     ..
                 } => {
-                    Self::send_cmd_response(cmds, correlation_id, src_peer.addr(), Some(error));
+                    Self::write_cmd_response(cmds, correlation_id, src_peer.addr(), Some(error));
                 }
                 ServiceMsg::CmdAck { correlation_id } => {
                     debug!(
@@ -289,7 +281,7 @@ impl Session {
                         correlation_id,
                         src_peer.addr()
                     );
-                    Self::send_cmd_response(cmds, correlation_id, src_peer.addr(), None);
+                    Self::write_cmd_response(cmds, correlation_id, src_peer.addr(), None);
                 }
                 _ => {
                     warn!("Ignoring unexpected msg type received: {:?}", msg);

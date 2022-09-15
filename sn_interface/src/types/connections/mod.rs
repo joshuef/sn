@@ -19,6 +19,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
+use xor_name::XorName;
 
 /// This is tailored to the use-case of connecting on send.
 /// It keeps a Link instance per node, and is designed to make sure
@@ -84,8 +85,13 @@ impl PeerLinks {
     /// I.e. it will not connect here, but on calling send on the returned link.
     pub async fn get_or_create_link(&self, peer: &Peer, force_new_link: bool) -> Link {
         if force_new_link {
+            // first remove any existing
+            self.remove(peer).await;
+
             let link = Link::new(*peer, self.endpoint.clone());
             let _ = self.links.write().await.insert(*peer, link.clone());
+
+            debug!("new link forced to {peer:?}");
             return link;
         }
 
@@ -110,25 +116,44 @@ impl PeerLinks {
         }
     }
 
-    /// Disposes of the link and all underlying resources.
-    #[allow(unused)]
-    pub async fn disconnect(&self, id: Peer) {
-        let mut links = self.links.write().await;
-        let link = match links.remove(&id) {
-            // someone else inserted in the meanwhile, so use that
-            Some(link) => link,
-            // none here, all good
-            None => {
-                trace!("Attempted to remove {id:?}, it was not found");
-                return;
-            }
-        };
+    // /// Disposes of the link and all underlying resources.
+    // #[allow(unused)]
+    // pub async fn disconnect(&self, id: Peer) {
+    //     let mut links = self.links.write().await;
+    //     let link = match links.remove(&id) {
+    //         // someone else inserted in the meanwhile, so use that
+    //         Some(link) => link,
+    //         // none here, all good
+    //         None => {
+    //             trace!("Attempted to remove {id:?}, it was not found");
+    //             return;
+    //         }
+    //     };
 
-        link.disconnect().await;
-    }
+    //     link.disconnect().await;
+    // }
 
     async fn get(&self, id: &Peer) -> Option<Link> {
         let links = self.links.read().await;
         links.get(id).cloned()
+    }
+    pub async fn get_peer_by_name(&self, name: &XorName) -> Option<Peer> {
+        let links = self.links.read().await;
+
+        for (peer, _link) in links.iter() {
+            if peer.name() == *name {
+                return Some(*peer);
+            }
+        }
+        None
+    }
+
+    pub async fn remove(&self, id: &Peer) {
+        let mut links = self.links.write().await;
+        let existing_link = links.remove(id);
+
+        if let Some(actual_link) = existing_link {
+            actual_link.disconnect().await;
+        }
     }
 }

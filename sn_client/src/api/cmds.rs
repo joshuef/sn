@@ -61,7 +61,7 @@ impl Client {
             initial_interval: Duration::from_millis(500),
             max_interval: Duration::from_secs(20),
             max_elapsed_time: Some(op_limit),
-            randomization_factor: 0.5,
+            randomization_factor: 1.5,
             ..Default::default()
         };
 
@@ -70,13 +70,16 @@ impl Client {
         // this seems needed for custom settings to take effect
         backoff.reset();
 
-        let span = info_span!("Attempting a cmd");
+        let span = info_span!("Attempting a cmd with total timeout of {op_limit:?}");
         let _ = span.enter();
 
         let mut attempt = 1;
-        let force_new_link = false;
+        let mut force_new_link = false;
         loop {
-            debug!("Attempting {:?} (attempt #{})", debug_cmd, attempt);
+            debug!(
+                "Attempting {:?} (attempt #{}), forcing new: {force_new_link}",
+                debug_cmd, attempt
+            );
 
             let res = self
                 .send_signed_cmd(
@@ -89,7 +92,7 @@ impl Client {
                 )
                 .await;
 
-            // force_new_link = true;
+            force_new_link = true;
 
             if let Ok(cmd_result) = res {
                 debug!("{debug_cmd} sent okay");

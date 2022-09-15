@@ -88,7 +88,7 @@ impl Client {
     /// Returns a write ahead log (WAL) of register operations, note that the changes are not uploaded to the
     /// network until the WAL is published with `publish_register_ops`
     #[instrument(skip(self, children), level = "debug")]
-    pub async fn write_to_register(
+    pub async fn write_to_local_register(
         &self,
         address: Address,
         entry: Entry,
@@ -134,6 +134,8 @@ impl Client {
         // Let's fetch the Register from the network
         let query = DataQueryVariant::Register(RegisterQuery::Get(address));
         let query_result = self.send_query(query.clone()).await?;
+
+        debug!("get_register result is; {query_result:?}");
         match query_result.response {
             QueryResponse::GetRegister((res, op_id)) => {
                 res.map_err(|err| Error::ErrorMsg { source: err, op_id })
@@ -384,7 +386,7 @@ mod tests {
             let now = Instant::now();
 
             let (_value1_hash, batch) = client
-                .write_to_register(address, value_1.clone(), BTreeSet::new())
+                .write_to_local_register(address, value_1.clone(), BTreeSet::new())
                 .await?;
             client.publish_register_ops(batch).await?;
 
@@ -558,7 +560,7 @@ mod tests {
         let value_1 = random_register_entry();
 
         let (value1_hash, batch) = client
-            .write_to_register(address, value_1.clone(), BTreeSet::new())
+            .write_to_local_register(address, value_1.clone(), BTreeSet::new())
             .await?;
         client.publish_register_ops(batch).await?;
 
@@ -576,8 +578,11 @@ mod tests {
 
         // write to the register
         let (value2_hash, batch) = client
-            .write_to_register(address, value_2.clone(), BTreeSet::new())
+            .write_to_local_register(address, value_2.clone(), BTreeSet::new())
             .await?;
+
+        // we get an op to publish
+        assert!(batch.len() == 1);
 
         client.publish_register_ops(batch).await?;
 

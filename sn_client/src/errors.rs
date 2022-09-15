@@ -105,8 +105,8 @@ pub enum Error {
         last_error: Box<Self>,
     },
     /// No operation Id could be found
-    #[error("Could not retrieve the operation id of a query response: {0:?}")]
-    UnknownOperationId(QueryResponse),
+    #[error("Could not retrieve the operation id of a query or response")]
+    UnknownOperationId,
     /// Unexpected query response received
     #[error("Unexpected response received for {query:?}. Received: {response:?}")]
     UnexpectedQueryResponse {

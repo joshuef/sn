@@ -18,11 +18,11 @@ use sn_interface::{
 
 use sn_interface::{
     messaging::{
-        data::{DataQuery, DataQueryVariant, QueryResponse},
+        data::{DataQuery, DataQueryVariant, OperationId, QueryResponse},
         AuthKind, Dst, MsgId, ServiceAuth, WireMsg,
     },
     network_knowledge::supermajority,
-    types::{Peer, SendToOneError},
+    types::{ChunkAddress, Peer, SendToOneError},
 };
 
 use backoff::{backoff::Backoff, ExponentialBackoff};
@@ -32,7 +32,7 @@ use qp2p::{Close, ConnectionError, SendError};
 use rand::{rngs::OsRng, seq::SliceRandom};
 use std::collections::BTreeSet;
 use std::time::Duration;
-use tokio::{sync::mpsc::channel, task::JoinHandle};
+use tokio::task::JoinHandle;
 use tracing::{debug, error, trace, warn};
 use xor_name::XorName;
 
@@ -84,85 +84,43 @@ impl Session {
         #[cfg(feature = "traceroute")]
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
-        // The insertion of channel will be executed AFTER the completion of the `send_message`.
-        self.send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
-            .await?;
+        // Initial check incase we already have enough acks, we can end here
+        if self
+            .we_have_sufficient_acks_for_msg_id(msg_id, elders.clone())
+            .await?
+        {
+            return Ok(());
+        }
+
+        // Don't immediately fail if sending to one elder fails. This could prevent further sends
+        // and further responses coming in...
+        // Failing directly here could cause us to miss a send success
+        let send_msg_res = self
+            .send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
+            .await;
         trace!("Cmd msg {:?} sent", msg_id);
 
-        let expected_acks = elders_len;
+        if send_msg_res.is_err() {
+            trace!("Error when sending cmd msg out: {send_msg_res:?}");
+        }
 
         // We are not wait for the receive of majority of cmd Acks.
         // This could be further strict to wait for ALL the Acks get received.
         // The period is expected to have AE completed, hence no extra wait is required.
 
         let mut ack_checks = 0;
-        let max_ack_checks = 100;
+        let max_ack_checks = 20;
         let interval = Duration::from_millis(50);
-        let mut received_responses_from = BTreeSet::default();
 
         loop {
-            if let Some(acks_we_have) = self.pending_cmds.get(&msg_id) {
-                let acks = acks_we_have.value();
-
-                let received_response_count = acks.len();
-
-                let mut error_count = 0;
-                let mut return_error = None;
-
-                // track received errors
-                for refmulti in acks.iter() {
-                    let (ack_src, error) = refmulti.key();
-                    if return_error.is_none() {
-                        return_error = error.clone();
-                    }
-
-                    let _preexisting = received_responses_from.insert(*ack_src);
-
-                    if error.is_some() {
-                        error!(
-                            "received error response {:?} of cmd {:?} from {:?}, so far {} respones and {} of them are errors",
-                            error, msg_id, ack_src, received_response_count, error_count
-                        );
-                        error_count += 1;
-                    }
-                }
-
-                // first exit if too many errors:
-                if error_count >= expected_acks {
-                    error!(
-                        "Received majority of error response for cmd {:?}: {:?}",
-                        msg_id, return_error
-                    );
-                    // attempt to cleanup... though more acks may come in..
-                    let _ = self.pending_cmds.remove(&msg_id);
-
-                    if let Some(CmdError::Data(source)) = return_error {
-                        return Err(Error::ErrorCmd { source, msg_id });
-                    }
-
-                    // return Err(Error::ErrorCmd {
-                    //     source: error,
-                    //     msg_id,
-                    // });
-                }
-
-                let actual_ack_count = received_response_count - error_count;
-
-                if actual_ack_count >= expected_acks {
-                    break;
-                }
-
-                debug!("insufficient acks returned so far: {actual_ack_count}/{expected_acks}");
+            if self
+                .we_have_sufficient_acks_for_msg_id(msg_id, elders.clone())
+                .await?
+            {
+                return Ok(());
             }
 
             if ack_checks >= max_ack_checks {
-                let missing_responses: Vec<Peer> = elders
-                    .iter()
-                    .cloned()
-                    .filter(|p| !received_responses_from.contains(&p.addr()))
-                    .collect();
-
-                warn!("Missing Responses from: {:?}", missing_responses);
                 return Err(Error::InsufficientAcksReceived);
             }
 
@@ -171,9 +129,78 @@ impl Session {
             trace!("{:?} current ack waiting loop count {}", msg_id, ack_checks,);
             tokio::time::sleep(interval).await;
         }
+    }
 
-        trace!("Wait for any cmd response/reaction (AE msgs eg), is over. We've had sufficient success.)");
-        Ok(())
+    /// Checks self.pending_cmds for acks for a given msg id.
+    /// Returns true if we've sufficient to call this cmd a success
+    async fn we_have_sufficient_acks_for_msg_id(
+        &self,
+        msg_id: MsgId,
+        elders: Vec<Peer>,
+    ) -> Result<bool> {
+        let mut received_responses_from = BTreeSet::default();
+        let expected_acks = elders.len();
+
+        if let Some(acks_we_have) = self.pending_cmds.get(&msg_id) {
+            let acks = acks_we_have.value();
+
+            let received_response_count = acks.len();
+
+            let mut error_count = 0;
+            let mut return_error = None;
+
+            // track received errors
+            for refmulti in acks.iter() {
+                let (ack_src, error) = refmulti.key();
+                if return_error.is_none() {
+                    return_error = error.clone();
+                }
+
+                let _preexisting = received_responses_from.insert(*ack_src);
+
+                if error.is_some() {
+                    error!(
+                        "received error response {:?} of cmd {:?} from {:?}, so far {} respones and {} of them are errors",
+                        error, msg_id, ack_src, received_response_count, error_count
+                    );
+                    error_count += 1;
+                }
+            }
+
+            // first exit if too many errors:
+            if error_count >= expected_acks {
+                error!(
+                    "Received majority of error response for cmd {:?}: {:?}",
+                    msg_id, return_error
+                );
+                // attempt to cleanup... though more acks may come in..
+                let _ = self.pending_cmds.remove(&msg_id);
+
+                if let Some(CmdError::Data(source)) = return_error {
+                    return Err(Error::ErrorCmd { source, msg_id });
+                }
+            }
+
+            let actual_ack_count = received_response_count - error_count;
+
+            if actual_ack_count >= expected_acks {
+                trace!("Good! We've at or above {expected_acks} expected_acks");
+
+                return Ok(true);
+            }
+
+            let missing_responses: Vec<Peer> = elders
+                .iter()
+                .cloned()
+                .filter(|p| !received_responses_from.contains(&p.addr()))
+                .collect();
+
+            warn!("Missing Responses from: {:?}", missing_responses);
+            // return Err(Error::InsufficientAcksReceived);
+
+            debug!("insufficient acks returned so far: {actual_ack_count}/{expected_acks}");
+        }
+        Ok(false)
     }
 
     #[instrument(
@@ -219,22 +246,10 @@ impl Session {
             elders
         );
 
-        let (sender, mut receiver) = channel::<QueryResponse>(7);
-
-        if let Ok(op_id) = query.variant.operation_id() {
-            // Insert the response sender
-            trace!("Inserting channel for op_id {:?}", (msg_id, op_id));
-            if let Some(mut entry) = self.pending_queries.get_mut(&op_id) {
-                let senders_vec = entry.value_mut();
-                senders_vec.push((msg_id, sender))
-            } else {
-                let _nonexistant_entry = self.pending_queries.insert(op_id, vec![(msg_id, sender)]);
-            }
-
-            trace!("Inserted channel for {:?}", op_id);
-        } else {
-            warn!("No op_id found for query");
-        }
+        let operation_id = query
+            .variant
+            .operation_id()
+            .map_err(|_| Error::UnknownOperationId)?;
 
         let dst = Dst {
             name: dst,
@@ -248,8 +263,19 @@ impl Session {
         #[cfg(feature = "traceroute")]
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
-        self.send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
-            .await?;
+        debug!("pre send");
+        // Here we dont want to check before we resend... in case we're looking for an update
+        //
+        //
+        // The important thing is not to fail due to one failed send, if we already havemsgs in.
+        let send_response = self
+            .send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
+            .await;
+
+        if send_response.is_err() {
+            trace!("Error when sending query msg out: {send_response:?}");
+        }
+        debug!("post send");
 
         // TODO:
         // We are now simply accepting the very first valid response we receive,
@@ -261,88 +287,163 @@ impl Session {
         // so we don't need more than one valid response to prevent from accepting invalid responses
         // from byzantine nodes, however for mutable data (non-Chunk responses) we will
         // have to review the approach.
+        // let mut discarded_responses: usize = 0;
+        // let mut error_response = None;
+        // let mut valid_response = None;
+
+        let mut response_checks = 0;
+
+        loop {
+            debug!("looping send responses");
+            if let Some(response) = self
+                .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
+                .await?
+            {
+                debug!("returning okkkkkkkkkkkkk");
+                return Ok(response);
+            }
+
+            //stop mad looping
+            tokio::time::sleep(Duration::from_millis(50)).await;
+
+            if response_checks > 20 {
+                return Err(Error::NoResponse(elders));
+            }
+            response_checks += 1;
+        }
+
+        // debug!(
+        //     "Response obtained for query w/id {:?}: {:?}",
+        //     msg_id, response
+        // );
+
+        // match response {
+        //     Some(response) => {
+        //         trace!(
+        //             "Removing pending query map for {:?}",
+        //             (msg_id, &operation_id)
+        //         );
+        //         let _prev = self.pending_queries.remove(&operation_id);
+        //         Ok(QueryResult {
+        //             response,
+        //             operation_id,
+        //         })
+        //     }
+        //     None => Err(Error::NoResponse(elders)),
+        // }
+    }
+
+    async fn check_query_responses(
+        &self,
+        msg_id: MsgId,
+        operation_id: OperationId,
+        elders: Vec<Peer>,
+        chunk_addr: Option<ChunkAddress>,
+    ) -> Result<Option<QueryResult>> {
         let mut discarded_responses: usize = 0;
+        let mut error_response = None;
+        let mut valid_response = None;
+        let elders_len = elders.len();
 
-        let response = loop {
-            let mut error_response = None;
-            match (receiver.recv().await, chunk_addr) {
-                (Some(QueryResponse::GetChunk(Ok(chunk))), Some(chunk_addr)) => {
-                    // We are dealing with Chunk query responses, thus we validate its hash
-                    // matches its xorname, if so, we don't need to await for more responses
-                    debug!("Chunk QueryResponse received is: {:#?}", chunk);
+        if let Some(entry) = self.pending_queries.get(&operation_id) {
+            let responses = entry.value();
 
-                    if chunk_addr.name() == chunk.name() {
-                        trace!("Valid Chunk received for {:?}", msg_id);
-                        break Some(QueryResponse::GetChunk(Ok(chunk)));
-                    } else {
-                        // the Chunk content doesn't match its XorName,
-                        // this is suspicious and it could be a byzantine node
-                        warn!("We received an invalid Chunk response from one of the nodes");
+            // lets see if we have a positive response...
+            debug!("response so far: {:?}", responses);
+
+            for refmulti in responses.iter() {
+                let (_socket, response) = refmulti.key().clone();
+
+                debug!("before matching response");
+                match response {
+                    QueryResponse::GetChunk(Ok(chunk)) => {
+                        if let Some(chunk_addr) = chunk_addr {
+                            // We are dealing with Chunk query responses, thus we validate its hash
+                            // matches its xorname, if so, we don't need to await for more responses
+                            debug!("Chunk QueryResponse received is: {:#?}", chunk);
+
+                            if chunk_addr.name() == chunk.name() {
+                                trace!("Valid Chunk received for {:?}", msg_id);
+                                valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
+
+                                // return Ok(Some(QueryResponse::GetChunk(Ok(chunk))));
+                            } else {
+                                // the Chunk content doesn't match its XorName,
+                                // this is suspicious and it could be a byzantine node
+                                warn!(
+                                    "We received an invalid Chunk response from one of the nodes"
+                                );
+                                discarded_responses += 1;
+                            }
+                        }
+                    }
+                    QueryResponse::GetRegister((Err(_), _))
+                    | QueryResponse::ReadRegister((Err(_), _))
+                    | QueryResponse::GetRegisterPolicy((Err(_), _))
+                    | QueryResponse::GetRegisterOwner((Err(_), _))
+                    | QueryResponse::GetRegisterUserPermissions((Err(_), _))
+                    | QueryResponse::GetChunk(Err(_)) => {
+                        debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
+                        error_response = Some(response);
                         discarded_responses += 1;
                     }
-                }
-                // Erring on the side of positivity. \
-                // Saving error, but not returning until we have more responses in
-                // (note, this will overwrite prior errors, so we'll just return whichever was last received)
-                (response @ Some(QueryResponse::GetChunk(Err(_))), Some(_))
-                | (response @ Some(QueryResponse::GetRegister((Err(_), _))), None)
-                | (response @ Some(QueryResponse::GetRegisterPolicy((Err(_), _))), None)
-                | (response @ Some(QueryResponse::GetRegisterOwner((Err(_), _))), None)
-                | (response @ Some(QueryResponse::GetRegisterUserPermissions((Err(_), _))), None) =>
-                {
-                    debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
-                    error_response = response;
-                    discarded_responses += 1;
-                }
-                (Some(response), _) => {
-                    debug!("QueryResponse received is: {:#?}", response);
-                    break Some(response);
-                }
-                (None, _) => {
-                    debug!("QueryResponse channel closed.");
-                    break None;
-                }
-            }
-            if discarded_responses == elders_len {
-                break error_response;
-            }
-        };
 
-        debug!(
-            "Response obtained for query w/id {:?}: {:?}",
-            msg_id, response
-        );
-
-        if let Some(query) = &response {
-            if let Ok(query_op_id) = query.operation_id() {
-                // Remove the response sender
-                trace!("Removing channel for {:?}", (msg_id, &query_op_id));
-                if let Some(mut entry) = self.pending_queries.get_mut(&query_op_id) {
-                    let listeners_for_op = entry.value_mut();
-                    if let Some(index) = listeners_for_op
-                        .iter()
-                        .position(|(id, _sender)| *id == msg_id)
-                    {
-                        let _old_listener = listeners_for_op.swap_remove(index);
+                    QueryResponse::GetRegister((Ok(ref register), _)) => {
+                        debug!("okay got register");
+                        // TODO: properly merge all registers
+                        if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) =
+                            &valid_response
+                        {
+                            if register.size() > prior_response.size() {
+                                debug!("longer register");
+                                // keep this new register
+                                valid_response = Some(response);
+                            }
+                        } else {
+                            valid_response = Some(response);
+                        }
                     }
-                } else {
-                    warn!("No listeners found for our op_id: {:?}", query_op_id)
+                    QueryResponse::ReadRegister((Ok(ref register_set), _)) => {
+                        debug!("okay _read_ register");
+                        // TODO: properly merge all registers
+                        if let Some(QueryResponse::ReadRegister((Ok(prior_response), _))) =
+                            &valid_response
+                        {
+                            if register_set.len() > prior_response.len() {
+                                debug!("longer register retrieved");
+                                // keep this new register
+                                valid_response = Some(response);
+                            }
+                        } else {
+                            valid_response = Some(response);
+                        }
+                    }
+                    response => {
+                        // we got a valid response
+                        valid_response = Some(response)
+                    }
                 }
             }
         }
 
-        match response {
-            Some(response) => {
-                let operation_id = response
-                    .operation_id()
-                    .map_err(|_| Error::UnknownOperationId(response.clone()))?;
-                Ok(QueryResult {
+        if discarded_responses == elders_len {
+            debug!("discarded equals elders");
+            if let Some(response) = error_response {
+                return Ok(Some(QueryResult {
                     response,
                     operation_id,
-                })
+                }));
             }
-            None => Err(Error::NoResponse(elders)),
+            // return Ok(error_response);
+        } else if let Some(response) = valid_response {
+            debug!("valid response innnn!!! : {:?}", response);
+            return Ok(Some(QueryResult {
+                response,
+                operation_id,
+            }));
         }
+
+        Ok(None)
     }
 
     #[instrument(skip_all, level = "debug")]
@@ -552,6 +653,7 @@ impl Session {
     ) -> Result<()> {
         let bytes = wire_msg.serialize()?;
 
+        debug!("---> send msg going... will force new?: {force_new_link}");
         let mut last_error = None;
         // Send message to all Elders concurrently
         let mut tasks = Vec::default();
@@ -581,6 +683,8 @@ impl Session {
                         Err(Error::QuicP2pConnection { peer, error: err })
                     }
                     Err(SendToOneError::Send(err)) => Err(Error::QuicP2pSend { peer, error: err }),
+                    #[cfg(features = "chaos")]
+                    Err(SendToOneError::ChaosNoConnection) => Err(Error::ChoasSendFail),
                 };
 
                 (peer_name, result)
@@ -614,6 +718,7 @@ impl Session {
                                 Close::Application { reason, error_code },
                             )),
                         });
+                        self.peer_links.remove(&peer).await;
                     }
                     Err(Error::QuicP2pSend {
                         peer,
@@ -624,6 +729,8 @@ impl Session {
                             peer,
                             error: SendError::ConnectionLost(error),
                         });
+
+                        self.peer_links.remove(&peer).await;
                     }
                     Err(error) => {
                         warn!(
@@ -631,6 +738,9 @@ impl Session {
                             msg_id, peer_name, error
                         );
                         last_error = Some(error);
+                        if let Some(peer) = self.peer_links.get_peer_by_name(&peer_name).await {
+                            self.peer_links.remove(&peer).await;
+                        }
                     }
                     Ok(_) => successful_sends += 1,
                 },
