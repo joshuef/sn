@@ -102,7 +102,9 @@ impl Safe {
 
         let client = self.get_safe_client()?;
 
-        let (entry_hash, op_batch) = client.write_to_local_register(address, data, replace).await?;
+        let (entry_hash, op_batch) = client
+            .write_to_local_register(address, data, replace)
+            .await?;
 
         client.publish_register_ops(op_batch).await?;
 

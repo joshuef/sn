@@ -142,7 +142,7 @@ impl PeerLinks {
 
         for (peer, _link) in links.iter() {
             if peer.name() == *name {
-                return Some(peer.clone())
+                return Some(peer.clone());
             }
         }
         None

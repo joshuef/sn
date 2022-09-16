@@ -246,7 +246,6 @@ impl Session {
                     if let Ok(op_id) = response.operation_id() {
                         debug!("OpId of {msg_id:?} is {op_id:?}");
                         if let Some(entry) = queries.get_mut(&op_id) {
-
                             debug!("op id: {op_id:?} exists in pending queries...");
                             let received = entry.value();
 

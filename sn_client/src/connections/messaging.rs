@@ -289,19 +289,23 @@ impl Session {
                         | QueryResponse::GetRegisterOwner((Err(_), _))
                         | QueryResponse::GetRegisterUserPermissions((Err(_), _))
                         | QueryResponse::GetChunk(Err(_)) => {
-                            // if let Some(chunk_addr) = chunk_addr {
                             debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
                             error_response = Some(response);
                             discarded_responses += 1;
-                            // }
                         }
-                        QueryResponse::GetRegister((Ok(register), _)) @ the_response => {
+
+                        QueryResponse::GetRegister((Ok(ref register), _)) => {
+                            debug!("okay got register");
                             // TODO: properly merge all registers
-                            if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) = valid_response {
-                                if register.size() > prior_response.size(){
+                            if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) =
+                                &valid_response
+                            {
+                                if register.size() > prior_response.size() {
                                     // keep this new register
-                                    valid_response =
+                                    valid_response = Some(response);
                                 }
+                            } else {
+                                valid_response = Some(response);
                             }
                         }
                         response => {
@@ -332,11 +336,11 @@ impl Session {
 
         match response {
             Some(response) => {
-                // trace!(
-                //     "Removing pending query map for {:?}",
-                //     (msg_id, &operation_id)
-                // );
-                // let _prev = self.pending_queries.remove(&operation_id);
+                trace!(
+                    "Removing pending query map for {:?}",
+                    (msg_id, &operation_id)
+                );
+                let _prev = self.pending_queries.remove(&operation_id);
                 Ok(QueryResult {
                     response,
                     operation_id,
@@ -637,7 +641,6 @@ impl Session {
                         );
                         last_error = Some(error);
                         if let Some(peer) = self.peer_links.get_peer_by_name(&peer_name).await {
-
                             self.peer_links.remove(&peer).await;
                         }
                     }
