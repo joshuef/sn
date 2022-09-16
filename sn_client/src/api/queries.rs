@@ -70,7 +70,7 @@ impl Client {
         let mut attempts = 1;
         let dst = query.variant.dst_name();
         // should we force a fresh connection to the nodes?
-        let force_new_link = false;
+        let mut force_new_link = false;
         let mut data_not_found_count = BTreeSet::default();
         loop {
             let msg = ServiceMsg::Query(query.clone());
@@ -142,7 +142,7 @@ impl Client {
                 _ => {
                     if attempts > self.max_retries / 3 {
                         // any further attempts should use fresh links in case of issues
-                        // force_new_link = true;
+                        force_new_link = true;
                     }
                 }
             }

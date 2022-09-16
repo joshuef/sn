@@ -74,7 +74,7 @@ impl Client {
         let _ = span.enter();
 
         let mut attempt = 1;
-        let force_new_link = false;
+        let mut force_new_link = false;
         loop {
             debug!("Attempting {:?} (attempt #{})", debug_cmd, attempt);
 
@@ -89,7 +89,7 @@ impl Client {
                 )
                 .await;
 
-            // force_new_link = true;
+            force_new_link = true;
 
             if let Ok(cmd_result) = res {
                 debug!("{debug_cmd} sent okay");

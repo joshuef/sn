@@ -326,10 +326,10 @@ impl Session {
 
         match response {
             Some(response) => {
-                trace!(
-                    "Removing pending query map for {:?}",
-                    (msg_id, &operation_id)
-                );
+                // trace!(
+                //     "Removing pending query map for {:?}",
+                //     (msg_id, &operation_id)
+                // );
                 // let _prev = self.pending_queries.remove(&operation_id);
                 Ok(QueryResult {
                     response,
