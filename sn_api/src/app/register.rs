@@ -187,7 +187,7 @@ impl Safe {
         }
 
         let client = self.get_safe_client()?;
-        let (entry_hash, op_batch) = match client.write_to_register(address, entry, parents).await {
+        let (entry_hash, op_batch) = match client.write_to_local_register(address, entry, parents).await {
             Ok(data) => data,
             Err(
                 ClientError::NetworkDataError(SafeNdError::AccessDenied(_))

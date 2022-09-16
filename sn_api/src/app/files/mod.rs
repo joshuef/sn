@@ -120,7 +120,7 @@ impl Safe {
             let entry = files_map_xorurl.as_bytes().to_vec();
             let client = self.get_safe_client()?;
             let (entry_hash, reg_op) = client
-                .write_to_register(reg_address, entry, Default::default())
+                .write_to_local_register(reg_address, entry, Default::default())
                 .await?;
 
             client.publish_register_ops(reg_op).await?;

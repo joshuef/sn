@@ -244,11 +244,19 @@ impl Session {
                 );
 
                     if let Ok(op_id) = response.operation_id() {
+                        debug!("OpId of {msg_id:?} is {op_id:?}");
                         if let Some(entry) = queries.get_mut(&op_id) {
+
+                            debug!("op id: {op_id:?} exists in pending queries...");
                             let received = entry.value();
 
+                            debug!("inserting response : {response:?}");
+
                             let _prior = received.insert((src_peer.addr(), response));
+
+                            debug!("received now looks like: {:?}", received);
                         } else {
+                            debug!("op id: {op_id:?} does not exist in pending queries...");
                             let received = DashSet::new();
                             let _prior = received.insert((src_peer.addr(), response));
                             let _prev = queries.insert(op_id, Arc::new(received));

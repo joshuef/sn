@@ -264,9 +264,6 @@ impl Session {
 
                 for refmulti in responses.iter() {
                     let (_socket, response) = refmulti.key().clone();
-                    if valid_response.is_some() {
-                        continue;
-                    }
 
                     debug!("before matching response");
                     match response {
@@ -297,6 +294,15 @@ impl Session {
                             error_response = Some(response);
                             discarded_responses += 1;
                             // }
+                        }
+                        QueryResponse::GetRegister((Ok(register), _)) @ the_response => {
+                            // TODO: properly merge all registers
+                            if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) = valid_response {
+                                if register.size() > prior_response.size(){
+                                    // keep this new register
+                                    valid_response =
+                                }
+                            }
                         }
                         response => {
                             // we got a valid response
@@ -610,6 +616,7 @@ impl Session {
                                 Close::Application { reason, error_code },
                             )),
                         });
+                        self.peer_links.remove(&peer).await;
                     }
                     Err(Error::QuicP2pSend {
                         peer,
@@ -620,6 +627,8 @@ impl Session {
                             peer,
                             error: SendError::ConnectionLost(error),
                         });
+
+                        self.peer_links.remove(&peer).await;
                     }
                     Err(error) => {
                         warn!(
@@ -627,6 +636,10 @@ impl Session {
                             msg_id, peer_name, error
                         );
                         last_error = Some(error);
+                        if let Some(peer) = self.peer_links.get_peer_by_name(&peer_name).await {
+
+                            self.peer_links.remove(&peer).await;
+                        }
                     }
                     Ok(_) => successful_sends += 1,
                 },

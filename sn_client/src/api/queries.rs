@@ -107,6 +107,7 @@ impl Client {
                             return Ok(query_result);
                         }
                     } else {
+                        debug!("Okayyyyy");
                         return Ok(query_result);
                     }
 
@@ -139,12 +140,14 @@ impl Client {
                         last_error: Box::new(Error::NoResponse(elders)),
                     });
                 }
-                _ => {
-                    if attempts > self.max_retries / 3 {
-                        // any further attempts should use fresh links in case of issues
-                        force_new_link = true;
-                    }
-                }
+                _ => {}
+            }
+
+            // if we've attempted a couple of times, we should have hit _most_ elders...
+            // so now we force new links
+            if attempts > 2 {
+                // any further attempts should use fresh links in case of issues
+                force_new_link = true;
             }
 
             attempts += 1;

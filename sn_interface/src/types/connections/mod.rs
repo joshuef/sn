@@ -19,6 +19,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
+use xor_name::XorName;
 
 /// This is tailored to the use-case of connecting on send.
 /// It keeps a Link instance per node, and is designed to make sure
@@ -115,29 +116,39 @@ impl PeerLinks {
         }
     }
 
-    /// Disposes of the link and all underlying resources.
-    #[allow(unused)]
-    pub async fn disconnect(&self, id: Peer) {
-        let mut links = self.links.write().await;
-        let link = match links.remove(&id) {
-            // someone else inserted in the meanwhile, so use that
-            Some(link) => link,
-            // none here, all good
-            None => {
-                trace!("Attempted to remove {id:?}, it was not found");
-                return;
-            }
-        };
+    // /// Disposes of the link and all underlying resources.
+    // #[allow(unused)]
+    // pub async fn disconnect(&self, id: Peer) {
+    //     let mut links = self.links.write().await;
+    //     let link = match links.remove(&id) {
+    //         // someone else inserted in the meanwhile, so use that
+    //         Some(link) => link,
+    //         // none here, all good
+    //         None => {
+    //             trace!("Attempted to remove {id:?}, it was not found");
+    //             return;
+    //         }
+    //     };
 
-        link.disconnect().await;
-    }
+    //     link.disconnect().await;
+    // }
 
     async fn get(&self, id: &Peer) -> Option<Link> {
         let links = self.links.read().await;
         links.get(id).cloned()
     }
+    pub async fn get_peer_by_name(&self, name: &XorName) -> Option<Peer> {
+        let links = self.links.read().await;
 
-    async fn remove(&self, id: &Peer) {
+        for (peer, _link) in links.iter() {
+            if peer.name() == *name {
+                return Some(peer.clone())
+            }
+        }
+        None
+    }
+
+    pub async fn remove(&self, id: &Peer) {
         let mut links = self.links.write().await;
         let existing_link = links.remove(id);
 
