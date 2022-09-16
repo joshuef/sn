@@ -79,9 +79,9 @@ impl Session {
 
                     },
                     Err(Error::QuicP2p(qp2p_err)) => {
-                          // TODO: Can we recover here?
-                          info!("Error from Qp2p received, closing listener loop. {:?}", qp2p_err);
-                          break;
+                        // TODO: Can we recover here?
+                        info!("Error from Qp2p received, closing listener loop. {:?}", qp2p_err);
+                        break;
                     },
                     Err(error) => {
                         error!("Error while processing incoming msg: {:?}. Listening for next msg...", error);
@@ -89,6 +89,7 @@ impl Session {
                 }
             }
 
+            session.peer_links.remove(&peer).await;
             // once the msg loop breaks, we know the connection is closed
             trace!("{} to {} (id: {})", LogMarker::ConnectionClosed, addr, connection_id);
 
