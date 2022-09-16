@@ -96,7 +96,7 @@ impl Session {
         // The period is expected to have AE completed, hence no extra wait is required.
 
         let mut ack_checks = 0;
-        let max_ack_checks = 100;
+        let max_ack_checks = 30;
         let interval = Duration::from_millis(50);
         let mut received_responses_from = BTreeSet::default();
 
