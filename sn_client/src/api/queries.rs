@@ -77,7 +77,7 @@ impl Client {
             let serialised_query = WireMsg::serialize_msg_payload(&msg)?;
             let signature = self.keypair.sign(&serialised_query);
             debug!(
-                "Attempting {:?} (attempt #{}) with a query timeout of {:?}",
+                "Attempting {:?} (attempt #{}) with a query timeout of {:?}, will force new: {force_new_link}",
                 query, attempts, attempt_timeout
             );
 

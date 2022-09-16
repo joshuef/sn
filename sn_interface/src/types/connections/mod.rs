@@ -84,8 +84,13 @@ impl PeerLinks {
     /// I.e. it will not connect here, but on calling send on the returned link.
     pub async fn get_or_create_link(&self, peer: &Peer, force_new_link: bool) -> Link {
         if force_new_link {
+            // first remove any existing
+            self.remove(peer).await;
+
             let link = Link::new(*peer, self.endpoint.clone());
             let _ = self.links.write().await.insert(*peer, link.clone());
+
+            debug!("new link forced to {peer:?}");
             return link;
         }
 
@@ -130,5 +135,14 @@ impl PeerLinks {
     async fn get(&self, id: &Peer) -> Option<Link> {
         let links = self.links.read().await;
         links.get(id).cloned()
+    }
+
+    async fn remove(&self, id: &Peer) {
+        let mut links = self.links.write().await;
+        let existing_link = links.remove(id);
+
+        if let Some(actual_link) = existing_link {
+            actual_link.disconnect().await;
+        }
     }
 }

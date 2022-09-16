@@ -76,7 +76,10 @@ impl Client {
         let mut attempt = 1;
         let mut force_new_link = false;
         loop {
-            debug!("Attempting {:?} (attempt #{})", debug_cmd, attempt);
+            debug!(
+                "Attempting {:?} (attempt #{}), forcing new: {force_new_link}",
+                debug_cmd, attempt
+            );
 
             let res = self
                 .send_signed_cmd(

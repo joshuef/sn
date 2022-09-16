@@ -185,6 +185,7 @@ impl Link {
                 if let Some(id) = res {
                     self.read_conn(id, listen).await
                 } else {
+                    debug!("creating conn");
                     self.create_connection(listen).await
                 }
             }
@@ -217,13 +218,21 @@ impl Link {
         id: ConnId,
         listen: F,
     ) -> Result<qp2p::Connection, SendToOneError> {
+        debug!("reading existing conn");
+
         let res = { self.connections.read().await.get(&id).cloned() };
         match res {
             Some(item) => {
                 self.touch(item.conn.id()).await;
                 Ok(item.conn)
             }
-            None => self.create_connection(listen).await,
+            None => {
+                debug!(
+                    "reading existing conn failed... so we're making a new one... to {:?}",
+                    self.peer
+                );
+                self.create_connection(listen).await
+            }
         }
     }
 

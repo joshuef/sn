@@ -547,6 +547,7 @@ impl Session {
     ) -> Result<()> {
         let bytes = wire_msg.serialize()?;
 
+        debug!("---> send msg going... will force new?: {force_new_link}");
         let mut last_error = None;
         // Send message to all Elders concurrently
         let mut tasks = Vec::default();
