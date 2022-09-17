@@ -18,11 +18,11 @@ use sn_interface::{
 
 use sn_interface::{
     messaging::{
-        data::{DataQuery, DataQueryVariant, QueryResponse},
+        data::{DataQuery, DataQueryVariant, OperationId, QueryResponse},
         AuthKind, Dst, MsgId, ServiceAuth, WireMsg,
     },
     network_knowledge::supermajority,
-    types::{Peer, SendToOneError},
+    types::{ChunkAddress, Peer, SendToOneError},
 };
 
 use backoff::{backoff::Backoff, ExponentialBackoff};
@@ -264,6 +264,13 @@ impl Session {
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
         debug!("pre send");
+        if let Some(response) = self
+            .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
+            .await?
+        {
+            return Ok(response);
+        }
+
         let send_response = self
             .send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
             .await;
@@ -283,14 +290,21 @@ impl Session {
         // so we don't need more than one valid response to prevent from accepting invalid responses
         // from byzantine nodes, however for mutable data (non-Chunk responses) we will
         // have to review the approach.
-        let mut discarded_responses: usize = 0;
-        let mut error_response = None;
-        let mut valid_response = None;
+        // let mut discarded_responses: usize = 0;
+        // let mut error_response = None;
+        // let mut valid_response = None;
 
         let mut response_checks = 0;
 
-        let response = loop {
+        loop {
             debug!("looping send responses");
+            if let Some(response) = self
+                .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
+                .await?
+            {
+                return Ok(response);
+            }
+
             // if let Some(entry) = self.pending_queries.get(&operation_id) {
             //     let responses = entry.value();
 
@@ -353,40 +367,124 @@ impl Session {
 
             //stop mad looping
             tokio::time::sleep(Duration::from_millis(50)).await;
-            if discarded_responses == elders_len {
-                break error_response;
-            }
-
-            if valid_response.is_some() {
-                break valid_response;
-            }
 
             if response_checks > 20 {
-                return Err(Error::NoReponse(elders))
+                return Err(Error::NoResponse(elders));
             }
-            respones_checks +=1;
+            response_checks += 1;
+        }
 
-        };
+        // debug!(
+        //     "Response obtained for query w/id {:?}: {:?}",
+        //     msg_id, response
+        // );
 
-        debug!(
-            "Response obtained for query w/id {:?}: {:?}",
-            msg_id, response
-        );
+        // match response {
+        //     Some(response) => {
+        //         trace!(
+        //             "Removing pending query map for {:?}",
+        //             (msg_id, &operation_id)
+        //         );
+        //         let _prev = self.pending_queries.remove(&operation_id);
+        //         Ok(QueryResult {
+        //             response,
+        //             operation_id,
+        //         })
+        //     }
+        //     None => Err(Error::NoResponse(elders)),
+        // }
+    }
 
-        match response {
-            Some(response) => {
-                trace!(
-                    "Removing pending query map for {:?}",
-                    (msg_id, &operation_id)
-                );
-                let _prev = self.pending_queries.remove(&operation_id);
-                Ok(QueryResult {
+    async fn check_query_responses(
+        &self,
+        msg_id: MsgId,
+        operation_id: OperationId,
+        elders: Vec<Peer>,
+        chunk_addr: Option<ChunkAddress>,
+    ) -> Result<Option<QueryResult>> {
+        let mut discarded_responses: usize = 0;
+        let mut error_response = None;
+        let mut valid_response = None;
+        let elders_len = elders.len();
+
+        if let Some(entry) = self.pending_queries.get(&operation_id) {
+            let responses = entry.value();
+
+            // lets see if we have a positive response...
+            debug!("response so far: {:?}", responses);
+
+            for refmulti in responses.iter() {
+                let (_socket, response) = refmulti.key().clone();
+
+                debug!("before matching response");
+                match response {
+                    QueryResponse::GetChunk(Ok(chunk)) => {
+                        if let Some(chunk_addr) = chunk_addr {
+                            // We are dealing with Chunk query responses, thus we validate its hash
+                            // matches its xorname, if so, we don't need to await for more responses
+                            debug!("Chunk QueryResponse received is: {:#?}", chunk);
+
+                            if chunk_addr.name() == chunk.name() {
+                                trace!("Valid Chunk received for {:?}", msg_id);
+                                valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
+                            } else {
+                                // the Chunk content doesn't match its XorName,
+                                // this is suspicious and it could be a byzantine node
+                                warn!(
+                                    "We received an invalid Chunk response from one of the nodes"
+                                );
+                                discarded_responses += 1;
+                            }
+                        }
+                    }
+                    QueryResponse::GetRegister((Err(_), _))
+                    | QueryResponse::GetRegisterPolicy((Err(_), _))
+                    | QueryResponse::GetRegisterOwner((Err(_), _))
+                    | QueryResponse::GetRegisterUserPermissions((Err(_), _))
+                    | QueryResponse::GetChunk(Err(_)) => {
+                        debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
+                        error_response = Some(response);
+                        discarded_responses += 1;
+                    }
+
+                    QueryResponse::GetRegister((Ok(ref register), _)) => {
+                        debug!("okay got register");
+                        // TODO: properly merge all registers
+                        if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) =
+                            &valid_response
+                        {
+                            if register.size() > prior_response.size() {
+                                // keep this new register
+                                valid_response = Some(response);
+                            }
+                        } else {
+                            valid_response = Some(response);
+                        }
+                    }
+                    response => {
+                        // we got a valid response
+                        valid_response = Some(response)
+                    }
+                }
+            }
+        }
+
+        if discarded_responses == elders_len {
+            if let Some(response) = error_response {
+                return Ok(Some(QueryResult {
                     response,
                     operation_id,
-                })
+                }));
             }
-            None => Err(Error::NoResponse(elders)),
+            // return Ok(error_response);
+        } else if let Some(response) = valid_response {
+            return Ok(Some(QueryResult {
+                response,
+                operation_id,
+            }));
         }
+
+        Ok(None)
     }
 
     #[instrument(skip_all, level = "debug")]
