@@ -114,7 +114,7 @@ impl Client {
 
             if let Ok(result) = res {
                 debug!("{query:?} sent and received okay");
-                break Ok(result);
+                return Ok(result);
             }
             // In the next attempt, try the next adult, further away.
             query.adult_index += 1;
@@ -128,7 +128,7 @@ impl Client {
                 tokio::time::sleep(delay).await;
             } else {
                 // we're done trying
-                break res;
+                return res;
             }
         }
     }

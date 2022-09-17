@@ -264,14 +264,10 @@ impl Session {
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
         debug!("pre send");
-        if let Some(response) = self
-            .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
-            .await?
-        {
-            debug!("returning okkkkkkk");
-            return Ok(response);
-        }
-
+        // Here we dont want to check before we resend... in case we're looking for an update
+        //
+        //
+        // The important thing is not to fail due to one failed send, if we already havemsgs in.
         let send_response = self
             .send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
             .await;
@@ -369,6 +365,8 @@ impl Session {
                             if chunk_addr.name() == chunk.name() {
                                 trace!("Valid Chunk received for {:?}", msg_id);
                                 valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
+
+                                // return Ok(Some(QueryResponse::GetChunk(Ok(chunk))));
                             } else {
                                 // the Chunk content doesn't match its XorName,
                                 // this is suspicious and it could be a byzantine node
@@ -396,6 +394,7 @@ impl Session {
                             &valid_response
                         {
                             if register.size() > prior_response.size() {
+                                debug!("longer register");
                                 // keep this new register
                                 valid_response = Some(response);
                             }
