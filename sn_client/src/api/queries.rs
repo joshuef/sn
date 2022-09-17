@@ -62,7 +62,7 @@ impl Client {
         // Add jitter so not all clients retry at the same rate. This divider will knock on to the overall retry window
         // and should help prevent elders from being conseceutively overwhelmed
         let jitter = rng.gen_range(1.0..1.5);
-        let attempt_timeout = self.query_timeout.div_f32(retry_count as f32 + jitter);
+        // let attempt_timeout = self.query_timeout.div_f32(retry_count as f32 + jitter);
         trace!("Setting up query retry, interval is: {:?}", attempt_timeout);
 
         let span = info_span!("Attempting a query");
@@ -84,18 +84,15 @@ impl Client {
             // grab up to date destination section from our local network knowledge
             let (section_pk, elders) = self.session.get_query_elders(dst).await?;
 
-            let res = tokio::time::timeout(
-                attempt_timeout,
-                self.send_signed_query_to_section(
-                    query.clone(),
-                    client_pk,
-                    serialised_query.clone(),
-                    signature.clone(),
-                    Some((section_pk, elders.clone())),
-                    force_new_link,
-                ),
-            )
-            .await;
+            let res = self.send_signed_query_to_section(
+                query.clone(),
+                client_pk,
+                serialised_query.clone(),
+                signature.clone(),
+                Some((section_pk, elders.clone())),
+                force_new_link,
+            ).await;
+
 
             match res {
                 Ok(Ok(query_result)) => {
@@ -116,17 +113,6 @@ impl Client {
                         query.adult_index
                     )
                 }
-                Ok(Err(err)) if attempts > self.max_retries => {
-                    debug!(
-                        "Retries ({}) all failed returning no response for {:?}",
-                        self.max_retries, query
-                    );
-                    break Err(Error::NoResponseAfterRetrying {
-                        query,
-                        attempts,
-                        last_error: Box::new(err),
-                    });
-                }
                 Err(_) if attempts > self.max_retries => {
                     // this should be due to our tokio time out, rather than an error
                     // returned by `send_signed_query_to_section`
@@ -145,10 +131,10 @@ impl Client {
 
             // if we've attempted a couple of times, we should have hit _most_ elders...
             // so now we force new links
-            if attempts > 2 {
-                // any further attempts should use fresh links in case of issues
-                force_new_link = true;
-            }
+            // if attempts > 2 {
+            //     // any further attempts should use fresh links in case of issues
+            //     // force_new_link = true;
+            // }
 
             attempts += 1;
 

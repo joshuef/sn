@@ -286,67 +286,70 @@ impl Session {
         let mut discarded_responses: usize = 0;
         let mut error_response = None;
         let mut valid_response = None;
+
+        let mut response_checks = 0;
+
         let response = loop {
             debug!("looping send responses");
-            if let Some(entry) = self.pending_queries.get(&operation_id) {
-                let responses = entry.value();
+            // if let Some(entry) = self.pending_queries.get(&operation_id) {
+            //     let responses = entry.value();
 
-                // lets see if we have a positive response...
-                debug!("response so far: {:?}", responses);
+            //     // lets see if we have a positive response...
+            //     debug!("response so far: {:?}", responses);
 
-                for refmulti in responses.iter() {
-                    let (_socket, response) = refmulti.key().clone();
+            //     for refmulti in responses.iter() {
+            //         let (_socket, response) = refmulti.key().clone();
 
-                    debug!("before matching response");
-                    match response {
-                        QueryResponse::GetChunk(Ok(chunk)) => {
-                            if let Some(chunk_addr) = chunk_addr {
-                                // We are dealing with Chunk query responses, thus we validate its hash
-                                // matches its xorname, if so, we don't need to await for more responses
-                                debug!("Chunk QueryResponse received is: {:#?}", chunk);
+            //         debug!("before matching response");
+            //         match response {
+            //             QueryResponse::GetChunk(Ok(chunk)) => {
+            //                 if let Some(chunk_addr) = chunk_addr {
+            //                     // We are dealing with Chunk query responses, thus we validate its hash
+            //                     // matches its xorname, if so, we don't need to await for more responses
+            //                     debug!("Chunk QueryResponse received is: {:#?}", chunk);
 
-                                if chunk_addr.name() == chunk.name() {
-                                    trace!("Valid Chunk received for {:?}", msg_id);
-                                    valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
-                                } else {
-                                    // the Chunk content doesn't match its XorName,
-                                    // this is suspicious and it could be a byzantine node
-                                    warn!("We received an invalid Chunk response from one of the nodes");
-                                    discarded_responses += 1;
-                                }
-                            }
-                        }
-                        QueryResponse::GetRegister((Err(_), _))
-                        | QueryResponse::GetRegisterPolicy((Err(_), _))
-                        | QueryResponse::GetRegisterOwner((Err(_), _))
-                        | QueryResponse::GetRegisterUserPermissions((Err(_), _))
-                        | QueryResponse::GetChunk(Err(_)) => {
-                            debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
-                            error_response = Some(response);
-                            discarded_responses += 1;
-                        }
+            //                     if chunk_addr.name() == chunk.name() {
+            //                         trace!("Valid Chunk received for {:?}", msg_id);
+            //                         valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
+            //                     } else {
+            //                         // the Chunk content doesn't match its XorName,
+            //                         // this is suspicious and it could be a byzantine node
+            //                         warn!("We received an invalid Chunk response from one of the nodes");
+            //                         discarded_responses += 1;
+            //                     }
+            //                 }
+            //             }
+            //             QueryResponse::GetRegister((Err(_), _))
+            //             | QueryResponse::GetRegisterPolicy((Err(_), _))
+            //             | QueryResponse::GetRegisterOwner((Err(_), _))
+            //             | QueryResponse::GetRegisterUserPermissions((Err(_), _))
+            //             | QueryResponse::GetChunk(Err(_)) => {
+            //                 debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
+            //                 error_response = Some(response);
+            //                 discarded_responses += 1;
+            //             }
 
-                        QueryResponse::GetRegister((Ok(ref register), _)) => {
-                            debug!("okay got register");
-                            // TODO: properly merge all registers
-                            if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) =
-                                &valid_response
-                            {
-                                if register.size() > prior_response.size() {
-                                    // keep this new register
-                                    valid_response = Some(response);
-                                }
-                            } else {
-                                valid_response = Some(response);
-                            }
-                        }
-                        response => {
-                            // we got a valid response
-                            valid_response = Some(response)
-                        }
-                    }
-                }
-            }
+            //             QueryResponse::GetRegister((Ok(ref register), _)) => {
+            //                 debug!("okay got register");
+            //                 // TODO: properly merge all registers
+            //                 if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) =
+            //                     &valid_response
+            //                 {
+            //                     if register.size() > prior_response.size() {
+            //                         // keep this new register
+            //                         valid_response = Some(response);
+            //                     }
+            //                 } else {
+            //                     valid_response = Some(response);
+            //                 }
+            //             }
+            //             response => {
+            //                 // we got a valid response
+            //                 valid_response = Some(response)
+            //             }
+            //         }
+            //     }
+            // }
 
             //stop mad looping
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -357,6 +360,12 @@ impl Session {
             if valid_response.is_some() {
                 break valid_response;
             }
+
+            if response_checks > 20 {
+                return Err(Error::NoReponse(elders))
+            }
+            respones_checks +=1;
+
         };
 
         debug!(
