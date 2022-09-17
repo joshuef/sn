@@ -378,6 +378,7 @@ impl Session {
                         }
                     }
                     QueryResponse::GetRegister((Err(_), _))
+                    | QueryResponse::ReadRegister((Err(_), _))
                     | QueryResponse::GetRegisterPolicy((Err(_), _))
                     | QueryResponse::GetRegisterOwner((Err(_), _))
                     | QueryResponse::GetRegisterUserPermissions((Err(_), _))
@@ -395,6 +396,21 @@ impl Session {
                         {
                             if register.size() > prior_response.size() {
                                 debug!("longer register");
+                                // keep this new register
+                                valid_response = Some(response);
+                            }
+                        } else {
+                            valid_response = Some(response);
+                        }
+                    }
+                    QueryResponse::ReadRegister((Ok(ref register_set), _)) => {
+                        debug!("okay _read_ register");
+                        // TODO: properly merge all registers
+                        if let Some(QueryResponse::ReadRegister((Ok(prior_response), _))) =
+                            &valid_response
+                        {
+                            if register_set.len() > prior_response.len() {
+                                debug!("longer register retrieved");
                                 // keep this new register
                                 valid_response = Some(response);
                             }
