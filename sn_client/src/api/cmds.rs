@@ -109,8 +109,7 @@ impl Client {
             if let Some(delay) = backoff.next_backoff() {
                 debug!("Sleeping for {delay:?} before trying cmd {debug_cmd:?} again");
                 tokio::time::sleep(delay).await;
-            }
-            else {
+            } else {
                 // we're done trying
                 break res;
             }

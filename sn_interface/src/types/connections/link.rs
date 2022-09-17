@@ -147,7 +147,7 @@ impl Link {
                     x
                 );
 
-                 // clean up failing connections at once, no nead to leak it outside of here
+                // clean up failing connections at once, no nead to leak it outside of here
                 // next send (e.g. when retrying) will use/create a new connection
                 let id = &conn.id();
 
@@ -159,9 +159,7 @@ impl Link {
                 conn.close(Some(format!("{:?}", error)));
                 Err(SendToOneError::ChaosNoConnection)
             }
-
         }
-
 
         match conn.send_with(bytes, default_priority, retry_config).await {
             Ok(()) => {
@@ -394,9 +392,9 @@ pub enum SendToOneError {
     Connection(qp2p::ConnectionError),
     ///
     Send(qp2p::SendError),
-    #[cfg(feature="chaos")]
+    #[cfg(feature = "chaos")]
     /// ChaosNoConn
-    ChaosNoConnection
+    ChaosNoConnection,
 }
 
 impl SendToOneError {
