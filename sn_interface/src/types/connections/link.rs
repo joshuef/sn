@@ -133,6 +133,36 @@ impl Link {
             queue_len,
             self.peer
         );
+
+        // Simulate failed connections
+        #[cfg(feature = "chaos")]
+        {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let x: f64 = rng.gen_range(0.0..1.0);
+
+            if x > 0.9 {
+                warn!(
+                    "\n =========== [Chaos] Connection fail chaos. Conection removed from Link w/ x of: {}. ============== \n",
+                    x
+                );
+
+                 // clean up failing connections at once, no nead to leak it outside of here
+                // next send (e.g. when retrying) will use/create a new connection
+                let id = &conn.id();
+
+                // We could write just `self.queue.remove(id)`, but the library warns for `unused_results`.
+                {
+                    let _ = self.connections.write().await.remove(id);
+                    let _ = self.queue.write().await.remove(id);
+                }
+                conn.close(Some(format!("{:?}", error)));
+                Err(SendToOneError::ChaosNoConnection)
+            }
+
+        }
+
+
         match conn.send_with(bytes, default_priority, retry_config).await {
             Ok(()) => {
                 self.remove_expired().await;
@@ -364,6 +394,9 @@ pub enum SendToOneError {
     Connection(qp2p::ConnectionError),
     ///
     Send(qp2p::SendError),
+    #[cfg(feature="chaos")]
+    /// ChaosNoConn
+    ChaosNoConnection
 }
 
 impl SendToOneError {

@@ -27,6 +27,8 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("chaos closed this conn")]
+    ChoasSendFail,
     /// Failed to obtain network contacts to bootstrap to
     #[error("Failed to obtain network contacts to bootstrap to: {0}")]
     NetworkContacts(String),

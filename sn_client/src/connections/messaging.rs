@@ -84,85 +84,83 @@ impl Session {
         #[cfg(feature = "traceroute")]
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
-        // The insertion of channel will be executed AFTER the completion of the `send_message`.
-        self.send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
-            .await?;
+        // Initial check incase we already have enough acks, we can end here
+        if self.we_have_sufficient_acks_for_msg_id(msg_id.clone(), elders.clone()).await? {
+            return Ok(())
+        }
+
+        // Don't immediately fail if sending to one elder fails. This could prevent further sends
+        // and further responses coming in...
+        // Failing directly here could cause us to miss a send success
+        let send_msg_res = self.send_msg(elders.clone(), wire_msg, msg_id, force_new_link)
+            .await;
         trace!("Cmd msg {:?} sent", msg_id);
 
-        let expected_acks = elders_len;
 
         // We are not wait for the receive of majority of cmd Acks.
         // This could be further strict to wait for ALL the Acks get received.
         // The period is expected to have AE completed, hence no extra wait is required.
 
         let mut ack_checks = 0;
-        let max_ack_checks = 30;
+        let max_ack_checks = 20;
         let interval = Duration::from_millis(50);
-        let mut received_responses_from = BTreeSet::default();
 
         loop {
-            if let Some(acks_we_have) = self.pending_cmds.get(&msg_id) {
-                let acks = acks_we_have.value();
-
-                let received_response_count = acks.len();
-
-                let mut error_count = 0;
-                let mut return_error = None;
-
-                // track received errors
-                for refmulti in acks.iter() {
-                    let (ack_src, error) = refmulti.key();
-                    if return_error.is_none() {
-                        return_error = error.clone();
-                    }
-
-                    let _preexisting = received_responses_from.insert(*ack_src);
-
-                    if error.is_some() {
-                        error!(
-                            "received error response {:?} of cmd {:?} from {:?}, so far {} respones and {} of them are errors",
-                            error, msg_id, ack_src, received_response_count, error_count
-                        );
-                        error_count += 1;
-                    }
-                }
-
-                // first exit if too many errors:
-                if error_count >= expected_acks {
-                    error!(
-                        "Received majority of error response for cmd {:?}: {:?}",
-                        msg_id, return_error
-                    );
-                    // attempt to cleanup... though more acks may come in..
-                    let _ = self.pending_cmds.remove(&msg_id);
-
-                    if let Some(CmdError::Data(source)) = return_error {
-                        return Err(Error::ErrorCmd { source, msg_id });
-                    }
-
-                    // return Err(Error::ErrorCmd {
-                    //     source: error,
-                    //     msg_id,
-                    // });
-                }
-
-                let actual_ack_count = received_response_count - error_count;
-
-                if actual_ack_count >= expected_acks {
-                    break;
-                }
-
-                debug!("insufficient acks returned so far: {actual_ack_count}/{expected_acks}");
+            if self.we_have_sufficient_acks_for_msg_id(msg_id.clone(), elders.clone()).await? {
+                return Ok(())
             }
+            // if let Some(acks_we_have) = self.pending_cmds.get(&msg_id) {
+            //     let acks = acks_we_have.value();
+
+            //     let received_response_count = acks.len();
+
+            //     let mut error_count = 0;
+            //     let mut return_error = None;
+
+            //     // track received errors
+            //     for refmulti in acks.iter() {
+            //         let (ack_src, error) = refmulti.key();
+            //         if return_error.is_none() {
+            //             return_error = error.clone();
+            //         }
+
+            //         let _preexisting = received_responses_from.insert(*ack_src);
+
+            //         if error.is_some() {
+            //             error!(
+            //                 "received error response {:?} of cmd {:?} from {:?}, so far {} respones and {} of them are errors",
+            //                 error, msg_id, ack_src, received_response_count, error_count
+            //             );
+            //             error_count += 1;
+            //         }
+            //     }
+
+            //     // first exit if too many errors:
+            //     if error_count >= expected_acks {
+            //         error!(
+            //             "Received majority of error response for cmd {:?}: {:?}",
+            //             msg_id, return_error
+            //         );
+            //         // attempt to cleanup... though more acks may come in..
+            //         let _ = self.pending_cmds.remove(&msg_id);
+
+            //         if let Some(CmdError::Data(source)) = return_error {
+            //             return Err(Error::ErrorCmd { source, msg_id });
+            //         }
+            //     }
+
+            //     let actual_ack_count = received_response_count - error_count;
+
+            //     if actual_ack_count >= expected_acks {
+            //         trace!("Good! We've at or above {expected_acks} expected_acks");
+
+            //         return Ok(());
+            //     }
+
+            //     debug!("insufficient acks returned so far: {actual_ack_count}/{expected_acks}");
+            // }
 
             if ack_checks >= max_ack_checks {
-                let missing_responses: Vec<Peer> = elders
-                    .iter()
-                    .cloned()
-                    .filter(|p| !received_responses_from.contains(&p.addr()))
-                    .collect();
-
-                warn!("Missing Responses from: {:?}", missing_responses);
                 return Err(Error::InsufficientAcksReceived);
             }
 
@@ -172,8 +170,77 @@ impl Session {
             tokio::time::sleep(interval).await;
         }
 
-        trace!("Wait for any cmd response/reaction (AE msgs eg), is over. We've had sufficient success.)");
-        Ok(())
+        trace!("Wait for any cmd response/reaction (AE msgs eg), is over");
+        // return the result of send_msg here
+        send_msg_res
+    }
+
+    /// Checks self.pending_cmds for acks for a given msg id.
+    /// Returns true if we've sufficient to call this cmd a success
+    async fn we_have_sufficient_acks_for_msg_id(&self, msg_id: MsgId, elders: Vec<Peer>) -> Result<bool> {
+        let mut received_responses_from = BTreeSet::default();
+        let expected_acks = elders.len();
+
+        if let Some(acks_we_have) = self.pending_cmds.get(&msg_id) {
+            let acks = acks_we_have.value();
+
+            let received_response_count = acks.len();
+
+            let mut error_count = 0;
+            let mut return_error = None;
+
+            // track received errors
+            for refmulti in acks.iter() {
+                let (ack_src, error) = refmulti.key();
+                if return_error.is_none() {
+                    return_error = error.clone();
+                }
+
+                let _preexisting = received_responses_from.insert(*ack_src);
+
+                if error.is_some() {
+                    error!(
+                        "received error response {:?} of cmd {:?} from {:?}, so far {} respones and {} of them are errors",
+                        error, msg_id, ack_src, received_response_count, error_count
+                    );
+                    error_count += 1;
+                }
+            }
+
+            // first exit if too many errors:
+            if error_count >= expected_acks {
+                error!(
+                    "Received majority of error response for cmd {:?}: {:?}",
+                    msg_id, return_error
+                );
+                // attempt to cleanup... though more acks may come in..
+                let _ = self.pending_cmds.remove(&msg_id);
+
+                if let Some(CmdError::Data(source)) = return_error {
+                    return Err(Error::ErrorCmd { source, msg_id });
+                }
+            }
+
+            let actual_ack_count = received_response_count - error_count;
+
+            if actual_ack_count >= expected_acks {
+                trace!("Good! We've at or above {expected_acks} expected_acks");
+
+                return Ok(true);
+            }
+
+            let missing_responses: Vec<Peer> = elders
+                    .iter()
+                    .cloned()
+                    .filter(|p| !received_responses_from.contains(&p.addr()))
+                    .collect();
+
+                warn!("Missing Responses from: {:?}", missing_responses);
+                // return Err(Error::InsufficientAcksReceived);
+
+            debug!("insufficient acks returned so far: {actual_ack_count}/{expected_acks}");
+        }
+        Ok(false)
     }
 
     #[instrument(
@@ -276,6 +343,7 @@ impl Session {
                                 if chunk_addr.name() == chunk.name() {
                                     trace!("Valid Chunk received for {:?}", msg_id);
                                     valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
+
                                 } else {
                                     // the Chunk content doesn't match its XorName,
                                     // this is suspicious and it could be a byzantine node
@@ -587,6 +655,8 @@ impl Session {
                         Err(Error::QuicP2pConnection { peer, error: err })
                     }
                     Err(SendToOneError::Send(err)) => Err(Error::QuicP2pSend { peer, error: err }),
+                    #[cfg(features="chaos")]
+                    Err(SendToOneError::ChaosNoConnection) => Err(Error::ChoasSendFail),
                 };
 
                 (peer_name, result)

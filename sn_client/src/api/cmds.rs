@@ -61,7 +61,7 @@ impl Client {
             initial_interval: Duration::from_millis(500),
             max_interval: Duration::from_secs(20),
             max_elapsed_time: Some(op_limit),
-            randomization_factor: 0.5,
+            randomization_factor: 1.5,
             ..Default::default()
         };
 
@@ -70,7 +70,7 @@ impl Client {
         // this seems needed for custom settings to take effect
         backoff.reset();
 
-        let span = info_span!("Attempting a cmd");
+        let span = info_span!("Attempting a cmd with total timeout of {op_limit:?}");
         let _ = span.enter();
 
         let mut attempt = 1;
@@ -109,7 +109,8 @@ impl Client {
             if let Some(delay) = backoff.next_backoff() {
                 debug!("Sleeping for {delay:?} before trying cmd {debug_cmd:?} again");
                 tokio::time::sleep(delay).await;
-            } else {
+            }
+            else {
                 // we're done trying
                 break res;
             }

@@ -113,6 +113,7 @@ impl Link {
             self.queue.len(),
             self.peer
         );
+
         match conn.send_with(bytes, priority, retry_config).await {
             Ok(()) => Ok(()),
             Err(error) => {
