@@ -110,50 +110,12 @@ impl Client {
                 )
                 .await;
 
-            // match res {
-            //     Ok(query_result) => {
-            //         if query_result.is_data_not_found() {
-            //             let _existed = data_not_found_count.insert(query.adult_index);
-            //             // if we've received DataNotFound from each adult_index,
-            //             // we can return that error
-            //             if data_not_found_count.len() == data_copy_count() {
-            //                 return Ok(query_result);
-            //             }
-            //         } else {
-            //             debug!("Okayyyyy");
-            //             return Ok(query_result);
-            //         }
-
-            //         warn!(
-            //             "{query:?} DataNotFound returned from adult_index: {:?}",
-            //             query.adult_index
-            //         )
-            //     }
-            //     // Err(_) if attempts > self.max_retries => {
-            //     //     // this should be due to our tokio time out, rather than an error
-            //     //     // returned by `send_signed_query_to_section`
-            //     //     debug!(
-            //     //         "Retries ({}) all failed returning no response for {:?}",
-            //     //         self.max_retries, query
-            //     //     );
-            //     //     break Err(Error::NoResponseAfterRetrying {
-            //     //         query,
-            //     //         attempts,
-            //     //         last_error: Box::new(Error::NoResponse(elders)),
-            //     //     });
-            //     // }
-            //     _ => {}
-            // }
-
-            // if we've attempted a couple of times, we should have hit _most_ elders...
-            // so now we force new links
-            // if attempts > 2 {
-            //     // any further attempts should use fresh links in case of issues
-            //     // force_new_link = true;
-            // }
-
             attempts += 1;
 
+            if let Ok(result) = res {
+                debug!("{query:?} sent and received okay");
+                break Ok(result);
+            }
             // In the next attempt, try the next adult, further away.
             query.adult_index += 1;
             // There should not be more than a certain amount of adults holding copies of the data. Retry the closest adult again.

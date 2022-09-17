@@ -268,6 +268,7 @@ impl Session {
             .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
             .await?
         {
+            debug!("returning okkkkkkk");
             return Ok(response);
         }
 
@@ -302,68 +303,9 @@ impl Session {
                 .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
                 .await?
             {
+                debug!("returning okkkkkkkkkkkkk");
                 return Ok(response);
             }
-
-            // if let Some(entry) = self.pending_queries.get(&operation_id) {
-            //     let responses = entry.value();
-
-            //     // lets see if we have a positive response...
-            //     debug!("response so far: {:?}", responses);
-
-            //     for refmulti in responses.iter() {
-            //         let (_socket, response) = refmulti.key().clone();
-
-            //         debug!("before matching response");
-            //         match response {
-            //             QueryResponse::GetChunk(Ok(chunk)) => {
-            //                 if let Some(chunk_addr) = chunk_addr {
-            //                     // We are dealing with Chunk query responses, thus we validate its hash
-            //                     // matches its xorname, if so, we don't need to await for more responses
-            //                     debug!("Chunk QueryResponse received is: {:#?}", chunk);
-
-            //                     if chunk_addr.name() == chunk.name() {
-            //                         trace!("Valid Chunk received for {:?}", msg_id);
-            //                         valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
-            //                     } else {
-            //                         // the Chunk content doesn't match its XorName,
-            //                         // this is suspicious and it could be a byzantine node
-            //                         warn!("We received an invalid Chunk response from one of the nodes");
-            //                         discarded_responses += 1;
-            //                     }
-            //                 }
-            //             }
-            //             QueryResponse::GetRegister((Err(_), _))
-            //             | QueryResponse::GetRegisterPolicy((Err(_), _))
-            //             | QueryResponse::GetRegisterOwner((Err(_), _))
-            //             | QueryResponse::GetRegisterUserPermissions((Err(_), _))
-            //             | QueryResponse::GetChunk(Err(_)) => {
-            //                 debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
-            //                 error_response = Some(response);
-            //                 discarded_responses += 1;
-            //             }
-
-            //             QueryResponse::GetRegister((Ok(ref register), _)) => {
-            //                 debug!("okay got register");
-            //                 // TODO: properly merge all registers
-            //                 if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) =
-            //                     &valid_response
-            //                 {
-            //                     if register.size() > prior_response.size() {
-            //                         // keep this new register
-            //                         valid_response = Some(response);
-            //                     }
-            //                 } else {
-            //                     valid_response = Some(response);
-            //                 }
-            //             }
-            //             response => {
-            //                 // we got a valid response
-            //                 valid_response = Some(response)
-            //             }
-            //         }
-            //     }
-            // }
 
             //stop mad looping
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -470,6 +412,7 @@ impl Session {
         }
 
         if discarded_responses == elders_len {
+            debug!("discarded equals elders");
             if let Some(response) = error_response {
                 return Ok(Some(QueryResult {
                     response,
@@ -478,6 +421,7 @@ impl Session {
             }
             // return Ok(error_response);
         } else if let Some(response) = valid_response {
+            debug!("valid response innnn!!! : {:?}", response);
             return Ok(Some(QueryResult {
                 response,
                 operation_id,
