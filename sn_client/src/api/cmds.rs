@@ -58,10 +58,10 @@ impl Client {
         let op_limit = self.cmd_timeout;
 
         let mut backoff = ExponentialBackoff {
-            initial_interval: Duration::from_millis(500),
+            initial_interval: Duration::from_secs(1),
             max_interval: Duration::from_secs(20),
             max_elapsed_time: Some(op_limit),
-            randomization_factor: 1.5,
+            randomization_factor: 0.5,
             ..Default::default()
         };
 
@@ -110,6 +110,7 @@ impl Client {
                 debug!("Sleeping for {delay:?} before trying cmd {debug_cmd:?} again");
                 tokio::time::sleep(delay).await;
             } else {
+                debug!("backoff done affter #{:?} attempts", attempt - 1);
                 // we're done trying
                 break res;
             }
