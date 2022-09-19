@@ -250,7 +250,8 @@ impl Session {
                             let received = entry.value();
 
                             debug!("inserting response : {response:?}");
-
+                            // we can acutally have many responses per peer if they're different
+                            // this could be a fail, and then an Ok aftewards from a different adult.
                             let _prior = received.insert((src_peer.addr(), response));
 
                             debug!("received now looks like: {:?}", received);

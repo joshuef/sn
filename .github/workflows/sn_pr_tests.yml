@@ -602,7 +602,6 @@ jobs:
           release: true
           retries: 0
         timeout-minutes: 80
-        # NRS is slow without this change
 
       - name: Are nodes still running...?
         shell: bash

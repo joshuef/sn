@@ -1206,7 +1206,7 @@ mod tests {
     use crate::{
         app::test_helpers::{new_safe_instance, random_nrs_name},
         register::EntryHash,
-        retry_loop, retry_loop_for_pattern,
+        retry_loop_for_pattern,
     };
     use anyhow::{anyhow, bail, Result};
     use assert_matches::assert_matches;
@@ -1227,13 +1227,14 @@ mod tests {
     async fn new_files_container_from_testdata(
         safe: &Safe,
     ) -> Result<(String, ProcessedFiles, FilesMap)> {
-        let (xorurl, processed_files, files_map) =
-            retry_loop!(safe.files_container_create_from(TEST_DATA_FOLDER, None, true, true,));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from(TEST_DATA_FOLDER, None, true, true)
+            .await?;
 
         assert!(xorurl.starts_with("safe://"));
         assert_eq!(processed_files.len(), TESTDATA_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), TESTDATA_PUT_FILESMAP_COUNT);
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
+        let _ = safe.fetch(&xorurl, None).await;
 
         Ok((xorurl, processed_files, files_map))
     }
@@ -1281,10 +1282,10 @@ mod tests {
 
         assert!(xorurl.starts_with("safe://"));
 
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
+        let _ = safe.fetch(&xorurl, None).await;
 
         // we check that the container is empty, i.e. no entry in the underlying Register.
-        let file_map = retry_loop!(safe.files_container_get(&xorurl));
+        let file_map = safe.files_container_get(&xorurl);
         assert!(file_map.is_none());
 
         // let's add a file
@@ -1320,7 +1321,7 @@ mod tests {
             .store_bytes(Bytes::from(random_content.clone()), None)
             .await?;
 
-        let retrieved = retry_loop!(safe.files_get(&file_xorurl, None));
+        let retrieved = safe.files_get(&file_xorurl, None).await?;
         assert_eq!(retrieved, random_content.as_bytes());
 
         Ok(())
@@ -1396,12 +1397,9 @@ mod tests {
     #[tokio::test]
     async fn test_files_container_create_from_folder_without_trailing_slash() -> Result<()> {
         let safe = new_safe_instance().await?;
-        let (xorurl, processed_files, files_map) = retry_loop!(safe.files_container_create_from(
-            TEST_DATA_FOLDER_NO_SLASH,
-            None,
-            true,
-            true,
-        ));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from(TEST_DATA_FOLDER_NO_SLASH, None, true, true)
+            .await?;
 
         assert!(xorurl.starts_with("safe://"));
         assert_eq!(processed_files.len(), TESTDATA_NO_SLASH_PUT_FILEITEM_COUNT);
@@ -1573,7 +1571,9 @@ mod tests {
         let safe = new_safe_instance().await?;
         let (xorurl, processed_files, _) = new_files_container_from_testdata(&safe).await?;
 
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let (content, new_processed_files) = safe
@@ -1710,7 +1710,7 @@ mod tests {
         assert_eq!(processed_files.len(), 1);
         assert_eq!(files_map.len(), 1);
 
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
+        let _ = safe.fetch(&xorurl, None).await;
 
         let (content, new_processed_files) = safe
             .files_container_sync(
@@ -1792,8 +1792,10 @@ mod tests {
         let safe = new_safe_instance().await?;
         let (xorurl, _, files_map) = new_files_container_from_testdata(&safe).await?;
 
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let _ = safe.fetch(&xorurl, None).await;
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let (version1_content, new_processed_files) = safe
@@ -1951,24 +1953,28 @@ mod tests {
         let safe = new_safe_instance().await?;
         let (xorurl, _, _) = new_files_container_from_testdata(&safe).await?;
 
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let nrsurl = random_nrs_name();
         let mut safe_url = SafeUrl::from_url(&xorurl)?;
         safe_url.set_content_version(Some(version0));
-        let (nrs_xorurl, did_create) = retry_loop!(safe.nrs_add(&nrsurl, &safe_url));
+        let (nrs_xorurl, did_create) = safe.nrs_add(&nrsurl, &safe_url).await?;
         assert!(did_create);
-        let _ = retry_loop!(safe.fetch(&nrs_xorurl.to_string(), None));
+        let _ = safe.fetch(&nrs_xorurl.to_string(), None).await?;
 
-        let (version1_content, _) = retry_loop!(safe.files_container_sync(
-            "./testdata/subfolder/",
-            &nrsurl,
-            false,
-            false,
-            false,
-            true, // this flag requests the update-nrs
-        ));
+        let (version1_content, _) = safe
+            .files_container_sync(
+                "./testdata/subfolder/",
+                &nrsurl,
+                false,
+                false,
+                false,
+                true, // this flag requests the update-nrs
+            )
+            .await?;
         let (version1, _) =
             version1_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -1978,7 +1984,7 @@ mod tests {
 
         let mut safe_url = SafeUrl::from_url(&xorurl)?;
         safe_url.set_content_version(Some(version1));
-        let new_link = retry_loop!(safe.parse_and_resolve_url(&nrsurl));
+        let new_link = safe.parse_and_resolve_url(&nrsurl).await?;
         // NRS points to the v0: check if different from v1 url
         assert_ne!(new_link.to_string(), safe_url.to_string());
 
@@ -1992,14 +1998,16 @@ mod tests {
 
         let mut safe_url = SafeUrl::from_url(&xorurl)?;
         safe_url.set_path("path/when/sync");
-        let (content, new_processed_files) = retry_loop!(safe.files_container_sync(
-            "./testdata/subfolder",
-            &safe_url.to_string(),
-            true,
-            false,
-            false,
-            false,
-        ));
+        let (content, new_processed_files) = safe
+            .files_container_sync(
+                "./testdata/subfolder",
+                &safe_url.to_string(),
+                true,
+                false,
+                false,
+                false,
+            )
+            .await?;
         let (_, new_files_map) =
             content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2058,14 +2066,16 @@ mod tests {
 
         let mut safe_url = SafeUrl::from_url(&xorurl)?;
         safe_url.set_path("/path/when/sync/");
-        let (content, new_processed_files) = retry_loop!(safe.files_container_sync(
-            "./testdata/subfolder",
-            &safe_url.to_string(),
-            true,
-            false,
-            false,
-            false,
-        ));
+        let (content, new_processed_files) = safe
+            .files_container_sync(
+                "./testdata/subfolder",
+                &safe_url.to_string(),
+                true,
+                false,
+                false,
+                false,
+            )
+            .await?;
         let (_, new_files_map) =
             content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2122,7 +2132,9 @@ mod tests {
         let safe = new_safe_instance().await?;
         let (xorurl, _, files_map) = new_files_container_from_testdata(&safe).await?;
 
-        let (_, fetched_files_map) = retry_loop!(safe.files_container_get(&xorurl))
+        let (_, fetched_files_map) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         assert_eq!(fetched_files_map.len(), TESTDATA_PUT_FILESMAP_COUNT);
@@ -2143,17 +2155,21 @@ mod tests {
         let safe = new_safe_instance().await?;
         let (xorurl, _, _) = new_files_container_from_testdata(&safe).await?;
 
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
-        let (version1_content, _) = retry_loop!(safe.files_container_sync(
-            "./testdata/subfolder/",
-            &xorurl,
-            true,
-            false,
-            true, // this sets the delete flag,
-            false,
-        ));
+        let (version1_content, _) = safe
+            .files_container_sync(
+                "./testdata/subfolder/",
+                &xorurl,
+                true,
+                false,
+                true, // this sets the delete flag,
+                false,
+            )
+            .await?;
         let (version1, _) =
             version1_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2173,25 +2189,31 @@ mod tests {
         let safe = new_safe_instance().await?;
         let (xorurl, _, files_map) = new_files_container_from_testdata(&safe).await?;
 
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         // let's create a new version of the files container
-        let (version1_content, _) = retry_loop!(safe.files_container_sync(
-            "./testdata/subfolder/",
-            &xorurl,
-            true,
-            false,
-            true, // this sets the delete flag
-            false,
-        ));
+        let (version1_content, _) = safe
+            .files_container_sync(
+                "./testdata/subfolder/",
+                &xorurl,
+                true,
+                false,
+                true, // this sets the delete flag
+                false,
+            )
+            .await?;
         let (version1, new_files_map) =
             version1_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         // let's fetch version 0
         let mut safe_url = SafeUrl::from_url(&xorurl)?;
         safe_url.set_content_version(Some(version0));
-        let (version, v0_files_map) = retry_loop!(safe.files_container_get(&safe_url.to_string()))
+        let (version, v0_files_map) = safe
+            .files_container_get(&safe_url.to_string())
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         assert_eq!(version, version0);
@@ -2257,7 +2279,9 @@ mod tests {
         let safe = new_safe_instance().await?;
         let (xorurl, _, files_map) = new_files_container_from_testdata(&safe).await?;
 
-        let (_, files_map_get) = retry_loop!(safe.files_container_get(&xorurl.to_string()))
+        let (_, files_map_get) = safe
+            .files_container_get(&xorurl.to_string())
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         assert_eq!(files_map, files_map_get);
@@ -2274,37 +2298,37 @@ mod tests {
     #[ignore = "fix unknown issue"]
     async fn test_files_container_sync_with_nrs_url() -> Result<()> {
         let safe = new_safe_instance().await?;
-        let (xorurl, _, _) =
-            retry_loop!(safe.files_container_create_from("./testdata/test.md", None, false, true,));
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let (xorurl, _, _) = safe
+            .files_container_create_from("./testdata/test.md", None, false, true)
+            .await?;
+        let _ = safe.fetch(&xorurl, None).await;
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let nrsurl = random_nrs_name();
         let mut safe_url = SafeUrl::from_url(&xorurl)?;
         safe_url.set_content_version(Some(version0));
-        let (nrs_xorurl, did_create) = retry_loop!(safe.nrs_add(&nrsurl, &safe_url));
+        let (nrs_xorurl, did_create) = safe.nrs_add(&nrsurl, &safe_url).await?;
 
         assert!(did_create);
-        let _ = retry_loop!(safe.fetch(&nrs_xorurl.to_string(), None));
+        let _ = safe.fetch(&nrs_xorurl.to_string(), None).await?;
 
-        let _ = retry_loop!(safe.files_container_sync(
-            "./testdata/subfolder/",
-            &xorurl,
-            false,
-            false,
-            false,
-            false,
-        ));
+        let _ = safe
+            .files_container_sync("./testdata/subfolder/", &xorurl, false, false, false, false)
+            .await?;
 
-        let (version2_content, _) = retry_loop!(safe.files_container_sync(
-            TEST_DATA_FOLDER,
-            &nrsurl,
-            false,
-            false,
-            false,
-            true, // this flag requests the update-nrs
-        ));
+        let (version2_content, _) = safe
+            .files_container_sync(
+                TEST_DATA_FOLDER,
+                &nrsurl,
+                false,
+                false,
+                false,
+                true, // this flag requests the update-nrs
+            )
+            .await?;
         let (version2, _) =
             version2_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2327,28 +2351,29 @@ mod tests {
     #[tokio::test]
     async fn test_files_container_add() -> Result<()> {
         let safe = new_safe_instance().await?;
-        let (xorurl, processed_files, files_map) = retry_loop!(safe.files_container_create_from(
-            "./testdata/subfolder/",
-            None,
-            false,
-            true,
-        ));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from("./testdata/subfolder/", None, false, true)
+            .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let _ = safe.fetch(&xorurl, None).await;
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let mut url_with_path = SafeUrl::from_xorurl(&xorurl)?;
         url_with_path.set_path("/new_filename_test.md");
 
-        let (version1_content, new_processed_files) = retry_loop!(safe.files_container_add(
-            "./testdata/test.md",
-            &url_with_path.to_string(),
-            false,
-            false,
-            false,
-        ));
+        let (version1_content, new_processed_files) = safe
+            .files_container_add(
+                "./testdata/test.md",
+                &url_with_path.to_string(),
+                false,
+                false,
+                false,
+            )
+            .await?;
         let (version1, new_files_map) =
             version1_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2382,27 +2407,26 @@ mod tests {
     #[tokio::test]
     async fn test_files_container_add_dry_run() -> Result<()> {
         let mut safe = new_safe_instance().await?;
-        let (xorurl, processed_files, files_map) = retry_loop!(safe.files_container_create_from(
-            "./testdata/subfolder/",
-            None,
-            false,
-            true,
-        ));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from("./testdata/subfolder/", None, false, true)
+            .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
+        let _ = safe.fetch(&xorurl, None).await;
 
         let mut url_with_path = SafeUrl::from_xorurl(&xorurl)?;
         url_with_path.set_path("/new_filename_test.md");
 
         safe.dry_run_mode = true;
-        let (version1_content, new_processed_files) = retry_loop!(safe.files_container_add(
-            "./testdata/test.md",
-            &url_with_path.to_string(),
-            false,
-            false,
-            false,
-        ));
+        let (version1_content, new_processed_files) = safe
+            .files_container_add(
+                "./testdata/test.md",
+                &url_with_path.to_string(),
+                false,
+                false,
+                false,
+            )
+            .await?;
         let (_, new_files_map) =
             version1_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2411,13 +2435,15 @@ mod tests {
         assert_eq!(new_files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT + 1);
 
         // a dry run again should give the exact same results
-        let (version2_content, new_processed_files2) = retry_loop!(safe.files_container_add(
-            "./testdata/test.md",
-            &url_with_path.to_string(),
-            false,
-            false,
-            false,
-        ));
+        let (version2_content, new_processed_files2) = safe
+            .files_container_add(
+                "./testdata/test.md",
+                &url_with_path.to_string(),
+                false,
+                false,
+                false,
+            )
+            .await?;
         let (_, new_files_map2) =
             version2_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2442,15 +2468,12 @@ mod tests {
     #[tokio::test]
     async fn test_files_container_add_dir() -> Result<()> {
         let safe = new_safe_instance().await?;
-        let (xorurl, processed_files, files_map) = retry_loop!(safe.files_container_create_from(
-            "./testdata/subfolder/",
-            None,
-            false,
-            true,
-        ));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from("./testdata/subfolder/", None, false, true)
+            .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT); // root "/" + 2 files
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
+        let _ = safe.fetch(&xorurl, None).await;
 
         match safe
             .files_container_add(TEST_DATA_FOLDER_NO_SLASH, &xorurl, false, false, false)
@@ -2476,17 +2499,16 @@ mod tests {
     #[tokio::test]
     async fn test_files_container_add_existing_name() -> Result<()> {
         let safe = new_safe_instance().await?;
-        let (xorurl, processed_files, files_map) = retry_loop!(safe.files_container_create_from(
-            "./testdata/subfolder/",
-            None,
-            false,
-            true,
-        ));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from("./testdata/subfolder/", None, false, true)
+            .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
 
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let _ = safe.fetch(&xorurl, None).await;
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let mut url_with_path = SafeUrl::from_xorurl(&xorurl)?;
@@ -2517,13 +2539,15 @@ mod tests {
 
         // let's try to add a file with same target name but with different content, it should still fail
         let filename2 = Path::new("./testdata/test.md");
-        let (version2_content, new_processed_files) = retry_loop!(safe.files_container_add(
-            &filename2.display().to_string(),
-            &url_with_path.to_string(),
-            false,
-            false,
-            false,
-        ));
+        let (version2_content, new_processed_files) = safe
+            .files_container_add(
+                &filename2.display().to_string(),
+                &url_with_path.to_string(),
+                false,
+                false,
+                false,
+            )
+            .await?;
         let (version2, new_files_map) =
             version2_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2537,13 +2561,15 @@ mod tests {
         assert_eq!(files_map, new_files_map);
 
         // let's now force it
-        let (version3_content, new_processed_files) = retry_loop!(safe.files_container_add(
-            &filename2.display().to_string(),
-            &url_with_path.to_string(),
-            true, //force it
-            false,
-            false,
-        ));
+        let (version3_content, new_processed_files) = safe
+            .files_container_add(
+                &filename2.display().to_string(),
+                &url_with_path.to_string(),
+                true, //force it
+                false,
+                false,
+            )
+            .await?;
         let (version3, new_files_map) =
             version3_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2562,11 +2588,12 @@ mod tests {
     #[tokio::test]
     async fn test_files_container_fail_add_or_sync_invalid_path() -> Result<()> {
         let safe = new_safe_instance().await?;
-        let (xorurl, processed_files, files_map) =
-            retry_loop!(safe.files_container_create_from("./testdata/test.md", None, false, true,));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from("./testdata/test.md", None, false, true)
+            .await?;
         assert_eq!(processed_files.len(), 1);
         assert_eq!(files_map.len(), 1);
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
+        let _ = safe.fetch(&xorurl, None).await;
 
         match safe
             .files_container_sync("/non-existing-path", &xorurl, false, false, false, false)
@@ -2615,32 +2642,33 @@ mod tests {
     #[tokio::test]
     async fn test_files_container_add_a_url() -> Result<()> {
         let safe = new_safe_instance().await?;
-        let (xorurl, processed_files, files_map) = retry_loop!(safe.files_container_create_from(
-            "./testdata/subfolder/",
-            None,
-            false,
-            true,
-        ));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from("./testdata/subfolder/", None, false, true)
+            .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let _ = safe.fetch(&xorurl, None).await;
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let data = Bytes::from("0123456789");
-        let file_xorurl = retry_loop!(safe.store_bytes(data.clone(), None));
+        let file_xorurl = safe.store_bytes(data.clone(), None).await?;
         let new_filename = Path::new("/new_filename_test.md");
 
         let mut url_with_path = SafeUrl::from_xorurl(&xorurl)?;
         url_with_path.set_path(&new_filename.display().to_string());
 
-        let (version1_content, new_processed_files) = retry_loop!(safe.files_container_add(
-            &file_xorurl,
-            &url_with_path.to_string(),
-            false,
-            false,
-            false,
-        ));
+        let (version1_content, new_processed_files) = safe
+            .files_container_add(
+                &file_xorurl,
+                &url_with_path.to_string(),
+                false,
+                false,
+                false,
+            )
+            .await?;
         let (version1, new_files_map) =
             version1_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2674,14 +2702,16 @@ mod tests {
 
         // let's add another file but with the same name
         let data = Bytes::from("9876543210");
-        let other_file_xorurl = retry_loop!(safe.store_bytes(data.clone(), None));
-        let (version2_content, new_processed_files) = retry_loop!(safe.files_container_add(
-            &other_file_xorurl,
-            &url_with_path.to_string(),
-            true, // force to overwrite it with new link
-            false,
-            false,
-        ));
+        let other_file_xorurl = safe.store_bytes(data.clone(), None).await?;
+        let (version2_content, new_processed_files) = safe
+            .files_container_add(
+                &other_file_xorurl,
+                &url_with_path.to_string(),
+                true, // force to overwrite it with new link
+                false,
+                false,
+            )
+            .await?;
         let (version2, new_files_map) =
             version2_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2705,16 +2735,15 @@ mod tests {
     #[tokio::test]
     async fn test_files_container_add_from_raw() -> Result<()> {
         let safe = new_safe_instance().await?;
-        let (xorurl, processed_files, files_map) = retry_loop!(safe.files_container_create_from(
-            "./testdata/subfolder/",
-            None,
-            false,
-            true,
-        ));
+        let (xorurl, processed_files, files_map) = safe
+            .files_container_create_from("./testdata/subfolder/", None, false, true)
+            .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
-        let _ = retry_loop!(safe.fetch(&xorurl, None));
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let _ = safe.fetch(&xorurl, None).await;
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let data = Bytes::from("0123456789");
@@ -2723,8 +2752,9 @@ mod tests {
         let mut url_with_path = SafeUrl::from_xorurl(&xorurl)?;
         url_with_path.set_path(&new_filename.display().to_string());
 
-        let (version1_content, new_processed_files) = retry_loop!(safe
-            .files_container_add_from_raw(data.clone(), &url_with_path.to_string(), false, false,));
+        let (version1_content, new_processed_files) = safe
+            .files_container_add_from_raw(data.clone(), &url_with_path.to_string(), false, false)
+            .await?;
         let (version1, new_files_map) =
             version1_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2740,13 +2770,14 @@ mod tests {
 
         // let's add another file but with the same name
         let data = Bytes::from("9876543210");
-        let (version2_content, new_processed_files) = retry_loop!(safe
+        let (version2_content, new_processed_files) = safe
             .files_container_add_from_raw(
                 data.clone(),
                 &url_with_path.to_string(),
                 true, // force to overwrite it with new link
                 false,
-            ));
+            )
+            .await?;
         let (version2, new_files_map) =
             version2_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
@@ -2767,15 +2798,18 @@ mod tests {
         let safe = new_safe_instance().await?;
         let (xorurl, _, files_map) = new_files_container_from_testdata(&safe).await?;
 
-        let (version0, _) = retry_loop!(safe.files_container_get(&xorurl))
+        let (version0, _) = safe
+            .files_container_get(&xorurl)
+            .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         let mut url_with_path = SafeUrl::from_xorurl(&xorurl)?;
         url_with_path.set_path("/test.md");
 
         // let's remove a file first
-        let (version1, new_processed_files, new_files_map) =
-            retry_loop!(safe.files_container_remove_path(&url_with_path.to_string(), false, false));
+        let (version1, new_processed_files, new_files_map) = safe
+            .files_container_remove_path(&url_with_path.to_string(), false, false)
+            .await?;
 
         assert_ne!(version1, version0);
         assert_eq!(new_processed_files.len(), 1);
@@ -2790,8 +2824,9 @@ mod tests {
 
         // let's remove an entire folder now with recursive flag
         url_with_path.set_path("/subfolder");
-        let (version2, new_processed_files, new_files_map) =
-            retry_loop!(safe.files_container_remove_path(&url_with_path.to_string(), true, false));
+        let (version2, new_processed_files, new_files_map) = safe
+            .files_container_remove_path(&url_with_path.to_string(), true, false)
+            .await?;
 
         assert_ne!(version2, version0);
         assert_ne!(version2, version1);
