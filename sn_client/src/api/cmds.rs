@@ -56,10 +56,11 @@ impl Client {
         let signature = self.sign(&serialised_cmd);
 
         let op_limit = self.cmd_timeout;
+        let max_interval = self.cmd_timeout.div_f32(retry_count as f32);
 
         let mut backoff = ExponentialBackoff {
             initial_interval: Duration::from_secs(1),
-            max_interval: Duration::from_secs(20),
+            max_interval,
             max_elapsed_time: Some(op_limit),
             randomization_factor: 0.5,
             ..Default::default()
@@ -74,7 +75,7 @@ impl Client {
         let _ = span.enter();
 
         let mut attempt = 1;
-        let mut force_new_link = false;
+        let force_new_link = false;
         loop {
             debug!(
                 "Attempting {:?} (attempt #{}), forcing new: {force_new_link}",
@@ -92,7 +93,7 @@ impl Client {
                 )
                 .await;
 
-            force_new_link = true;
+            // force_new_link = true;
 
             if let Ok(cmd_result) = res {
                 debug!("{debug_cmd} sent okay");
@@ -100,14 +101,14 @@ impl Client {
             }
 
             trace!(
-                "Failed response on {debug_cmd} attempt #{attempt}: {:?}",
+                "Failed response on {debug_cmd} cmd attempt #{attempt}: {:?}",
                 res
             );
 
             attempt += 1;
 
             if let Some(delay) = backoff.next_backoff() {
-                debug!("Sleeping for {delay:?} before trying cmd {debug_cmd:?} again");
+                debug!("Sleeping for {delay:?} before trying attempt {attempt} cmd {debug_cmd:?} again");
                 tokio::time::sleep(delay).await;
             } else {
                 debug!("backoff done affter #{:?} attempts", attempt - 1);

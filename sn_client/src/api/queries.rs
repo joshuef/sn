@@ -74,12 +74,12 @@ impl Client {
         let force_new_link = false;
         // let mut data_not_found_count = BTreeSet::default();
 
-        let op_limit = self.query_timeout;
+        let max_interval = self.query_timeout.div_f32(retry_count as f32);
 
         let mut backoff = ExponentialBackoff {
-            initial_interval: Duration::from_millis(500),
-            max_interval: Duration::from_secs(20),
-            max_elapsed_time: Some(op_limit),
+            initial_interval: Duration::from_millis(1),
+            max_interval,
+            max_elapsed_time: Some(self.query_timeout),
             randomization_factor: 1.5,
             ..Default::default()
         };

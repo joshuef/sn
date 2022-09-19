@@ -109,7 +109,7 @@ impl Session {
         // The period is expected to have AE completed, hence no extra wait is required.
 
         let mut ack_checks = 0;
-        let max_ack_checks = 20;
+        let max_ack_checks = 10;
         let interval = Duration::from_millis(50);
 
         loop {
@@ -287,14 +287,13 @@ impl Session {
         // so we don't need more than one valid response to prevent from accepting invalid responses
         // from byzantine nodes, however for mutable data (non-Chunk responses) we will
         // have to review the approach.
-        // let mut discarded_responses: usize = 0;
-        // let mut error_response = None;
-        // let mut valid_response = None;
 
         let mut response_checks = 0;
 
         loop {
-            debug!("looping send responses");
+            debug!(
+                "looping send responses, attempt: #{response_checks} for op_id: {operation_id:?}"
+            );
             if let Some(response) = self
                 .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
                 .await?
@@ -311,26 +310,6 @@ impl Session {
             }
             response_checks += 1;
         }
-
-        // debug!(
-        //     "Response obtained for query w/id {:?}: {:?}",
-        //     msg_id, response
-        // );
-
-        // match response {
-        //     Some(response) => {
-        //         trace!(
-        //             "Removing pending query map for {:?}",
-        //             (msg_id, &operation_id)
-        //         );
-        //         let _prev = self.pending_queries.remove(&operation_id);
-        //         Ok(QueryResult {
-        //             response,
-        //             operation_id,
-        //         })
-        //     }
-        //     None => Err(Error::NoResponse(elders)),
-        // }
     }
 
     async fn check_query_responses(
