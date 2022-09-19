@@ -1285,7 +1285,7 @@ mod tests {
         let _ = safe.fetch(&xorurl, None).await;
 
         // we check that the container is empty, i.e. no entry in the underlying Register.
-        let file_map = safe.files_container_get(&xorurl);
+        let file_map = safe.files_container_get(&xorurl).await?;
         assert!(file_map.is_none());
 
         // let's add a file
@@ -2703,7 +2703,7 @@ mod tests {
         // let's add another file but with the same name
         let data = Bytes::from("9876543210");
         let other_file_xorurl = safe.store_bytes(data.clone(), None).await?;
-        let (version2_content, new_processed_files) = safe
+        let (version2_content, mut new_processed_files) = safe
             .files_container_add(
                 &other_file_xorurl,
                 &url_with_path.to_string(),
@@ -2712,8 +2712,29 @@ mod tests {
                 false,
             )
             .await?;
-        let (version2, new_files_map) =
+        let (mut version2, mut new_files_map) =
             version2_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
+
+        // we know there a change, so we wait for an udpated version here
+        while version2 == version1 {
+            let (version2_content, new_new_processed_files) = safe
+            .files_container_add(
+                &other_file_xorurl,
+                &url_with_path.to_string(),
+                true, // force to overwrite it with new link
+                false,
+                false,
+            )
+            .await?;
+
+            let (new_version2, new_new_files_map) =
+                version2_content.ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
+            version2 = new_version2;
+            new_files_map = new_new_files_map;
+            new_processed_files = new_new_processed_files;
+        }
+
+
 
         assert_ne!(version2, version0);
         assert_ne!(version2, version1);
