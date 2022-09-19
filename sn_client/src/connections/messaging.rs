@@ -176,7 +176,7 @@ impl Session {
                 // attempt to cleanup... though more acks may come in..
                 let _ = self.pending_cmds.remove(&msg_id);
 
-                if let Some(CmdError::Data(source)) = return_error {
+                if let Some(source) = return_error {
                     return Err(Error::ErrorCmd { source, msg_id });
                 }
             }
