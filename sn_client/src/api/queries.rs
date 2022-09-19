@@ -59,11 +59,8 @@ impl Client {
             variant: query,
         };
 
-        // let mut rng = rand::rngs::OsRng;
         // Add jitter so not all clients retry at the same rate. This divider will knock on to the overall retry window
         // and should help prevent elders from being conseceutively overwhelmed
-        // let jitter = rng.gen_range(1.0..1.5);
-        // let attempt_timeout = self.query_timeout.div_f32(retry_count as f32 + jitter);
         trace!("Setting up query retry");
 
         let span = info_span!("Attempting a query");
@@ -72,7 +69,6 @@ impl Client {
         let dst = query.variant.dst_name();
         // should we force a fresh connection to the nodes?
         let force_new_link = false;
-        // let mut data_not_found_count = BTreeSet::default();
 
         let max_interval = self.query_timeout.div_f32(retry_count as f32);
 
@@ -116,6 +112,7 @@ impl Client {
                 debug!("{query:?} sent and received okay");
                 return Ok(result);
             }
+
             // In the next attempt, try the next adult, further away.
             query.adult_index += 1;
             // There should not be more than a certain amount of adults holding copies of the data. Retry the closest adult again.
