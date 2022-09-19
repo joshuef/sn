@@ -9,7 +9,7 @@
 use crate::log_sleep;
 use crate::node::{
     flow_ctrl::{
-        cmds::{Cmd, CmdJob},
+        cmds::{Cmd, CmdJob, VALIDATE_MSG_PRIO},
         dispatcher::Dispatcher,
         event_channel::EventSender,
     },
@@ -66,8 +66,35 @@ impl CmdCtrl {
     async fn push_internal(&mut self, cmd: Cmd, parent_id: Option<usize>) {
         self.id_counter += 1;
 
-        let job = CmdJob::new(self.id_counter, parent_id, cmd, SystemTime::now());
+        // First, check if we already have this
+        // This should just queue up any one request from a given client if its not been validated yet
+        if let Cmd::ValidateMsg {
+            wire_msg: original_wire_msg,
+            origin: original_origin,
+        } = &cmd
+        {
+            for (job, job_prio) in &self.cmd_queue {
+                // skip anything that's been validated...
+                if job_prio != &VALIDATE_MSG_PRIO {
+                    continue;
+                }
 
+                if let Cmd::ValidateMsg {
+                    wire_msg: job_wire_msg,
+                    origin: job_origin,
+                } = job.cmd()
+                {
+                    if original_origin == job_origin && original_wire_msg == job_wire_msg {
+                        debug!(
+                            "Existing ValidateMsg that matches this found. Dropping Cmd: {cmd:?}"
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+
+        let job = CmdJob::new(self.id_counter, parent_id, cmd, SystemTime::now());
         let prio = job.priority();
         let _ = self.cmd_queue.push(job, prio);
     }

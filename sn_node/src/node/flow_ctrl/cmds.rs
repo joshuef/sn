@@ -34,6 +34,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+pub(crate) const VALIDATE_MSG_PRIO: i32 = -9;
+
 /// A struct for the job of controlling the flow
 /// of a [`Cmd`] in the system.
 ///
@@ -91,6 +93,9 @@ impl CmdJob {
 
     pub(crate) fn into_cmd(self) -> Cmd {
         self.cmd
+    }
+    pub(crate) fn cmd(&self) -> &Cmd {
+        &self.cmd
     }
 
     pub(crate) fn priority(&self) -> i32 {
@@ -240,7 +245,7 @@ impl Cmd {
             HandleValidSystemMsg { msg, .. } => msg.priority(),
             HandleValidServiceMsg { msg, .. } => msg.priority(),
 
-            ValidateMsg { .. } => -9, // before it's validated, we cannot give it high prio, as it would be a spam vector
+            ValidateMsg { .. } => VALIDATE_MSG_PRIO, // before it's validated, we cannot give it high prio, as it would be a spam vector
         }
     }
 
