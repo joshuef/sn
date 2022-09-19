@@ -21,14 +21,13 @@ use crate::node::{Error, Result};
 use qp2p::UsrMsgBytes;
 
 use sn_interface::{
-    messaging::{system::MembershipState, MsgId, WireMsg},
-    network_knowledge::NodeState,
+    messaging::{MsgId, WireMsg},
     types::Peer,
 };
 
 use dashmap::DashMap;
 use qp2p::{Endpoint, IncomingConnections};
-use std::{collections::BTreeSet, net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
     task,
@@ -91,42 +90,24 @@ impl Comm {
         self.our_endpoint.public_addr()
     }
 
-    pub(crate) async fn cleanup_peers(&self, section_members: BTreeSet<NodeState>) {
-        debug!(
-            "Cleanup peers , known section members: {:?}",
-            section_members
-        );
+    pub(crate) async fn cleanup_peers(&self) {
+        debug!("Cleanup peers");
 
-        let mut peers_to_cleanup = vec![];
-
-        let mut retain_peers = vec![];
-
-        // first lets look out for members only.
-        for member in section_members {
-            if MembershipState::Joined == member.state() {
-                retain_peers.push(member.name());
-            }
-        }
+        let mut peers_to_remove = vec![];
 
         for entry in self.sessions.iter() {
             let peer = entry.key();
 
-            if !retain_peers.contains(&peer.name()) {
-                peers_to_cleanup.push(*peer);
-            } else {
-                let session = entry.value();
-                session.remove_expired().await;
+            let session = entry.value();
+            if session.can_cleanup().await {
+                peers_to_remove.push(*peer);
             }
         }
 
         // cleanup any and all conns that are not active section members
-        for peer in peers_to_cleanup {
+        for peer in peers_to_remove {
             trace!("Cleaning up peer's sessions: {peer:?}");
-            let perhaps_peer = self.sessions.remove(&peer);
-
-            if let Some((_peer, session)) = perhaps_peer {
-                session.disconnect().await
-            };
+            let _perhaps_peer = self.sessions.remove(&peer);
         }
 
         debug!("PeerSessions count post-cleanup: {:?}", self.sessions.len());

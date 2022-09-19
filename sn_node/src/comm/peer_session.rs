@@ -49,10 +49,14 @@ impl PeerSession {
         PeerSession { channel: sender }
     }
 
-    pub(crate) async fn remove_expired(&self) {
+    /// can we cleanup this session?
+    pub(crate) async fn can_cleanup(&self) -> bool {
         if let Err(e) = self.channel.send(SessionCmd::RemoveExpired).await {
-            error!("Error while sending RemoveExpired cmd {e:?}");
+            warn!("Error while sending RemoveExpired cmd {e:?}");
+            return true;
         }
+
+        self.channel.is_closed()
     }
 
     // this must be restricted somehow, we can't allow an unbounded inflow
@@ -131,8 +135,12 @@ impl PeerSessionWorker {
             let status = match session_cmd {
                 SessionCmd::Send(job) => self.send(job).await,
                 SessionCmd::RemoveExpired => {
-                    self.link.remove_expired();
-                    SessionStatus::Ok
+                    if self.link.is_connected_after_cleanup() {
+                        SessionStatus::Ok
+                    } else {
+                        // close down the session
+                        SessionStatus::Terminating
+                    }
                 }
                 SessionCmd::AddConnection(conn) => {
                     self.link.add(conn);
@@ -143,7 +151,7 @@ impl PeerSessionWorker {
 
             match status {
                 SessionStatus::Terminating => {
-                    info!("Terminating connection");
+                    info!("Terminating connection to {:?}", self.link.peer());
                     break;
                 }
                 SessionStatus::Ok => (),

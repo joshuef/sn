@@ -261,6 +261,12 @@ impl Link {
         self.drop_excess();
     }
 
+    /// Are we still connected here  after cleanup
+    /// retruens true if a connection remains
+    pub(crate) fn is_connected_after_cleanup(&mut self) -> bool {
+        self.remove_expired();
+        !self.connections.is_empty()
+    }
     /// Remove connections that exceed capacity, oldest first.
     fn drop_excess(&mut self) {
         if self.queue.len() >= CAPACITY {
