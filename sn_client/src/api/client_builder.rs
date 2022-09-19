@@ -147,7 +147,6 @@ impl ClientBuilder {
     /// - `[Self::keypair]` and `[Self::dbc_owner]` are randomly generated
     /// - `[Self::query_timeout`] and `[Self::cmd_timeout]` default to [`DEFAULT_QUERY_CMD_TIMEOUT`]
     /// - `[Self::max_retries`] and `[Self::cmd_timeout]` default to [`DEFAULT_MAX_QUERY_CMD_RETRIES`]
-    /// - `[Self::cmd_ack_wait`] defaults to [`DEFAULT_ACK_WAIT`]
     /// - [`qp2p::Config`] will default to it's [`Default`] impl
     /// - Network contacts file will be read from a standard location
     pub async fn build(self) -> Result<Client, Error> {
