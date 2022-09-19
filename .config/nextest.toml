@@ -1,9 +1,7 @@
 [profile.ci]
-retries = 3
+retries = 0
 # Output failures both immediately and at the end of the run
 failure-output = "immediate-final"
-# Give all tests a chance to run
-fail-fast = false
 
 [profile.ci.junit]
 path = "junit.xml"

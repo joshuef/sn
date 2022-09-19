@@ -354,6 +354,7 @@ mod tests {
         init_logger();
         let file = random_bytes(LARGE_FILE_SIZE_MIN);
 
+        panic!("nooo");
         use crate::api::data::encrypt_large;
         let (first_address, mut first_chunks) = encrypt_large(file.clone())?;
 
