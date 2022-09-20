@@ -144,7 +144,7 @@ mod core {
     // `use sn_client::SN_CLIENT_QUERY_TIMEOUT`), but the timeout is configurable. Ideally this would be
     // based on liveness properties (e.g. the timeout should be dynamic based on the responsiveness of
     // the section).
-    const DATA_QUERY_TIMEOUT: Duration = Duration::from_secs(15);
+    const DATA_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 
     #[derive(Debug, Clone)]
     pub(crate) struct DkgSessionInfo {
