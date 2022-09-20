@@ -28,15 +28,20 @@
     clippy::unwrap_used
 )]
 
-use sn_node::node::{start_node, Config, Error as NodeError, Event, MembershipEvent};
-
 use clap::{CommandFactory, Parser};
 use clap_complete::{generate, Shell};
 use color_eyre::{Section, SectionExt};
 use eyre::{eyre, Context, ErrReport, Result};
 use self_update::{cargo_crate_version, Status};
+use sn_interface::network_knowledge::SectionTree;
+use sn_node::comm::Comm;
+use sn_node::node::{start_node, Config, Error as NodeError, Event, MembershipEvent};
+use std::net::{Ipv4Addr, SocketAddr};
 use std::{io::Write, process::exit};
-use tokio::time::{sleep, Duration};
+use tokio::{
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 use tracing::{self, error, info, trace, warn};
 
 const JOIN_TIMEOUT_SEC: u64 = 100;
@@ -55,28 +60,54 @@ async fn main() -> Result<()> {
     // // 16mb here for windows stack size, which was being exceeded previously
     // .thread_stack_size(16 * 1024 * 1024)
     // .build()?;
+    let (connection_event_tx, mut connection_event_rx) = mpsc::channel(100);
 
     // rt.block_on(async {
     let mut config = Config::new().await?;
+    let local_addr = config
+        .local_addr
+        .unwrap_or_else(|| SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)));
 
-    // let comm = if config.is_first() {
-    //     Comm::first_node(
-    //     local_addr,
-    //     config.network_config().clone(),
-    //     connection_event_tx,
-    //     )
-    //     .await?
-    // }
-    // else {
-    //     Comm::bootstrap(
-    //         local_addr,
-    //         bootstrap_nodes.as_slice(),
-    //         config.network_config().clone(),
-    //         connection_event_tx,
-    //     )
-    //     .await?
-    // }
+    let comm = if config.is_first() {
+        Comm::first_node(
+            local_addr,
+            config.network_config().clone(),
+            connection_event_tx,
+        )
+        .await?
+    } else {
+        // get initial contacts
+        let path = config.network_contacts_file().ok_or_else(|| {
+            NodeError::Configuration("Could not obtain network contacts file path".to_string())
+        })?;
+        let network_contacts = SectionTree::from_disk(&path).await?;
+        let section_elders = {
+            let sap = network_contacts
+                .closest(&xor_name::rand::random(), None)
+                .ok_or_else(|| {
+                    NodeError::Configuration("Could not obtain closest SAP".to_string())
+                })?;
+            sap.elders_vec()
+        };
+        let bootstrap_nodes: Vec<SocketAddr> =
+            section_elders.iter().map(|node| node.addr()).collect();
 
+        let (comm, socket) = Comm::bootstrap(
+            local_addr,
+            bootstrap_nodes.as_slice(),
+            config.network_config().clone(),
+            connection_event_tx,
+        )
+        .await?;
+
+        comm
+    };
+
+
+    // SO here we have comm...
+    // we need that in a thread with its own event loop
+    // and we spawn a freash thread just for that
+    // with a sender available outside...
 
     let _guard = log::init_node_logging(&config)?;
     trace!("Initial node config: {config:?}");

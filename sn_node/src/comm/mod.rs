@@ -36,7 +36,7 @@ use tokio::{
 
 // Communication component of the node to interact with other nodes.
 #[derive(Clone)]
-pub(crate) struct Comm {
+pub struct Comm {
     our_endpoint: Endpoint,
     msg_listener: MsgListener,
     sessions: Arc<DashMap<Peer, PeerSession>>,
@@ -44,7 +44,7 @@ pub(crate) struct Comm {
 
 impl Comm {
     #[tracing::instrument(skip_all)]
-    pub(crate) async fn first_node(
+    pub async fn first_node(
         local_addr: SocketAddr,
         config: qp2p::Config,
         incoming_msg_pipe: Sender<MsgEvent>,
@@ -60,7 +60,7 @@ impl Comm {
     }
 
     #[tracing::instrument(skip_all)]
-    pub(crate) async fn bootstrap(
+    pub async fn bootstrap(
         local_addr: SocketAddr,
         bootstrap_nodes: &[SocketAddr],
         config: qp2p::Config,
@@ -415,7 +415,7 @@ impl Drop for Comm {
 }
 
 #[derive(Debug)]
-pub(crate) enum MsgEvent {
+pub enum MsgEvent {
     Received { sender: Peer, wire_msg: WireMsg },
 }
 

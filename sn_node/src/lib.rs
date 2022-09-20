@@ -42,7 +42,7 @@
 #[macro_use]
 extern crate tracing;
 
-mod comm;
+pub mod comm;
 
 mod storage;
 
