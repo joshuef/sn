@@ -35,11 +35,13 @@ use tokio::{
 };
 
 // Communication component of the node to interact with other nodes.
-#[derive(Clone)]
 pub struct Comm {
     our_endpoint: Endpoint,
     msg_listener: MsgListener,
     sessions: Arc<DashMap<Peer, PeerSession>>,
+    outgoing_msg_channel: mpsc::Sender<UsrMsgBytes>,
+    inbox: mpsc::Receiver<UsrMsgBytes>
+
 }
 
 impl Comm {
@@ -136,6 +138,11 @@ impl Comm {
     #[cfg(test)]
     pub(crate) async fn is_reachable(&self, _peer: &SocketAddr) -> Result<(), Error> {
         Ok(())
+    }
+
+    /// Get the channel to send msgs
+    pub fn send_msg_channel(&self) -> mpsc::Sender<UsrMsgBytes> {
+        self.outgoing_msg_channel.clone()
     }
 
     /// Tests whether the peer is reachable.
@@ -367,6 +374,7 @@ fn setup_comms(
 #[tracing::instrument(skip_all)]
 fn setup(our_endpoint: Endpoint, receive_msg: Sender<MsgEvent>) -> (Comm, MsgListener) {
     let (add_connection, conn_receiver) = mpsc::channel(100);
+    let (outgoing_msg_channel, mut inbox) = mpsc::channel(100);
 
     let msg_listener = MsgListener::new(add_connection, receive_msg);
 
@@ -374,9 +382,12 @@ fn setup(our_endpoint: Endpoint, receive_msg: Sender<MsgEvent>) -> (Comm, MsgLis
         our_endpoint,
         msg_listener: msg_listener.clone(),
         sessions: Arc::new(DashMap::new()),
+        inbox,
+        outgoing_msg_channel
     };
 
-    let _ = task::spawn_local(receive_conns(comm.clone(), conn_receiver));
+    // TODO get event loop and get this in
+    // let _ = task::spawn_local(receive_conns(comm.clone(), conn_receiver));
 
     (comm, msg_listener)
 }

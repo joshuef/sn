@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
     // // 16mb here for windows stack size, which was being exceeded previously
     // .thread_stack_size(16 * 1024 * 1024)
     // .build()?;
-    let (connection_event_tx, mut connection_event_rx) = mpsc::channel(100);
+    let (connection_event_tx, mut msg_receiver_channel) = mpsc::channel(100);
 
     // rt.block_on(async {
     let mut config = Config::new().await?;
@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
         .local_addr
         .unwrap_or_else(|| SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)));
 
-    let comm = if config.is_first() {
+    let (comm) = if config.is_first() {
         Comm::first_node(
             local_addr,
             config.network_config().clone(),
@@ -102,6 +102,9 @@ async fn main() -> Result<()> {
 
         comm
     };
+
+
+    let send_msg_channel = comm.send_msg_channel();
 
 
     // SO here we have comm...
