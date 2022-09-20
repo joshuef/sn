@@ -526,255 +526,255 @@ jobs:
           sleep 10
           rm -rf ~/.safe
 
-  api:
-    if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
-    name: Run API tests
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v2
+  # api:
+  #   if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
+  #   name: Run API tests
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-latest, windows-latest, macos-latest]
+  #   steps:
+  #     - uses: actions/checkout@v2
 
-      - name: Install Rust
-        id: toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+  #     - name: Install Rust
+  #       id: toolchain
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: stable
+  #         override: true
 
-      - uses: Swatinem/rust-cache@v1
-        continue-on-error: true
-        with:
-          cache-on-failure: true
-          sharedKey: ${{github.run_id}}
+  #     - uses: Swatinem/rust-cache@v1
+  #       continue-on-error: true
+  #       with:
+  #         cache-on-failure: true
+  #         sharedKey: ${{github.run_id}}
 
-      - name: install ripgrep
-        run: cargo install ripgrep
+  #     - name: install ripgrep
+  #       run: cargo install ripgrep
 
-      - name: Build sn bins
-        run: cd sn_node && cargo build --release --bins
-        timeout-minutes: 60
+  #     - name: Build sn bins
+  #       run: cd sn_node && cargo build --release --bins
+  #       timeout-minutes: 60
 
-      - name: Build testnet
-        run: cargo build  --release --bin testnet
-        timeout-minutes: 60
+  #     - name: Build testnet
+  #       run: cargo build  --release --bin testnet
+  #       timeout-minutes: 60
 
-      - name: Build log_cmds_inspector
-        run: cargo build  --release --bin log_cmds_inspector
-        timeout-minutes: 60
+  #     - name: Build log_cmds_inspector
+  #       run: cargo build  --release --bin log_cmds_inspector
+  #       timeout-minutes: 60
 
-      - name: Start the network
-        run: ./target/release/testnet
-        id: section-startup
-        env:
-          RUST_LOG: "sn_node,sn_consensus,sn_dysfunction=trace,sn_interface=trace"
+  #     - name: Start the network
+  #       run: ./target/release/testnet
+  #       id: section-startup
+  #       env:
+  #         RUST_LOG: "sn_node,sn_consensus,sn_dysfunction=trace,sn_interface=trace"
 
-      - name: Print Network Log Stats at start
-        shell: bash
-        run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
-        if: matrix.os != 'windows-latest'
+  #     - name: Print Network Log Stats at start
+  #       shell: bash
+  #       run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+  #       if: matrix.os != 'windows-latest'
 
-      - name: Wait for all nodes to join
-        shell: bash
-        run: ./resources/scripts/wait_for_nodes_to_join.sh
-        timeout-minutes: 15
+  #     - name: Wait for all nodes to join
+  #       shell: bash
+  #       run: ./resources/scripts/wait_for_nodes_to_join.sh
+  #       timeout-minutes: 15
 
-      - name: Print Network Log Stats after nodes joined
-        shell: bash
-        run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
-        if: matrix.os != 'windows-latest'
+  #     - name: Print Network Log Stats after nodes joined
+  #       shell: bash
+  #       run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+  #       if: matrix.os != 'windows-latest'
 
-      - name: Build all tests before running
-        run: cd sn_api && cargo test --no-run --release
-        timeout-minutes: 50
+  #     - name: Build all tests before running
+  #       run: cd sn_api && cargo test --no-run --release
+  #       timeout-minutes: 50
 
-      - name: Run API tests
-        uses: maidsafe/cargo-nextest@main
-        env:
-          RUST_LOG: "sn_client=trace"
-        with:
-          test-run-name: api-${{ matrix.os }}
-          profile: ci
-          junit-path: junit.xml
-          package: sn_api
-          release: true
-          retries: 0
-        timeout-minutes: 80
+  #     - name: Run API tests
+  #       uses: maidsafe/cargo-nextest@main
+  #       env:
+  #         RUST_LOG: "sn_client=trace"
+  #       with:
+  #         test-run-name: api-${{ matrix.os }}
+  #         profile: ci
+  #         junit-path: junit.xml
+  #         package: sn_api
+  #         release: true
+  #         retries: 0
+  #       timeout-minutes: 80
 
-      - name: Are nodes still running...?
-        shell: bash
-        timeout-minutes: 1
-        if: failure() && matrix.os
-        run: |
-          echo "$(pgrep sn_node | wc -l) nodes still running"
-          ls $HOME/.safe/node/local-test-network
+  #     - name: Are nodes still running...?
+  #       shell: bash
+  #       timeout-minutes: 1
+  #       if: failure() && matrix.os
+  #       run: |
+  #         echo "$(pgrep sn_node | wc -l) nodes still running"
+  #         ls $HOME/.safe/node/local-test-network
 
-      - name: Ensure no nodes have left during test runs
-        timeout-minutes: 1
-        shell: bash
-        if: matrix.os != 'windows-latest'
-        # we just want to print out the info. If there is none, an exit code of 1 is returned, so here we return true
-        run: rg "Membership - decided" $HOME/.safe/node/local-test-network | rg Left || true
+  #     - name: Ensure no nodes have left during test runs
+  #       timeout-minutes: 1
+  #       shell: bash
+  #       if: matrix.os != 'windows-latest'
+  #       # we just want to print out the info. If there is none, an exit code of 1 is returned, so here we return true
+  #       run: rg "Membership - decided" $HOME/.safe/node/local-test-network | rg Left || true
 
-      - name: Generate StateMap
-        shell: bash
-        continue-on-error: true
-        run: |
-          cargo install --git https://github.com/TritonDataCenter/statemap.git
-          ./resources/scripts/statemap-preprocess.sh --run-statemap > safe_statemap.svg
+  #     - name: Generate StateMap
+  #       shell: bash
+  #       continue-on-error: true
+  #       run: |
+  #         cargo install --git https://github.com/TritonDataCenter/statemap.git
+  #         ./resources/scripts/statemap-preprocess.sh --run-statemap > safe_statemap.svg
 
-      - name: Upload StateMap
-        uses: actions/upload-artifact@main
-        with:
-          name: statemap_api_${{matrix.os}}.svg
-          path: safe_statemap.svg
-        continue-on-error: true
+  #     - name: Upload StateMap
+  #       uses: actions/upload-artifact@main
+  #       with:
+  #         name: statemap_api_${{matrix.os}}.svg
+  #         path: safe_statemap.svg
+  #       continue-on-error: true
 
-      - name: Print Network Log Stats
-        shell: bash
-        continue-on-error: true
-        run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
-        if: steps.section-startup.outcome == 'success'
+  #     - name: Print Network Log Stats
+  #       shell: bash
+  #       continue-on-error: true
+  #       run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+  #       if: steps.section-startup.outcome == 'success'
 
-      - name: Tar log files
-        shell: bash
-        continue-on-error: true
-        run: find ~/.safe/node/local-test-network -iname '*.log*' | tar -zcvf log_files.tar.gz --files-from -
-        if: failure()
+  #     - name: Tar log files
+  #       shell: bash
+  #       continue-on-error: true
+  #       run: find ~/.safe/node/local-test-network -iname '*.log*' | tar -zcvf log_files.tar.gz --files-from -
+  #       if: failure()
 
-      - name: Upload Node Logs
-        uses: actions/upload-artifact@main
-        with:
-          name: sn_node_logs_api_${{matrix.os}}
-          path: log_files.tar.gz
-        if: failure()
-        continue-on-error: true
+  #     - name: Upload Node Logs
+  #       uses: actions/upload-artifact@main
+  #       with:
+  #         name: sn_node_logs_api_${{matrix.os}}
+  #         path: log_files.tar.gz
+  #       if: failure()
+  #       continue-on-error: true
 
-  cli:
-    if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
-    name: Run CLI tests
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v2
+  # cli:
+  #   if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
+  #   name: Run CLI tests
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-latest, windows-latest, macos-latest]
+  #   steps:
+  #     - uses: actions/checkout@v2
 
-      - name: Install Rust
-        id: toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+  #     - name: Install Rust
+  #       id: toolchain
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: stable
+  #         override: true
 
-      - uses: Swatinem/rust-cache@v1
-        continue-on-error: true
-        with:
-          cache-on-failure: true
-          sharedKey: ${{github.run_id}}
+  #     - uses: Swatinem/rust-cache@v1
+  #       continue-on-error: true
+  #       with:
+  #         cache-on-failure: true
+  #         sharedKey: ${{github.run_id}}
 
-      - name: install ripgrep
-        run: cargo install ripgrep
+  #     - name: install ripgrep
+  #       run: cargo install ripgrep
 
-      - name: Build sn bins
-        run: cd sn_node && cargo build --release --bins
-        timeout-minutes: 60
+  #     - name: Build sn bins
+  #       run: cd sn_node && cargo build --release --bins
+  #       timeout-minutes: 60
 
-      - name: Build testnet
-        run: cargo build  --release --bin testnet
-        timeout-minutes: 60
+  #     - name: Build testnet
+  #       run: cargo build  --release --bin testnet
+  #       timeout-minutes: 60
 
-      - name: Build log_cmds_inspector
-        run: cargo build  --release --bin log_cmds_inspector
-        timeout-minutes: 60
+  #     - name: Build log_cmds_inspector
+  #       run: cargo build  --release --bin log_cmds_inspector
+  #       timeout-minutes: 60
 
-      - name: Start the network
-        run: ./target/release/testnet
-        id: section-startup
-        env:
-          RUST_LOG: "sn_node,sn_api,sn_consensus,sn_dysfunction=trace,sn_interface=trace"
+  #     - name: Start the network
+  #       run: ./target/release/testnet
+  #       id: section-startup
+  #       env:
+  #         RUST_LOG: "sn_node,sn_api,sn_consensus,sn_dysfunction=trace,sn_interface=trace"
 
-      - name: Print Network Log Stats at start
-        shell: bash
-        run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
-        if: matrix.os != 'windows-latest'
+  #     - name: Print Network Log Stats at start
+  #       shell: bash
+  #       run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+  #       if: matrix.os != 'windows-latest'
 
-      - name: Wait for all nodes to join
-        shell: bash
-        run: ./resources/scripts/wait_for_nodes_to_join.sh
-        timeout-minutes: 15
+  #     - name: Wait for all nodes to join
+  #       shell: bash
+  #       run: ./resources/scripts/wait_for_nodes_to_join.sh
+  #       timeout-minutes: 15
 
-      - name: Generate keys for test run
-        run: cargo run --package sn_cli --release -- keys create --for-cli
+  #     - name: Generate keys for test run
+  #       run: cargo run --package sn_cli --release -- keys create --for-cli
 
-      - name: Build all tests before running
-        run: cd sn_cli && cargo test --no-run --release
-        timeout-minutes: 50
+  #     - name: Build all tests before running
+  #       run: cd sn_cli && cargo test --no-run --release
+  #       timeout-minutes: 50
 
-      - name: Run CLI tests
-        uses: maidsafe/cargo-nextest@main
-        env:
-          RUST_LOG: "sn_client=trace"
-        with:
-          test-run-name: cli-${{ matrix.os }}
-          profile: ci
-          junit-path: junit.xml
-          package: sn_cli
-          release: true
-          retries: 0
-        timeout-minutes: 50
+  #     - name: Run CLI tests
+  #       uses: maidsafe/cargo-nextest@main
+  #       env:
+  #         RUST_LOG: "sn_client=trace"
+  #       with:
+  #         test-run-name: cli-${{ matrix.os }}
+  #         profile: ci
+  #         junit-path: junit.xml
+  #         package: sn_cli
+  #         release: true
+  #         retries: 0
+  #       timeout-minutes: 50
 
-      - name: Are nodes still running...?
-        shell: bash
-        timeout-minutes: 1
-        if: failure() && matrix.os
-        run: |
-          echo "$(pgrep sn_node | wc -l) nodes still running"
-          ls $HOME/.safe/node/local-test-network
+  #     - name: Are nodes still running...?
+  #       shell: bash
+  #       timeout-minutes: 1
+  #       if: failure() && matrix.os
+  #       run: |
+  #         echo "$(pgrep sn_node | wc -l) nodes still running"
+  #         ls $HOME/.safe/node/local-test-network
 
-      - name: Ensure no nodes have left during test runs
-        timeout-minutes: 1
-        shell: bash
-        if: matrix.os != 'windows-latest'
-        # we just want to print out the info. If there is none, an exit code of 1 is returned, so here we return true
-        run: rg "Membership - decided" $HOME/.safe/node/local-test-network | rg Left || true
+  #     - name: Ensure no nodes have left during test runs
+  #       timeout-minutes: 1
+  #       shell: bash
+  #       if: matrix.os != 'windows-latest'
+  #       # we just want to print out the info. If there is none, an exit code of 1 is returned, so here we return true
+  #       run: rg "Membership - decided" $HOME/.safe/node/local-test-network | rg Left || true
 
-      - name: Generate StateMap
-        shell: bash
-        continue-on-error: true
-        run: |
-          cargo install --git https://github.com/TritonDataCenter/statemap.git
-          ./resources/scripts/statemap-preprocess.sh --run-statemap > safe_statemap.svg
+  #     - name: Generate StateMap
+  #       shell: bash
+  #       continue-on-error: true
+  #       run: |
+  #         cargo install --git https://github.com/TritonDataCenter/statemap.git
+  #         ./resources/scripts/statemap-preprocess.sh --run-statemap > safe_statemap.svg
 
-      - name: Upload StateMap
-        uses: actions/upload-artifact@main
-        with:
-          name: statemap_cli_${{matrix.os}}.svg
-          path: safe_statemap.svg
-        continue-on-error: true
+  #     - name: Upload StateMap
+  #       uses: actions/upload-artifact@main
+  #       with:
+  #         name: statemap_cli_${{matrix.os}}.svg
+  #         path: safe_statemap.svg
+  #       continue-on-error: true
 
-      - name: Print Network Log Stats
-        shell: bash
-        continue-on-error: true
-        run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
-        if: steps.section-startup.outcome == 'success'
+  #     - name: Print Network Log Stats
+  #       shell: bash
+  #       continue-on-error: true
+  #       run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
+  #       if: steps.section-startup.outcome == 'success'
 
-      - name: Tar log files
-        shell: bash
-        continue-on-error: true
-        run: find ~/.safe/node/local-test-network -iname '*.log*' | tar -zcvf log_files.tar.gz --files-from -
-        if: failure()
+  #     - name: Tar log files
+  #       shell: bash
+  #       continue-on-error: true
+  #       run: find ~/.safe/node/local-test-network -iname '*.log*' | tar -zcvf log_files.tar.gz --files-from -
+  #       if: failure()
 
-      - name: Upload Node Logs
-        uses: actions/upload-artifact@main
-        with:
-          name: sn_node_logs_cli_${{matrix.os}}
-          path: log_files.tar.gz
-        if: failure()
-        continue-on-error: true
+  #     - name: Upload Node Logs
+  #       uses: actions/upload-artifact@main
+  #       with:
+  #         name: sn_node_logs_cli_${{matrix.os}}
+  #         path: log_files.tar.gz
+  #       if: failure()
+  #       continue-on-error: true
 
   # This is required for publishing test results that come from forks. The actual publishing of the
   # results occurs in another workflow that will be triggered when this one finishes. Uploading this
