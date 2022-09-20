@@ -282,7 +282,7 @@ mod tests {
         },
     };
 
-    use eyre::{bail, eyre, Result};
+    use eyre::{bail, eyre, Context, Result};
     use rand::Rng;
     use std::{
         collections::{BTreeMap, BTreeSet},
@@ -455,13 +455,17 @@ mod tests {
         let (address, batch) = client
             .create_register(name, tag, none_policy(owner)) // trying to set write perms to false for the owner (will not be reflected as long as the user is the owner, as an owner will have full authority)
             .await?;
-        client.publish_register_ops(batch).await?;
+        client
+            .publish_register_ops(batch)
+            .await
+            .context("publish ops failed")?;
 
         // keep retrying until ok
         let permissions = client
             .get_register_permissions_for_user(address, owner)
             .instrument(tracing::info_span!("get owner perms"))
-            .await?;
+            .await
+            .context("get user perms failed")?;
 
         assert_eq!(Some(true), permissions.is_allowed(Action::Read));
         assert_eq!(Some(true), permissions.is_allowed(Action::Write));

@@ -727,74 +727,80 @@ mod tests {
         // let's create an empty files container so we have a valid to link
         let (link, _, _) = safe
             .files_container_create_from(TEST_DATA_FILE, None, false, false)
-            .await?;
+            .await.context("failed to create container")?;
         let (version0, _) = safe
             .files_container_get(&link)
             .await?
             .ok_or_else(|| anyhow!("files container was unexpectedly empty"))?;
 
         // associate a first name
-        let mut valid_link = SafeUrl::from_url(&link)?;
+        let mut valid_link = SafeUrl::from_url(&link).context("failed to create link")?;
         valid_link.set_content_version(Some(version0));
 
-        let (nrs_url, did_create) = safe.nrs_add(&site_name, &valid_link).await?;
+        let (nrs_url, did_create) = safe.nrs_add(&site_name, &valid_link).await.context("failed to nrs add")?;
         assert!(did_create);
 
-        let _ = safe.fetch(&nrs_url.to_string(), None).await?;
+        let _ = safe.fetch(&nrs_url.to_string(), None).await.context("failed to fetch")?;
 
+        debug!("--------------------------------------->1111111");
         // associate a second name
-        let second_valid_link = SafeUrl::from_url(&link)?;
+        let second_valid_link = SafeUrl::from_url(&link).context("failed to create anotehr link")?;
         valid_link.set_content_version(Some(version0));
         let site_name2 = format!("sub.{}", &site_name);
 
-        let (nrs_url2, did_create) = safe.nrs_add(&site_name2, &second_valid_link).await?;
+        let (nrs_url2, did_create) = safe.nrs_add(&site_name2, &second_valid_link).await.context("failed to add another nrs")?;
         assert!(!did_create);
 
-        let _ = safe.fetch(&nrs_url2.to_string(), None).await?;
+        let _ = safe.fetch(&nrs_url2.to_string(), None).await.context("failed to fetch again")?;
 
+        debug!("--------------------------------------->2222222222");
         // manually add a conflicting name
         let another_valid_url = nrs_url;
-        let url = validate_nrs_top_name(&site_name)?;
+        let url = validate_nrs_top_name(&site_name).context("could not validate name")?;
         let entry = (
             site_name.as_bytes().to_vec(),
             another_valid_url.to_string().as_bytes().to_vec(),
         );
         let _ = safe
-            .multimap_insert(&url.to_string(), entry, BTreeSet::new())
-            .await?;
+        .multimap_insert(&url.to_string(), entry, BTreeSet::new())
+        .await.context("multimap insert failed")?;
 
+        debug!("--------------------------------------->333333");
         // get of other name should be ok
-        let (res_url, _) = safe.nrs_get(&site_name2, None).await?;
+        let (res_url, _) = safe.nrs_get(&site_name2, None).await.context("failed get")?;
         assert_eq!(
             res_url.ok_or_else(|| anyhow!("url should not be None"))?,
             second_valid_link
         );
 
         // get of conflicting name should error out
-        let conflict_error = safe.nrs_get(&site_name, None).await;
+        let conflict_error = retry_loop_for_pattern!( safe.nrs_get(&site_name, None), res if res.is_err() );
         assert!(matches!(
             conflict_error,
-            Err(Error::ConflictingNrsEntries { .. })
-        ));
+            Err(Error::ConflictingNrsEntries { .. }),
+        ),
+        "error was not expected {conflict_error:?}"
+    );
 
+    debug!("--------------------------------------->44444");
         // check for the error content
         if let Err(Error::ConflictingNrsEntries(_, dups, _)) = conflict_error {
             let got_entries: Result<()> = dups.into_iter().try_for_each(|(public_name, url)| {
-                assert_eq!(public_name, site_name);
-                assert!(url == valid_link || url == another_valid_url);
+                assert_eq!(public_name, site_name, "problematic names match");
+                assert!(url == valid_link || url == another_valid_url, "theres a url conflict");
                 Ok(())
             });
-            assert!(got_entries.is_ok());
+            assert!(got_entries.is_ok(), "we have some entries");
         }
 
         // resolve the error
-        let _ = safe.nrs_associate(&site_name, &valid_link).await?;
+        let _ = safe.nrs_associate(&site_name, &valid_link).await.context("resolving the error failed")?;
 
         // get should work now
-        let (res_url, _) = safe.nrs_get(&site_name, None).await?;
+        let (res_url, _) = safe.nrs_get(&site_name, None).await.context("last get failed")?;
         assert_eq!(
             res_url.ok_or_else(|| anyhow!("url should not be None"))?,
-            valid_link
+            valid_link , "final url was as expcted"
         );
         Ok(())
     }

@@ -305,6 +305,9 @@ impl Session {
             tokio::time::sleep(Duration::from_millis(50)).await;
 
             if response_checks > 20 {
+                // if error_response.is_some(){
+                //     return Ok(er)
+                // }
                 return Err(Error::NoResponse(elders));
             }
             response_checks += 1;
@@ -418,21 +421,23 @@ impl Session {
             }
         }
 
-        if discarded_responses == elders_len {
-            debug!("discarded equals elders");
-            if let Some(response) = error_response {
-                return Ok(Some(QueryResult {
-                    response,
-                    operation_id,
-                }));
-            }
-            // return Ok(error_response);
-        } else if let Some(response) = valid_response {
+        // we've looped over all responses...
+        // if any are valid, lets return it
+        if let Some(response) = valid_response {
             debug!("valid response innnn!!! : {:?}", response);
             return Ok(Some(QueryResult {
                 response,
                 operation_id,
             }));
+            // otherwise, if we've got an error in
+            // we can return that too
+        } else if let Some(response) = error_response {
+            if discarded_responses > elders_len / 2 {
+                return Ok(Some(QueryResult {
+                    response,
+                    operation_id,
+                }));
+            }
         }
 
         Ok(None)
