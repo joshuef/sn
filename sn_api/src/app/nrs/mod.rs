@@ -368,7 +368,7 @@ mod tests {
         app::test_helpers::{new_safe_instance, random_nrs_name, TestDataFilesContainer},
         retry_loop_for_pattern, Error, SafeUrl,
     };
-    use anyhow::{anyhow, bail, Result};
+    use anyhow::{anyhow, bail, Context, Result};
     use std::matches;
 
     const TEST_DATA_FILE: &str = "./testdata/test.md";
@@ -430,7 +430,7 @@ mod tests {
 
         assert_eq!(url.public_name(), site_name);
         assert!(url.content_version().is_some());
-        let nrs_map = safe.nrs_get_subnames_map(&site_name, None).await?;
+        let nrs_map = retry_loop_for_pattern!(safe.nrs_get_subnames_map(&site_name, None), Ok(nrs_map) if nrs_map.map.len() > 0)?;
         assert_eq!(nrs_map.map.len(), 1);
         assert_eq!(
             *nrs_map.map.get(&site_name).ok_or_else(|| anyhow!(format!(
@@ -447,18 +447,28 @@ mod tests {
         let site_name = random_nrs_name();
         let safe = new_safe_instance().await?;
 
-        let files_container = TestDataFilesContainer::get_container(["/testdata/test.md"]).await?;
+        let files_container = TestDataFilesContainer::get_container(["/testdata/test.md"])
+            .await
+            .context("File container init failed")?;
         let public_name = &format!("test.{site_name}");
 
         safe.nrs_create(&site_name).await?;
-        let url = safe
+        let url = match safe
             .nrs_associate(public_name, &files_container["/testdata/test.md"])
-            .await?;
+            .await
+        {
+            Ok(res) => res,
+            Err(error) => {
+                bail!("Error during nrs associate {error:?}")
+            }
+        };
 
         assert_eq!(url.public_name(), public_name);
         assert!(url.content_version().is_some());
-        let nrs_map = safe.nrs_get_subnames_map(&site_name, None).await?;
-        assert_eq!(nrs_map.map.len(), 1);
+        // we're retrying until an adult returns with the data we've just put.
+        let nrs_map = retry_loop_for_pattern!(safe.nrs_get_subnames_map(&site_name, None), Ok(nrs_map) if nrs_map.map.len() == 1)?;
+
+        assert_eq!(nrs_map.map.len(), 1, "expected map len to be 1");
         assert_eq!(
             *nrs_map
                 .map
@@ -466,7 +476,8 @@ mod tests {
                 .ok_or_else(|| anyhow!(format!(
                     "'test.{site_name}' subname should have been present in retrieved NRS map"
                 )))?,
-            files_container["/testdata/test.md"]
+            files_container["/testdata/test.md"],
+            "expected nrs map container to match local"
         );
         Ok(())
     }
@@ -493,7 +504,7 @@ mod tests {
 
         // The last couple of tests verified the returned URLs are correct; for this test we don't
         // need that.
-        let nrs_map = safe.nrs_get_subnames_map(&site_name, None).await?;
+        let nrs_map = retry_loop_for_pattern!(safe.nrs_get_subnames_map(&site_name, None), Ok(nrs_map) if nrs_map.map.len() > 1)?;
         assert_eq!(nrs_map.map.len(), 2);
         assert_eq!(
             *nrs_map
@@ -660,14 +671,17 @@ mod tests {
             &files_container["/testdata/another.md"],
         )
         .await?;
-        let nrs_map = safe.nrs_get_subnames_map(&site_name, None).await?;
+
+        // we're retrying until an adult returns with the data we've just put.
+        let nrs_map = retry_loop_for_pattern!(safe.nrs_get_subnames_map(&site_name, None), Ok(nrs_map) if nrs_map.map.len() > 1)?;
         assert_eq!(nrs_map.map.len(), 2);
 
         let url = safe.nrs_remove(&format!("another.{site_name}")).await?;
 
         assert_eq!(url.public_name(), &format!("another.{site_name}"));
         assert!(url.content_version().is_some());
-        let nrs_map = safe.nrs_get_subnames_map(&site_name, None).await?;
+
+        let nrs_map = retry_loop_for_pattern!(safe.nrs_get_subnames_map(&site_name, None), Ok(nrs_map) if nrs_map.map.len()> 0)?;
         assert_eq!(nrs_map.map.len(), 1);
         assert_eq!(
             *nrs_map
@@ -690,14 +704,17 @@ mod tests {
 
         safe.nrs_create(&site_name).await?;
         safe.nrs_associate(&site_name, &files_container.url).await?;
-        let nrs_map = safe.nrs_get_subnames_map(&site_name, None).await?;
+
+        // we're retrying until an adult returns with the data we've just put.
+        let nrs_map = retry_loop_for_pattern!(safe.nrs_get_subnames_map(&site_name, None), Ok(nrs_map) if nrs_map.map.len() > 0)?;
         assert_eq!(nrs_map.map.len(), 1);
 
         let url = safe.nrs_remove(&site_name).await?;
 
         assert_eq!(url.public_name(), site_name);
         assert!(url.content_version().is_some());
-        let nrs_map = safe.nrs_get_subnames_map(&site_name, None).await?;
+        // we're retrying until an adult returns with the data we've just put.
+        let nrs_map = retry_loop_for_pattern!(safe.nrs_get_subnames_map(&site_name, None), Ok(nrs_map) if nrs_map.map.len() < 1)?;
         assert_eq!(nrs_map.map.len(), 0);
         Ok(())
     }
