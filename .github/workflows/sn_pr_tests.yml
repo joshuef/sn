@@ -262,9 +262,16 @@ jobs:
         run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
         if: matrix.os != 'windows-latest'
 
-      - name: Build all tests before running
+      - name: Build all tests before running non ubuntu
         run: cd sn_client && cargo test --no-run --release
         timeout-minutes: 50
+        if: matrix.os != 'ubuntu-latest'
+
+
+      - name: Build all tests before running on ubuntu
+        run: cd sn_client && cargo test --no-run --release -p sn_client
+        timeout-minutes: 50
+        if: matrix.os == 'ubuntu-latest'
 
       - name: Run client tests
         uses: maidsafe/cargo-nextest@main
@@ -277,7 +284,6 @@ jobs:
           package: sn_client
           release: true
           test-threads: 10
-          retries: 0
         timeout-minutes: 25
 
       - name: Run AE tests
@@ -290,7 +296,6 @@ jobs:
           release: true
           filters: ae_checks
           test-threads: 2
-          retries: 0
         timeout-minutes: 15
         env:
           SN_AE_WAIT: 10
@@ -437,7 +442,7 @@ jobs:
       #   run: ./target/release/log_cmds_inspector $HOME/.safe/node/local-test-network
 
       - name: Build all tests before running
-        run: cd sn_client && cargo test --no-run --release
+        run: cd sn_client && cargo test --no-run --release -p sn_client
         timeout-minutes: 50
 
       - name: Run sn_client tests
@@ -600,7 +605,7 @@ jobs:
   #         junit-path: junit.xml
   #         package: sn_api
   #         release: true
-  #         retries: 0
+  #
   #       timeout-minutes: 80
 
   #     - name: Are nodes still running...?
@@ -724,7 +729,7 @@ jobs:
   #         junit-path: junit.xml
   #         package: sn_cli
   #         release: true
-  #         retries: 0
+  #
   #       timeout-minutes: 50
 
   #     - name: Are nodes still running...?
