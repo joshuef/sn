@@ -67,7 +67,7 @@ impl Client {
         let mut attempts = 1;
         let dst = query.variant.dst_name();
         // should we force a fresh connection to the nodes?
-        let mut force_new_link = false;
+        let force_new_link = false;
 
         let max_interval = self.max_backoff_interval;
 
@@ -113,7 +113,7 @@ impl Client {
             if query.adult_index >= data_copy_count() {
                 query.adult_index = 0;
 
-                force_new_link = true;
+                // force_new_link = true;
 
                 if !retry {
                     // we dont want to retry beyond data_copy_count adults so
@@ -138,6 +138,7 @@ impl Client {
                 debug!("Sleeping before trying query again: {delay:?} sleep for {query:?}");
                 tokio::time::sleep(delay).await;
             } else {
+                warn!("Finished trying and last response to {query:?} is {res:?}");
                 // we're done trying
                 return res;
             }
