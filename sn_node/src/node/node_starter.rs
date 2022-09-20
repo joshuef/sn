@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::comm::Comm;
+use crate::comm::{Comm, OutgoingMsg, OutBox};
 use crate::node::{
     cfg::keypair_storage::{get_reward_pk, store_network_keypair, store_new_reward_keypair},
     flow_ctrl::{
@@ -59,8 +59,10 @@ pub(crate) type CmdChannel = mpsc::Sender<(Cmd, Option<usize>)>;
 pub async fn new_test_api(
     config: &Config,
     join_timeout: Duration,
+    outbox: OutBox,
+    addr: SocketAddr
 ) -> Result<(super::NodeTestApi, EventReceiver)> {
-    let (node, cmd_channel, event_receiver) = new_node(config, join_timeout).await?;
+    let (node, cmd_channel, event_receiver) = new_node(config, join_timeout, outbox, addr).await?;
     Ok((super::NodeTestApi::new(node, cmd_channel), event_receiver))
 }
 
@@ -79,8 +81,10 @@ pub struct NodeRef {
 pub async fn start_node(
     config: &Config,
     join_timeout: Duration,
+    outbox: OutBox,
+    addr: SocketAddr
 ) -> Result<(NodeRef, EventReceiver)> {
-    let (node, cmd_channel, event_receiver) = new_node(config, join_timeout).await?;
+    let (node, cmd_channel, event_receiver) = new_node(config, join_timeout, outbox, addr).await?;
 
     Ok((NodeRef { node, cmd_channel }, event_receiver))
 }
@@ -89,6 +93,8 @@ pub async fn start_node(
 async fn new_node(
     config: &Config,
     join_timeout: Duration,
+    outbox: OutBox,
+    addr: SocketAddr
 ) -> Result<(Arc<RwLock<Node>>, CmdChannel, EventReceiver)> {
     let root_dir_buf = config.root_dir()?;
     let root_dir = root_dir_buf.as_path();
@@ -107,7 +113,7 @@ async fn new_node(
     let used_space = UsedSpace::new(config.max_capacity());
 
     let (node, cmd_channel, network_events) =
-        bootstrap_node(config, used_space, root_dir, join_timeout).await?;
+        bootstrap_node(config, used_space, root_dir, join_timeout, outbox, addr).await?;
 
     {
         let read_only_node = node.read().await;
@@ -144,16 +150,18 @@ async fn bootstrap_node(
     used_space: UsedSpace,
     root_storage_dir: &Path,
     join_timeout: Duration,
+    outbox: OutBox,
+    addr: SocketAddr
 ) -> Result<(Arc<RwLock<Node>>, CmdChannel, EventReceiver)> {
-    let (connection_event_tx, mut connection_event_rx) = mpsc::channel(100);
+    // let (connection_event_tx, mut connection_event_rx) = mpsc::channel(100);
 
-    let local_addr = config
-        .local_addr
-        .unwrap_or_else(|| SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)));
+    // let local_addr = config
+    //     .local_addr
+    //     .unwrap_or_else(|| SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)));
 
     let (event_sender, event_receiver) = event_channel::new(EVENT_CHANNEL_SIZE);
 
-    let (node, comm) = if config.is_first() {
+    let node = if config.is_first() {
         // Genesis node having a fix age of 255.
         let keypair = ed25519::gen_keypair(&Prefix::default().range_inclusive(), 255);
         let node_name = ed25519::name(&keypair.public);
@@ -164,18 +172,18 @@ async fn bootstrap_node(
             std::process::id()
         );
 
-        let comm = Comm::first_node(
-            local_addr,
-            config.network_config().clone(),
-            connection_event_tx,
-        )
-        .await?;
+        // let comm = Comm::first_node(
+        //     local_addr,
+        //     config.network_config().clone(),
+        //     connection_event_tx,
+        // )
+        // .await?;
 
         // Generate the genesis key, this will be the first key in the sections chain,
         // as well as the owner of the genesis DBC minted by this first node of the network.
         let genesis_sk_set = bls::SecretKeySet::random(0, &mut rand::thread_rng());
         let (node, genesis_dbc) = Node::first_node(
-            comm.socket_addr(),
+            addr,
             Arc::new(keypair),
             event_sender.clone(),
             used_space.clone(),
@@ -213,32 +221,32 @@ async fn bootstrap_node(
             hex::encode(genesis_key.to_bytes())
         );
 
-        (node, comm)
+        node
     } else {
         let keypair = ed25519::gen_keypair(&Prefix::default().range_inclusive(), MIN_ADULT_AGE);
         let node_name = ed25519::name(&keypair.public);
         info!("{} Bootstrapping as a new node.", node_name);
 
-        let path = config.network_contacts_file().ok_or_else(|| {
-            Error::Configuration("Could not obtain network contacts file path".to_string())
-        })?;
-        let network_contacts = SectionTree::from_disk(&path).await?;
-        let section_elders = {
-            let sap = network_contacts
-                .closest(&xor_name::rand::random(), None)
-                .ok_or_else(|| Error::Configuration("Could not obtain closest SAP".to_string()))?;
-            sap.elders_vec()
-        };
-        let bootstrap_nodes: Vec<SocketAddr> =
-            section_elders.iter().map(|node| node.addr()).collect();
+        // let path = config.network_contacts_file().ok_or_else(|| {
+        //     Error::Configuration("Could not obtain network contacts file path".to_string())
+        // })?;
+        // let network_contacts = SectionTree::from_disk(&path).await?;
+        // let section_elders = {
+        //     let sap = network_contacts
+        //         .closest(&xor_name::rand::random(), None)
+        //         .ok_or_else(|| Error::Configuration("Could not obtain closest SAP".to_string()))?;
+        //     sap.elders_vec()
+        // };
+        // let bootstrap_nodes: Vec<SocketAddr> =
+        //     section_elders.iter().map(|node| node.addr()).collect();
 
-        let (comm, bootstrap_addr) = Comm::bootstrap(
-            local_addr,
-            bootstrap_nodes.as_slice(),
-            config.network_config().clone(),
-            connection_event_tx,
-        )
-        .await?;
+        // let (comm, bootstrap_addr) = Comm::bootstrap(
+        //     local_addr,
+        //     bootstrap_nodes.as_slice(),
+        //     config.network_config().clone(),
+        //     connection_event_tx,
+        // )
+        // .await?;
         info!(
             "{} Joining as a new node (PID: {}) our socket: {}, bootstrapper was: {}, network's genesis key: {:?}",
             node_name,
@@ -260,7 +268,7 @@ async fn bootstrap_node(
         .await?;
 
         let node = Node::new(
-            comm.socket_addr(),
+            addr,
             info.keypair.clone(),
             network_knowledge,
             None,
@@ -273,11 +281,11 @@ async fn bootstrap_node(
         info!("{} Joined the network!", node.info().name());
         info!("Our AGE: {}", node.info().age());
 
-        (node, comm)
+        node
     };
 
     let node = Arc::new(RwLock::new(node));
-    let cmd_ctrl = CmdCtrl::new(Dispatcher::new(node.clone(), comm));
+    let cmd_ctrl = CmdCtrl::new(Dispatcher::new(node.clone(), outbox));
     let (msg_and_period_ctrl, cmd_channel) =
         FlowCtrl::new(cmd_ctrl, connection_event_rx, event_sender);
 

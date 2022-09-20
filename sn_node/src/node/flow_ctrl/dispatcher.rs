@@ -31,10 +31,11 @@ pub(crate) struct Dispatcher {
     node: Arc<RwLock<Node>>,
     comm: Comm,
     dkg_timeout: Arc<DkgTimeout>,
+    outbox: OutBox
 }
 
 impl Dispatcher {
-    pub(crate) fn new(node: Arc<RwLock<Node>>, comm: Comm) -> Self {
+    pub(crate) fn new(node: Arc<RwLock<Node>>, outbox: OutBox) -> Self {
         let (cancel_timer_tx, cancel_timer_rx) = watch::channel(false);
         let dkg_timeout = Arc::new(DkgTimeout {
             cancel_timer_tx,
@@ -45,6 +46,7 @@ impl Dispatcher {
             node,
             dkg_timeout,
             comm,
+            outbox
         }
     }
 

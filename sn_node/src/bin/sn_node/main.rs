@@ -34,7 +34,7 @@ use color_eyre::{Section, SectionExt};
 use eyre::{eyre, Context, ErrReport, Result};
 use self_update::{cargo_crate_version, Status};
 use sn_interface::network_knowledge::SectionTree;
-use sn_node::comm::Comm;
+use sn_node::comm::{Comm, OutgoingMsg, OutBox};
 use sn_node::node::{start_node, Config, Error as NodeError, Event, MembershipEvent};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::{io::Write, process::exit};
@@ -116,9 +116,13 @@ async fn main() -> Result<()> {
     let _guard = log::init_node_logging(&config)?;
     trace!("Initial node config: {config:?}");
 
+    let addr = comm.socket_addr();
+
+    // TODO: refactor the above and keep it in the loop for full cleanup.
+
     loop {
         info!("Node runtime started");
-        create_runtime_and_node(&config).await?;
+        create_runtime_and_node(&config, send_msg_channel.clone(), addr).await?;
 
         // pull config again in case it has been updated meanwhile
         config = Config::new().await?;
@@ -127,13 +131,13 @@ async fn main() -> Result<()> {
 }
 
 /// Create a tokio runtime per `run_node` instance.
-async fn create_runtime_and_node(config: &Config) -> Result<()> {
+async fn create_runtime_and_node(config: &Config, outbox: OutBox, addr: SocketAddr) -> Result<()> {
     let local = tokio::task::LocalSet::new();
 
     local
         .run_until(async move {
             // loops ready to catch any ChurnJoinMiss
-            match run_node(config).await {
+            match run_node(config, outbox, addr).await {
                 Ok(_) => {
                     info!("Node has finished running, no runtime errors were reported");
                 }
@@ -147,7 +151,7 @@ async fn create_runtime_and_node(config: &Config) -> Result<()> {
     Ok(())
 }
 
-async fn run_node(config: &Config) -> Result<()> {
+async fn run_node(config: &Config, outbox: OutBox, addr: SocketAddr) -> Result<()> {
     if let Some(c) = &config.completions() {
         let shell = c.parse().map_err(|err: String| eyre!(err))?;
         let buf = gen_completions_for_shell(shell, Config::command()).map_err(|err| eyre!(err))?;
@@ -187,7 +191,7 @@ async fn run_node(config: &Config) -> Result<()> {
     let bootstrap_retry_duration = Duration::from_secs(BOOTSTRAP_RETRY_TIME_SEC);
 
     let (_node, mut event_stream) = loop {
-        match start_node(config, join_timeout).await {
+        match start_node(config, join_timeout, outbox, addr).await {
             Ok(result) => break result,
             Err(NodeError::CannotConnectEndpoint(qp2p::EndpointError::Upnp(error))) => {
                 return Err(error).suggestion(

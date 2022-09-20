@@ -45,6 +45,7 @@ pub struct Comm {
 
 /// peer, msg_id, bytes, is_msg_for_client
 pub type OutgoingMsg = (Peer, MsgId, UsrMsgBytes, bool);
+pub type OutBox = mpsc::Sender<OutgoingMsg>;
 
 impl Comm {
     #[tracing::instrument(skip_all)]
@@ -91,7 +92,7 @@ impl Comm {
         Ok((comm, remote_address))
     }
 
-    pub(crate) fn socket_addr(&self) -> SocketAddr {
+    pub fn socket_addr(&self) -> SocketAddr {
         self.our_endpoint.public_addr()
     }
 
@@ -143,7 +144,7 @@ impl Comm {
     }
 
     /// Get the channel to send msgs
-    pub fn send_msg_channel(&self) -> mpsc::Sender<OutgoingMsg> {
+    pub fn send_msg_channel(&self) -> OutBox {
         self.outgoing_msg_channel.clone()
     }
 
