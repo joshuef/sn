@@ -12,7 +12,7 @@ mod messaging;
 use crate::Result;
 use sn_interface::{
     messaging::{
-        data::{Error as ErrorMsg, OperationId, QueryResponse},
+        data::{Error as ErrorMsg, QueryResponse},
         MsgId,
     },
     network_knowledge::SectionTree,
@@ -25,7 +25,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 
 // Here we dont track the msg_id across the network, but just use it as a local identifier to remove the correct listener
-type PendingQueryResponses = Arc<DashMap<OperationId, Arc<DashSet<(SocketAddr, QueryResponse)>>>>;
+type PendingQueryResponses = Arc<DashMap<MsgId, Arc<DashSet<(SocketAddr, QueryResponse)>>>>;
 
 type CmdResponse = (SocketAddr, Option<ErrorMsg>);
 
@@ -36,7 +36,6 @@ type PendingCmdAcks = Arc<DashMap<MsgId, Arc<DashSet<CmdResponse>>>>;
 #[derive(Debug)]
 pub struct QueryResult {
     pub response: QueryResponse,
-    pub operation_id: OperationId,
 }
 
 impl QueryResult {

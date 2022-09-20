@@ -188,10 +188,10 @@ impl Client {
                 query,
                 auth,
                 serialised_query,
-                #[cfg(feature = "traceroute")]
-                self.public_key(),
                 dst_section_info,
                 force_new_link,
+                #[cfg(feature = "traceroute")]
+                self.public_key(),
             )
             .await
     }

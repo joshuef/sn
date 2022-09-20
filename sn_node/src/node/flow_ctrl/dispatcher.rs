@@ -115,6 +115,7 @@ impl Dispatcher {
                 Ok(vec![])
             }
             Cmd::AddToPendingQueries {
+                msg_id,
                 operation_id,
                 origin,
                 target_adult,
@@ -131,11 +132,11 @@ impl Dispatcher {
                         "Adding to pending data queries for op id: {:?}",
                         operation_id
                     );
-                    let _ = peers.insert(origin);
+                    let _ = peers.insert((msg_id, origin));
                 } else {
                     let _prior_value = node.pending_data_queries.set(
                         (operation_id, target_adult),
-                        BTreeSet::from([origin]),
+                        BTreeSet::from([(msg_id, origin)]),
                         None,
                     );
                 };

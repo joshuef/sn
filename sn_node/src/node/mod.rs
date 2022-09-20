@@ -90,10 +90,9 @@ mod core {
     use sn_interface::messaging::Entity;
     use sn_interface::{
         messaging::{
-            data::OperationId,
             signature_aggregator::SignatureAggregator,
-            system::{DkgSessionId, NodeState},
-            AuthorityProof, SectionAuth, SectionAuthorityProvider,
+            system::{DkgSessionId, NodeState, OperationId},
+            AuthorityProof, MsgId, SectionAuth, SectionAuthorityProvider,
         },
         network_knowledge::{
             supermajority, NetworkKnowledge, NodeInfo, SectionKeyShare, SectionKeysProvider,
@@ -186,7 +185,7 @@ mod core {
         pub(crate) capacity: Capacity,
         pub(crate) dysfunction_tracking: DysfunctionDetection,
         /// Cache the request combo,  (OperationId -> An adult xorname), to waiting Clients peers for that combo
-        pub(crate) pending_data_queries: Cache<(OperationId, XorName), BTreeSet<Peer>>,
+        pub(crate) pending_data_queries: Cache<(OperationId, XorName), BTreeSet<(MsgId, Peer)>>,
         // Caches
         pub(crate) ae_backoff_cache: AeBackoffCache,
     }

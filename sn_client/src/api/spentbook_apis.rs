@@ -56,8 +56,8 @@ impl Client {
         let query = DataQueryVariant::Spentbook(SpentbookQuery::SpentProofShares(address));
         let query_result = self.send_query(query.clone()).await?;
         match query_result.response {
-            QueryResponse::SpentProofShares((res, op_id)) => {
-                res.map_err(|err| Error::ErrorMsg { source: err, op_id })
+            QueryResponse::SpentProofShares(res) => {
+                res.map_err(|err| Error::ErrorMsg { source: err })
             }
             other => Err(Error::UnexpectedQueryResponse {
                 query,

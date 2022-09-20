@@ -17,12 +17,13 @@ use sn_interface::{
     data_copy_count,
     messaging::{
         data::{DataQuery, MetadataExchange, StorageLevel},
-        system::{NodeCmd, NodeQuery, SystemMsg},
-        AuthorityProof, EndUser, MsgId, ServiceAuth,
+        system::{NodeCmd, NodeQuery, OperationId, SystemMsg},
+        AuthorityProof, MsgId, ServiceAuth,
     },
     types::{log_markers::LogMarker, Peer, PublicKey, ReplicatedData},
 };
 
+use bytes::Bytes;
 use itertools::Itertools;
 use std::{cmp::Ordering, collections::BTreeSet};
 use tracing::info;
@@ -58,8 +59,10 @@ impl Node {
         source_client: Peer,
         #[cfg(feature = "traceroute")] traceroute: Traceroute,
     ) -> Result<Vec<Cmd>> {
+        // We generate the operation id to track the response from the Adult
+        // by using the query msg id, which shall be unique per query.
+        let operation_id = OperationId::from(&Bytes::copy_from_slice(msg_id.as_ref()));
         let address = query.variant.address();
-        let operation_id = query.variant.operation_id()?;
         trace!(
             "{:?} preparing to query adults for data at {:?} with op_id: {:?}",
             LogMarker::DataQueryReceviedAtElder,
@@ -82,6 +85,7 @@ impl Node {
         };
 
         let mut cmds = vec![Cmd::AddToPendingQueries {
+            msg_id,
             origin: source_client,
             operation_id,
             target_adult: target.name(),
@@ -93,7 +97,14 @@ impl Node {
         {
             if peers.len() > MAX_WAITING_PEERS_PER_QUERY {
                 warn!("Dropping query from {source_client:?}, there are more than {MAX_WAITING_PEERS_PER_QUERY} waiting already");
-                return Ok(vec![]);
+                let cmd = self.cmd_error_response(
+                    Error::CannotHandleQuery(query),
+                    source_client,
+                    msg_id,
+                    #[cfg(feature = "traceroute")]
+                    traceroute,
+                );
+                return Ok(vec![cmd]);
             }
         }
 
@@ -107,8 +118,7 @@ impl Node {
         let msg = SystemMsg::NodeQuery(NodeQuery::Data {
             query: query.variant,
             auth: auth.into_inner(),
-            origin: EndUser(source_client.name()),
-            correlation_id: msg_id,
+            operation_id,
         });
 
         cmds.push(self.trace_system_msg(

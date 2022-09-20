@@ -50,7 +50,7 @@ mod error;
 pub use detection::IssueType;
 
 pub use crate::error::Error;
-use sn_interface::messaging::data::OperationId;
+use sn_interface::messaging::system::OperationId;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     time::Instant,
@@ -279,7 +279,7 @@ fn std_deviation(data: &[f32]) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::{DysfunctionDetection, IssueType};
-    use sn_interface::messaging::data::OperationId;
+    use sn_interface::messaging::system::OperationId;
 
     use eyre::Error;
     use std::{collections::BTreeSet, sync::Once};

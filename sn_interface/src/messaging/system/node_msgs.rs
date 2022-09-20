@@ -6,18 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use super::OperationId;
 use crate::messaging::{
-    data::{DataQueryVariant, MetadataExchange, OperationId, QueryResponse, Result, StorageLevel},
-    EndUser, MsgId, ServiceAuth,
+    data::{DataQueryVariant, MetadataExchange, QueryResponse, StorageLevel},
+    ServiceAuth,
 };
-use crate::types::{
-    register::{Entry, EntryHash, Permissions, Policy, Register, User},
-    Chunk, DataAddress, PublicKey, ReplicatedData,
-};
+use crate::types::{DataAddress, PublicKey, ReplicatedData};
 
 use serde::{Deserialize, Serialize};
-use sn_dbc::SpentProofShare;
-use std::collections::BTreeSet;
 use xor_name::XorName;
 
 /// cmd message sent among nodes
@@ -71,84 +67,12 @@ pub enum NodeQuery {
         query: DataQueryVariant,
         /// Client signature
         auth: ServiceAuth,
-        /// The user that has initiated this query
-        origin: EndUser,
-        /// The correlation id that recorded in Elders for this query
-        correlation_id: MsgId,
+        /// The operation id that recorded in Elders for this query
+        operation_id: OperationId,
     },
 }
 
-/// Responses to queries from Elders to Adults.
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub enum NodeQueryResponse {
-    //
-    // ===== Chunk =====
-    //
-    #[cfg(feature = "chunks")]
-    /// Response to [`GetChunk`]
-    ///
-    /// [`GetChunk`]: crate::messaging::data::DataQueryVariant::GetChunk
-    GetChunk(Result<Chunk>),
-    //
-    // ===== Register Data =====
-    //
-    #[cfg(feature = "registers")]
-    /// Response to [`crate::messaging::data::RegisterQuery::Get`].
-    GetRegister((Result<Register>, OperationId)),
-    #[cfg(feature = "registers")]
-    /// Response to [`crate::messaging::data::RegisterQuery::GetOwner`].
-    GetRegisterOwner((Result<User>, OperationId)),
-    #[cfg(feature = "registers")]
-    /// Response to [`crate::messaging::data::RegisterQuery::GetEntry`].
-    GetRegisterEntry((Result<Entry>, OperationId)),
-    #[cfg(feature = "registers")]
-    /// Response to [`crate::messaging::data::RegisterQuery::GetPolicy`].
-    GetRegisterPolicy((Result<Policy>, OperationId)),
-    #[cfg(feature = "registers")]
-    /// Response to [`crate::messaging::data::RegisterQuery::Read`].
-    ReadRegister((Result<BTreeSet<(EntryHash, Entry)>>, OperationId)),
-    #[cfg(feature = "registers")]
-    /// Response to [`crate::messaging::data::RegisterQuery::GetUserPermissions`].
-    GetRegisterUserPermissions((Result<Permissions>, OperationId)),
-    //
-    // ===== Spentbook Data =====
-    //
-    #[cfg(feature = "spentbook")]
-    /// Response to [`crate::messaging::data::SpentbookQuery::SpentProofShares`].
-    SpentProofShares((Result<Vec<SpentProofShare>>, OperationId)),
-    //
-    // ===== Other =====
-    //
-    /// Failed to create id generation
-    FailedToCreateOperationId,
-}
-
-impl NodeQueryResponse {
-    pub fn convert(self) -> QueryResponse {
-        use NodeQueryResponse::*;
-        match self {
-            #[cfg(feature = "chunks")]
-            GetChunk(res) => QueryResponse::GetChunk(res),
-            #[cfg(feature = "registers")]
-            GetRegister(res) => QueryResponse::GetRegister(res),
-            #[cfg(feature = "registers")]
-            GetRegisterEntry(res) => QueryResponse::GetRegisterEntry(res),
-            #[cfg(feature = "registers")]
-            GetRegisterOwner(res) => QueryResponse::GetRegisterOwner(res),
-            #[cfg(feature = "registers")]
-            ReadRegister(res) => QueryResponse::ReadRegister(res),
-            #[cfg(feature = "registers")]
-            GetRegisterPolicy(res) => QueryResponse::GetRegisterPolicy(res),
-            #[cfg(feature = "registers")]
-            GetRegisterUserPermissions(res) => QueryResponse::GetRegisterUserPermissions(res),
-            #[cfg(feature = "spentbook")]
-            SpentProofShares(res) => QueryResponse::SpentProofShares(res),
-            FailedToCreateOperationId => QueryResponse::FailedToCreateOperationId,
-        }
-    }
-
-    pub fn operation_id(&self) -> Result<OperationId> {
-        self.clone().convert().operation_id()
-    }
-}
+/// Responses to queries sent from Elders to Adults.
+/// We define it as an alias to `QueryResponse` type, but we keep it as
+/// a separate system message type for more clarity in logs and messaging tracking/debugging.
+pub type NodeQueryResponse = QueryResponse;

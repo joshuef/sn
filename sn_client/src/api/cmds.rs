@@ -149,7 +149,7 @@ impl Client {
             .await
     }
 
-    /// Send a DataCmd to the network without awaiting for a response.
+    /// Send a DataCmd to the network and await a response.
     /// Cmds are automatically retried using exponential backoff if an error is returned.
     /// This function is a helper private to this module.
     #[instrument(skip_all, level = "debug", name = "client-api send cmd")]

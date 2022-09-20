@@ -114,13 +114,6 @@ impl DataStorage {
             DataQueryVariant::Spentbook(read) => {
                 // TODO: this is temporary till spentbook native data type is implemented,
                 // we read from the Register where we store the spentbook data
-                let spentbook_op_id = match read.operation_id() {
-                    Ok(id) => id,
-                    Err(_e) => {
-                        return NodeQueryResponse::FailedToCreateOperationId;
-                    }
-                };
-
                 let reg_addr = RegisterAddress::new(read.dst_name(), SPENTBOOK_TYPE_TAG);
 
                 match self
@@ -128,10 +121,10 @@ impl DataStorage {
                     .read(&RegisterQuery::Get(reg_addr), requester)
                     .await
                 {
-                    NodeQueryResponse::GetRegister((Err(MessagingError::DataNotFound(_)), _)) => {
-                        NodeQueryResponse::SpentProofShares((Ok(Vec::new()), spentbook_op_id))
+                    NodeQueryResponse::GetRegister(Err(MessagingError::DataNotFound(_))) => {
+                        NodeQueryResponse::SpentProofShares(Ok(Vec::new()))
                     }
-                    NodeQueryResponse::GetRegister((result, _)) => {
+                    NodeQueryResponse::GetRegister(result) => {
                         let proof_shares_result = result.map(|reg| {
                             let mut proof_shares = Vec::new();
                             let entries = reg.read();
@@ -150,7 +143,7 @@ impl DataStorage {
                             proof_shares
                         });
 
-                        NodeQueryResponse::SpentProofShares((proof_shares_result, spentbook_op_id))
+                        NodeQueryResponse::SpentProofShares(proof_shares_result)
                     }
                     other => {
                         // TODO: this is temporary till spentbook native data type is implemented,
@@ -314,7 +307,6 @@ mod tests {
         // Test client fetch
         let query = DataQueryVariant::GetChunk(*chunk.address());
         let user = User::Anyone;
-
         let query_response = storage.query(&query, user).await;
 
         assert_eq!(query_response, NodeQueryResponse::GetChunk(Ok(chunk)));

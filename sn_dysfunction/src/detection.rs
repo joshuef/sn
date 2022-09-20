@@ -91,7 +91,7 @@ impl DysfunctionDetection {
                 *node,
                 self.calculate_node_score_for_type(
                     node,
-                    &IssueType::PendingRequestOperation(rand_op_id()),
+                    &IssueType::PendingRequestOperation(OperationId::random()),
                 ),
             );
         }
@@ -281,18 +281,12 @@ impl DysfunctionDetection {
     }
 }
 
-fn rand_op_id() -> OperationId {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    OperationId(rng.gen())
-}
-
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
 
     use crate::{detection::IssueType, tests::init_test_logger, DysfunctionDetection};
-    use sn_interface::messaging::data::OperationId;
+    use sn_interface::messaging::system::OperationId;
 
     use eyre::bail;
     use proptest::prelude::*;
@@ -898,7 +892,7 @@ mod ops_tests {
         let mut pending_operations = Vec::new();
         for node in &nodes {
             for _ in 0..NORMAL_OPERATIONS_ISSUES {
-                let op_id = rand_op_id();
+                let op_id = OperationId::random();
                 pending_operations.push((node, op_id));
                 dysfunctional_detection
                     .track_issue(*node, IssueType::PendingRequestOperation(op_id));
@@ -917,7 +911,7 @@ mod ops_tests {
 
         // adding more issues though, and we should see some dysfunction
         for _ in 0..300 {
-            let op_id = rand_op_id();
+            let op_id = OperationId::random();
             dysfunctional_detection
                 .track_issue(nodes[0], IssueType::PendingRequestOperation(op_id));
         }

@@ -18,7 +18,7 @@ use sn_interface::{
 
 use sn_interface::{
     messaging::{
-        data::{DataQuery, DataQueryVariant, OperationId, QueryResponse},
+        data::{DataQuery, DataQueryVariant, QueryResponse},
         AuthKind, Dst, MsgId, ServiceAuth, WireMsg,
     },
     network_knowledge::supermajority,
@@ -213,9 +213,9 @@ impl Session {
         query: DataQuery,
         auth: ServiceAuth,
         payload: Bytes,
-        #[cfg(feature = "traceroute")] client_pk: PublicKey,
         dst_section_info: Option<(bls::PublicKey, Vec<Peer>)>,
         force_new_link: bool,
+        #[cfg(feature = "traceroute")] client_pk: PublicKey,
     ) -> Result<QueryResult> {
         let endpoint = self.endpoint.clone();
 
@@ -244,11 +244,6 @@ impl Session {
             elders_len,
             elders
         );
-
-        let operation_id = query
-            .variant
-            .operation_id()
-            .map_err(|_| Error::UnknownOperationId)?;
 
         let dst = Dst {
             name: dst,
@@ -290,11 +285,9 @@ impl Session {
         let mut response_checks = 0;
 
         loop {
-            debug!(
-                "looping send responses, attempt: #{response_checks} for {msg_id:?} op_id: {operation_id:?}"
-            );
+            debug!("looping send responses, attempt: #{response_checks} for {msg_id:?}");
             if let Some(response) = self
-                .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
+                .check_query_responses(msg_id, elders.clone(), chunk_addr)
                 .await?
             {
                 debug!("returning okkkkkkkkkkkkk");
@@ -314,7 +307,6 @@ impl Session {
     async fn check_query_responses(
         &self,
         msg_id: MsgId,
-        operation_id: OperationId,
         elders: Vec<Peer>,
         chunk_addr: Option<ChunkAddress>,
     ) -> Result<Option<QueryResult>> {
@@ -323,7 +315,7 @@ impl Session {
         let mut valid_response = None;
         let elders_len = elders.len();
 
-        if let Some(entry) = self.pending_queries.get(&operation_id) {
+        if let Some(entry) = self.pending_queries.get(&msg_id) {
             let responses = entry.value();
 
             // lets see if we have a positive response...
@@ -354,21 +346,21 @@ impl Session {
                             }
                         }
                     }
-                    QueryResponse::GetRegister((Err(_), _))
-                    | QueryResponse::ReadRegister((Err(_), _))
-                    | QueryResponse::GetRegisterPolicy((Err(_), _))
-                    | QueryResponse::GetRegisterOwner((Err(_), _))
-                    | QueryResponse::GetRegisterUserPermissions((Err(_), _))
+                    QueryResponse::GetRegister(Err(_))
+                    | QueryResponse::ReadRegister(Err(_))
+                    | QueryResponse::GetRegisterPolicy(Err(_))
+                    | QueryResponse::GetRegisterOwner(Err(_))
+                    | QueryResponse::GetRegisterUserPermissions(Err(_))
                     | QueryResponse::GetChunk(Err(_)) => {
                         debug!("QueryResponse error received from {peer_address:?} (but may be overridden by a non-error response from another elder): {:#?}", &response);
                         error_response = Some(response);
                         discarded_responses += 1;
                     }
 
-                    QueryResponse::GetRegister((Ok(ref register), _)) => {
+                    QueryResponse::GetRegister(Ok(ref register)) => {
                         debug!("okay got register from {peer_address:?}");
                         // TODO: properly merge all registers
-                        if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) =
+                        if let Some(QueryResponse::GetRegister(Ok(prior_response))) =
                             &valid_response
                         {
                             if register.size() > prior_response.size() {
@@ -380,10 +372,10 @@ impl Session {
                             valid_response = Some(response);
                         }
                     }
-                    QueryResponse::ReadRegister((Ok(ref register_set), _)) => {
+                    QueryResponse::ReadRegister(Ok(ref register_set)) => {
                         debug!("okay _read_ register from {peer_address:?}");
                         // TODO: properly merge all registers
-                        if let Some(QueryResponse::ReadRegister((Ok(prior_response), _))) =
+                        if let Some(QueryResponse::ReadRegister(Ok(prior_response))) =
                             &valid_response
                         {
                             if register_set.len() > prior_response.len() {
@@ -395,10 +387,10 @@ impl Session {
                             valid_response = Some(response);
                         }
                     }
-                    QueryResponse::SpentProofShares((Ok(ref spentproof_set), _)) => {
+                    QueryResponse::SpentProofShares(Ok(ref spentproof_set)) => {
                         debug!("okay _read_ spentproofs from {peer_address:?}");
                         // TODO: properly merge all registers
-                        if let Some(QueryResponse::SpentProofShares((Ok(prior_response), _))) =
+                        if let Some(QueryResponse::SpentProofShares(Ok(prior_response))) =
                             &valid_response
                         {
                             if spentproof_set.len() > prior_response.len() {
@@ -416,24 +408,20 @@ impl Session {
                     }
                 }
             }
+        } else {
+            warn!("No listeners found for our msg_id: {:?}", msg_id)
         }
 
         // we've looped over all responses...
         // if any are valid, lets return it
         if let Some(response) = valid_response {
             debug!("valid response innnn!!! : {:?}", response);
-            return Ok(Some(QueryResult {
-                response,
-                operation_id,
-            }));
+            return Ok(Some(QueryResult { response }));
             // otherwise, if we've got an error in
             // we can return that too
         } else if let Some(response) = error_response {
             if discarded_responses > elders_len / 2 {
-                return Ok(Some(QueryResult {
-                    response,
-                    operation_id,
-                }));
+                return Ok(Some(QueryResult { response }));
             }
         }
 

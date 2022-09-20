@@ -6,10 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::{
-    chunk_operation_id, register::RegisterQuery, spentbook::SpentbookQuery, Error, OperationId,
-    QueryResponse, Result,
-};
+use super::{register::RegisterQuery, spentbook::SpentbookQuery, Error, QueryResponse};
 use crate::types::{ChunkAddress, DataAddress, SpentbookAddress};
 use serde::{Deserialize, Serialize};
 use xor_name::XorName;
@@ -53,11 +50,11 @@ pub enum DataQueryVariant {
 impl DataQueryVariant {
     /// Creates a Response containing an error, with the Response variant corresponding to the
     /// Request variant.
-    pub fn error(&self, error: Error) -> Result<QueryResponse> {
+    pub fn error(&self, error: Error) -> QueryResponse {
         use DataQueryVariant::*;
         match self {
             #[cfg(feature = "chunks")]
-            GetChunk(_) => Ok(QueryResponse::GetChunk(Err(error))),
+            GetChunk(_) => QueryResponse::GetChunk(Err(error)),
             #[cfg(feature = "registers")]
             Register(q) => q.error(error),
             #[cfg(feature = "spentbook")]
@@ -89,21 +86,6 @@ impl DataQueryVariant {
             Self::Spentbook(read) => {
                 DataAddress::Spentbook(SpentbookAddress::new(*read.dst_address().name()))
             }
-        }
-    }
-
-    /// Retrieves the operation identifier for this response, use in tracking node liveness
-    /// and responses at clients.
-    /// Must be the same as the query response
-    /// Right now returning result to fail for anything non-chunk, as that's all we're tracking from other nodes here just now.
-    pub fn operation_id(&self) -> Result<OperationId> {
-        match self {
-            #[cfg(feature = "chunks")]
-            Self::GetChunk(address) => chunk_operation_id(address),
-            #[cfg(feature = "registers")]
-            Self::Register(read) => read.operation_id(),
-            #[cfg(feature = "spentbook")]
-            Self::Spentbook(read) => read.operation_id(),
         }
     }
 }

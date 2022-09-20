@@ -11,18 +11,18 @@ use crate::messaging::{
     data::ServiceMsg, system::SystemMsg, AuthKind, AuthorityProof, Dst, Error, MsgId, MsgType,
     NodeMsgAuthority, Result, ServiceAuth,
 };
+
 use bytes::Bytes;
 use custom_debug::Debug;
+use qp2p::UsrMsgBytes;
 use serde::Serialize;
 
 #[cfg(feature = "traceroute")]
 use crate::types::PublicKey;
 #[cfg(feature = "traceroute")]
-use serde::Deserialize;
-
-#[cfg(feature = "traceroute")]
 use itertools::Itertools;
-use qp2p::UsrMsgBytes;
+#[cfg(feature = "traceroute")]
+use serde::Deserialize;
 #[cfg(feature = "traceroute")]
 use std::fmt::{Debug as StdDebug, Display, Formatter};
 

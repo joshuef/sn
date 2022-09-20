@@ -8,7 +8,7 @@
 
 use sn_interface::{
     messaging::{
-        data::{DataQuery, DataQueryVariant, Error as ErrorMsg, OperationId, QueryResponse},
+        data::{DataQuery, DataQueryVariant, Error as ErrorMsg, QueryResponse},
         Error as MessagingError, MsgId,
     },
     types::{Error as DtError, Peer},
@@ -119,12 +119,10 @@ pub enum Error {
     #[error(transparent)]
     NetworkDataError(#[from] DtError),
     /// Errors received from the network via sn_messaging
-    #[error("Error received from the network: {source:?} Operationid: {op_id:?}")]
+    #[error("Error received from the network: {source:?}")]
     ErrorMsg {
         /// The source of an error msg
         source: ErrorMsg,
-        /// operation ID that was used to send the query
-        op_id: OperationId,
     },
     /// Error response received for a client cmd sent to the network
     #[error("Error received from the network: {source:?} for cmd: {msg_id:?}")]

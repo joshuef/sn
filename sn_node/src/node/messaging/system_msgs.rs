@@ -107,7 +107,6 @@ impl Node {
 
     // Handler for data messages which have successfully
     // passed all signature checks and msg verifications
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn handle_valid_system_msg(
         &mut self,
         msg_id: MsgId,
@@ -492,22 +491,20 @@ impl Node {
             SystemMsg::NodeQuery(NodeQuery::Data {
                 query,
                 auth,
-                origin,
-                correlation_id,
+                operation_id,
             }) => {
                 // A request from EndUser - via elders - for locally stored data
                 debug!(
-                    "Handle NodeQuery with msg_id {:?} and correlation_id {:?}",
-                    msg_id, correlation_id,
+                    "Handle NodeQuery with msg_id {:?}, operation_id {}",
+                    msg_id, operation_id
                 );
                 // There is no point in verifying a sig from a sender A or B here.
                 // Send back response to the sending elder
                 Ok(vec![
                     self.handle_data_query_at_adult(
-                        correlation_id,
+                        operation_id,
                         &query,
                         auth,
-                        origin,
                         sender,
                         #[cfg(feature = "traceroute")]
                         traceroute,
@@ -517,26 +514,12 @@ impl Node {
             }
             SystemMsg::NodeQueryResponse {
                 response,
-                correlation_id,
-                user,
+                operation_id,
             } => {
-                let op_id = if let Ok(op_id) = response.operation_id() {
-                    op_id
-                } else {
-                    debug!(
-                        "{:?}: op_id None, correlation_id: {correlation_id:?}, sender: {sender} origin msg_id: {msg_id:?}",
-                        LogMarker::ChunkQueryResponseReceviedFromAdult,
-                    );
-                    warn!(
-                        "There is no operation id. Dropping chunk query response from Adult {sender}, for user: {}.",
-                        user.0
-                    );
-                    return Ok(vec![]);
-                };
-
                 debug!(
-                    "{:?}: op_id {op_id:?}, correlation_id: {correlation_id:?}, sender: {sender} origin msg_id: {msg_id:?}",
+                    "{:?}: op_id {}, sender: {sender} origin msg_id: {msg_id:?}",
                     LogMarker::ChunkQueryResponseReceviedFromAdult,
+                    operation_id
                 );
 
                 match msg_authority {
@@ -544,11 +527,9 @@ impl Node {
                         let sending_nodes_pk = PublicKey::from(auth.into_inner().node_ed_pk);
                         Ok(self
                             .handle_data_query_response_at_elder(
-                                correlation_id,
+                                operation_id,
                                 response,
-                                user,
                                 sending_nodes_pk,
-                                op_id,
                                 #[cfg(feature = "traceroute")]
                                 traceroute,
                             )

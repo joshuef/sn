@@ -137,9 +137,7 @@ impl Client {
 
         debug!("get_register result is; {query_result:?}");
         match query_result.response {
-            QueryResponse::GetRegister((res, op_id)) => {
-                res.map_err(|err| Error::ErrorMsg { source: err, op_id })
-            }
+            QueryResponse::GetRegister(res) => res.map_err(|err| Error::ErrorMsg { source: err }),
             other => Err(Error::UnexpectedQueryResponse {
                 query,
                 response: other,
@@ -156,9 +154,7 @@ impl Client {
         let query = DataQueryVariant::Register(RegisterQuery::Read(address));
         let query_result = self.send_query(query.clone()).await?;
         match query_result.response {
-            QueryResponse::ReadRegister((res, op_id)) => {
-                res.map_err(|err| Error::ErrorMsg { source: err, op_id })
-            }
+            QueryResponse::ReadRegister(res) => res.map_err(|err| Error::ErrorMsg { source: err }),
             other => Err(Error::UnexpectedQueryResponse {
                 query,
                 response: other,
@@ -176,8 +172,8 @@ impl Client {
         let query = DataQueryVariant::Register(RegisterQuery::GetEntry { address, hash });
         let query_result = self.send_query(query.clone()).await?;
         match query_result.response {
-            QueryResponse::GetRegisterEntry((res, op_id)) => {
-                res.map_err(|err| Error::ErrorMsg { source: err, op_id })
+            QueryResponse::GetRegisterEntry(res) => {
+                res.map_err(|err| Error::ErrorMsg { source: err })
             }
             other => Err(Error::UnexpectedQueryResponse {
                 query,
@@ -196,8 +192,8 @@ impl Client {
         let query = DataQueryVariant::Register(RegisterQuery::GetOwner(address));
         let query_result = self.send_query(query.clone()).await?;
         match query_result.response {
-            QueryResponse::GetRegisterOwner((res, op_id)) => {
-                res.map_err(|err| Error::ErrorMsg { source: err, op_id })
+            QueryResponse::GetRegisterOwner(res) => {
+                res.map_err(|err| Error::ErrorMsg { source: err })
             }
             other => Err(Error::UnexpectedQueryResponse {
                 query,
@@ -220,8 +216,8 @@ impl Client {
         let query = DataQueryVariant::Register(RegisterQuery::GetUserPermissions { address, user });
         let query_result = self.send_query(query.clone()).await?;
         match query_result.response {
-            QueryResponse::GetRegisterUserPermissions((res, op_id)) => {
-                res.map_err(|err| Error::ErrorMsg { source: err, op_id })
+            QueryResponse::GetRegisterUserPermissions(res) => {
+                res.map_err(|err| Error::ErrorMsg { source: err })
             }
             other => Err(Error::UnexpectedQueryResponse {
                 query,
@@ -236,8 +232,8 @@ impl Client {
         let query = DataQueryVariant::Register(RegisterQuery::GetPolicy(address));
         let query_result = self.send_query(query.clone()).await?;
         match query_result.response {
-            QueryResponse::GetRegisterPolicy((res, op_id)) => {
-                res.map_err(|err| Error::ErrorMsg { source: err, op_id })
+            QueryResponse::GetRegisterPolicy(res) => {
+                res.map_err(|err| Error::ErrorMsg { source: err })
             }
             other => Err(Error::UnexpectedQueryResponse {
                 query,
@@ -507,7 +503,7 @@ mod tests {
 
         // Different entries written to the same rigister from root shall giving different hash
         let (value1_hash, _batch) = client
-            .write_to_register(address, value_1.clone(), BTreeSet::new())
+            .write_to_local_register(address, value_1.clone(), BTreeSet::new())
             .await?;
 
         let value_2 = random_register_entry();
@@ -516,7 +512,7 @@ mod tests {
             tracing::info_span!("test__register_write_without_publish__second_write").entered();
 
         let (value2_hash, _batch) = client
-            .write_to_register(address, value_2.clone(), BTreeSet::new())
+            .write_to_local_register(address, value_2.clone(), BTreeSet::new())
             .await?;
 
         assert!(value1_hash != value2_hash);
@@ -531,10 +527,10 @@ mod tests {
             tracing::info_span!("test__register_write_without_publish__third_write").entered();
 
         let (value1_3_hash, _batch) = client
-            .write_to_register(address, value_3.clone(), children.clone())
+            .write_to_local_register(address, value_3.clone(), children.clone())
             .await?;
         let (value1_2_hash, _batch) = client
-            .write_to_register(address, value_2.clone(), children.clone())
+            .write_to_local_register(address, value_2.clone(), children.clone())
             .await?;
         assert!(value1_2_hash != value1_3_hash);
 

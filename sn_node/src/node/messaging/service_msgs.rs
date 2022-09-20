@@ -21,11 +21,10 @@ use sn_interface::{
     data_copy_count,
     messaging::{
         data::{
-            DataCmd, DataQueryVariant, EditRegister, OperationId, ServiceMsg, SignedRegisterEdit,
-            SpentbookCmd,
+            DataCmd, DataQueryVariant, EditRegister, ServiceMsg, SignedRegisterEdit, SpentbookCmd,
         },
-        system::{NodeQueryResponse, SystemMsg},
-        AuthorityProof, EndUser, MsgId, ServiceAuth,
+        system::{NodeQueryResponse, OperationId, SystemMsg},
+        AuthorityProof, MsgId, ServiceAuth,
     },
     network_knowledge::{SectionAuthorityProvider, SectionKeysProvider},
     types::{
@@ -86,12 +85,12 @@ impl Node {
         #[cfg(feature = "traceroute")]
         traceroute.0.push(self.identity());
 
-        let new_msg_id = MsgId::new();
+        let msg_id = MsgId::new();
 
-        debug!("SendMSg formed for {:?}", new_msg_id);
+        debug!("SendMSg formed for {:?}", msg_id);
         Cmd::SendMsg {
             msg: OutgoingMsg::Service(msg),
-            msg_id: MsgId::new(),
+            msg_id,
             recipients,
             #[cfg(feature = "traceroute")]
             traceroute,
@@ -99,12 +98,12 @@ impl Node {
     }
 
     /// Handle data query
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn handle_data_query_at_adult(
         &self,
-        correlation_id: MsgId,
+        operation_id: OperationId,
         query: &DataQueryVariant,
         auth: ServiceAuth,
-        user: EndUser,
         requesting_elder: Peer,
         #[cfg(feature = "traceroute")] traceroute: Traceroute,
     ) -> Cmd {
@@ -116,8 +115,7 @@ impl Node {
         trace!("data query response at adult is: {:?}", response);
         let msg = SystemMsg::NodeQueryResponse {
             response,
-            correlation_id,
-            user,
+            operation_id,
         };
 
         self.trace_system_msg(
@@ -133,13 +131,11 @@ impl Node {
     /// Forms a response to send to the requester
     pub(crate) async fn handle_data_query_response_at_elder(
         &mut self,
-        correlation_id: MsgId,
-        response: NodeQueryResponse,
-        user: EndUser,
-        sending_node_pk: PublicKey,
         op_id: OperationId,
+        response: NodeQueryResponse,
+        sending_node_pk: PublicKey,
         #[cfg(feature = "traceroute")] traceroute: Traceroute,
-    ) -> Option<Cmd> {
+    ) -> Vec<Cmd> {
         debug!(
             "Handling data read @ elders, received from {:?}, op id: {:?}",
             sending_node_pk, op_id
@@ -147,25 +143,22 @@ impl Node {
 
         let node_id = XorName::from(sending_node_pk);
 
-        // dont remove here, leave the receipients to expire. That way any incoming reqeusts
-        // will still be forwarded on, and one NotFound reply from one adult may not bork
-        // the Operational success at another Adult (if they were queried again)
-        let query_peers = self.pending_data_queries.get(&(op_id, node_id));
+        let query_peers = self.pending_data_queries.remove(&(op_id, node_id));
 
         // First check for waiting peers. If no one is waiting, we drop the response
         let waiting_peers = if let Some(peers) = query_peers {
             if peers.is_empty() {
                 warn!("No waiting peers to send {op_id:?} to....");
                 // nothing to do
-                return None;
+                return vec![];
             }
-            peers.clone()
+            peers
         } else {
             warn!(
                 "Dropping chunk query response from Adult {}. We might have already forwarded this chunk to the requesting client or the client connection cache has expired: {}",
-                sending_node_pk, user.0
+                sending_node_pk, op_id
             );
-            return None;
+            return vec![];
         };
 
         let pending_removed = self
@@ -174,25 +167,28 @@ impl Node {
 
         if !pending_removed {
             trace!("Ignoring un-expected response");
-            return None;
+            return vec![];
         }
 
-        let query_response = response.convert();
+        let mut cmds = vec![];
+        for (correlation_id, peer) in waiting_peers.into_iter() {
+            let msg = ServiceMsg::QueryResponse {
+                response: response.clone(),
+                correlation_id,
+            };
 
-        let msg = ServiceMsg::QueryResponse {
-            response: query_response,
-            correlation_id,
-        };
+            cmds.push(self.send_service_msg(
+                msg,
+                Peers::Single(peer),
+                #[cfg(feature = "traceroute")]
+                traceroute.clone(),
+            ));
+        }
 
         // Clear expired queries from the cache.
         self.pending_data_queries.remove_expired();
 
-        Some(self.send_service_msg(
-            msg,
-            Peers::Multiple(waiting_peers),
-            #[cfg(feature = "traceroute")]
-            traceroute,
-        ))
+        cmds
     }
 
     /// Handle incoming service msgs. Though NOT queries, as this requires
