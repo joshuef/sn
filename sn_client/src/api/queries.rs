@@ -73,7 +73,7 @@ impl Client {
         let max_interval = self.query_timeout.div_f32(retry_count as f32);
 
         let mut backoff = ExponentialBackoff {
-            initial_interval: Duration::from_millis(1),
+            initial_interval: Duration::from_secs(1),
             max_interval,
             max_elapsed_time: Some(self.query_timeout),
             randomization_factor: 1.5,
