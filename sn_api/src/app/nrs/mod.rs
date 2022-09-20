@@ -366,9 +366,9 @@ mod tests {
     use super::*;
     use crate::{
         app::test_helpers::{new_safe_instance, random_nrs_name, TestDataFilesContainer},
-        Error, SafeUrl,
+        retry_loop_for_pattern, Error, SafeUrl,
     };
-    use anyhow::{anyhow, Result};
+    use anyhow::{anyhow, bail, Result};
     use std::matches;
 
     const TEST_DATA_FILE: &str = "./testdata/test.md";
@@ -616,18 +616,26 @@ mod tests {
         let files_container = TestDataFilesContainer::get_container(["/testdata/test.md"]).await?;
         let public_name = &format!("test.{site_name}");
 
-        let (_, topname_registered) = safe
+        let (_, topname_registered) = match safe
             .nrs_add(public_name, &files_container["/testdata/test.md"])
-            .await?;
+            .await
+        {
+            Ok(res) => res,
+            Err(error) => bail!("Error during nrs add {error:?}"),
+        };
+
         assert!(topname_registered);
 
-        let nrs_map = safe.nrs_get_subnames_map(&site_name, None).await?;
-        assert_eq!(nrs_map.map.len(), 1);
+        // we're retrying until an adult returns with the data we've just put.
+        let nrs_map = retry_loop_for_pattern!(safe.nrs_get_subnames_map(&site_name, None), Ok(nrs_map) if nrs_map.map.len() > 0)?;
+
+        assert_eq!(nrs_map.map.len(), 1, "nrs map has len 1");
         assert_eq!(
             *nrs_map.map.get(public_name).ok_or_else(|| anyhow!(format!(
                 "'{public_name}' subname should have been present in retrieved NRS map"
             )))?,
-            files_container["/testdata/test.md"]
+            files_container["/testdata/test.md"],
+            "added subname is correct"
         );
         Ok(())
     }

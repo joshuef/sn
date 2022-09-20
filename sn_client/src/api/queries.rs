@@ -30,8 +30,7 @@ impl Client {
     /// Queries are automatically retried using exponential backoff if the timeout is hit.
     #[instrument(skip(self), level = "debug")]
     pub async fn send_query(&self, query: DataQueryVariant) -> Result<QueryResult, Error> {
-        self.send_query_with_retry_count(query, self.max_retries)
-            .await
+        self.send_query_with_retry(query, true).await
     }
 
     /// Send a Query to the network and await a response.
@@ -41,17 +40,17 @@ impl Client {
         &self,
         query: DataQueryVariant,
     ) -> Result<QueryResult, Error> {
-        self.send_query_with_retry_count(query, 1).await
+        self.send_query_with_retry(query, false).await
     }
 
     // Send a Query to the network and await a response.
     // Queries are automatically retried if the timeout is hit
     // This function is a private helper.
     #[instrument(skip(self), level = "debug")]
-    async fn send_query_with_retry_count(
+    async fn send_query_with_retry(
         &self,
         query: DataQueryVariant,
-        retry_count: usize,
+        retry: bool,
     ) -> Result<QueryResult, Error> {
         let client_pk = self.public_key();
         let mut query = DataQuery {
@@ -70,7 +69,7 @@ impl Client {
         // should we force a fresh connection to the nodes?
         let force_new_link = false;
 
-        let max_interval = self.query_timeout.div_f32(retry_count as f32);
+        let max_interval = self.max_backoff_interval;
 
         let mut backoff = ExponentialBackoff {
             initial_interval: Duration::from_secs(1),
@@ -108,20 +107,33 @@ impl Client {
 
             attempts += 1;
 
-            if let Ok(result) = res {
-                debug!("{query:?} sent and received okay");
-                return Ok(result);
-            }
-
             // In the next attempt, try the next adult, further away.
             query.adult_index += 1;
             // There should not be more than a certain amount of adults holding copies of the data. Retry the closest adult again.
             if query.adult_index >= data_copy_count() {
                 query.adult_index = 0;
+
+                if !retry {
+                    // we dont want to retry beyond data_copy_count adults so
+                    return res;
+                }
             }
 
             if let Some(delay) = backoff.next_backoff() {
-                debug!("Sleeping for {delay:?} before trying query {query:?} again");
+                // if we've an acceptable result, return instead of wait/retry loop
+                if let Ok(result) = res {
+                    if result.data_was_found() {
+                        debug!("{query:?} sent and received okay");
+                        return Ok(result);
+                    } else {
+                        warn!(
+                            "Data not found... querying again until we hit query_timeout ({:?})",
+                            self.query_timeout
+                        );
+                    }
+                }
+
+                debug!("Sleeping before trying query again: {delay:?} sleep for {query:?}");
                 tokio::time::sleep(delay).await;
             } else {
                 // we're done trying

@@ -24,10 +24,10 @@ use xor_name::XorName;
 
 impl Client {
     /// Send a Cmd to the network and await a response.
-    /// Cmds are not retried if the timeout is hit.
+    /// Cmds are not retried.
     #[instrument(skip(self), level = "debug")]
     pub async fn send_cmd_without_retry(&self, cmd: DataCmd) -> Result<(), Error> {
-        self.send_cmd_with_retry_count(cmd, 1).await
+        self.send_cmd_with_retry(cmd, false).await
     }
 
     /// Sign data using the client keypair
@@ -39,11 +39,7 @@ impl Client {
     // Cmds are automatically retried if an error is returned
     // This function is a private helper.
     #[instrument(skip(self), level = "debug")]
-    async fn send_cmd_with_retry_count(
-        &self,
-        cmd: DataCmd,
-        retry_count: usize,
-    ) -> Result<(), Error> {
+    async fn send_cmd_with_retry(&self, cmd: DataCmd, retry: bool) -> Result<(), Error> {
         let client_pk = self.public_key();
         let dst_name = cmd.dst_name();
 
@@ -56,7 +52,7 @@ impl Client {
         let signature = self.sign(&serialised_cmd);
 
         let op_limit = self.cmd_timeout;
-        let max_interval = self.cmd_timeout.div_f32(retry_count as f32);
+        let max_interval = self.max_backoff_interval;
 
         let mut backoff = ExponentialBackoff {
             initial_interval: Duration::from_secs(1),
@@ -94,6 +90,11 @@ impl Client {
                 .await;
 
             // force_new_link = true;
+
+            // no retries wanted, so we bail on first response
+            if !retry {
+                break res;
+            }
 
             if let Ok(cmd_result) = res {
                 debug!("{debug_cmd} sent okay");
@@ -153,6 +154,6 @@ impl Client {
     /// This function is a helper private to this module.
     #[instrument(skip_all, level = "debug", name = "client-api send cmd")]
     pub(crate) async fn send_cmd(&self, cmd: DataCmd) -> Result<(), Error> {
-        self.send_cmd_with_retry_count(cmd, self.max_retries).await
+        self.send_cmd_with_retry(cmd, true).await
     }
 }

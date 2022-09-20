@@ -457,9 +457,6 @@ mod tests {
             .await?;
         client.publish_register_ops(batch).await?;
 
-        let delay = tokio::time::Duration::from_secs(1);
-        tokio::time::sleep(delay).await;
-
         // keep retrying until ok
         let permissions = client
             .get_register_permissions_for_user(address, owner)

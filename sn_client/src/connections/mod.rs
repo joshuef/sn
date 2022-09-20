@@ -39,12 +39,16 @@ pub struct QueryResult {
     pub operation_id: OperationId,
 }
 
-// impl QueryResult {
-//     /// Returns true if the QueryResponse is DataNotFound
-//     pub(crate) fn is_data_not_found(&self) -> bool {
-//         self.response.is_data_not_found()
-//     }
-// }
+impl QueryResult {
+    /// Returns true if the QueryResponse is DataNotFound
+    pub(crate) fn data_was_found(&self) -> bool {
+        let found = !self.response.is_data_not_found();
+
+        debug!("was the data found??? {found:?}, {self:?}");
+
+        found
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(super) struct Session {

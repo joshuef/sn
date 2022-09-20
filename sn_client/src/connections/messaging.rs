@@ -330,9 +330,8 @@ impl Session {
             debug!("response so far: {:?}", responses);
 
             for refmulti in responses.iter() {
-                let (_socket, response) = refmulti.key().clone();
+                let (peer_address, response) = refmulti.key().clone();
 
-                debug!("before matching response");
                 match response {
                     QueryResponse::GetChunk(Ok(chunk)) => {
                         if let Some(chunk_addr) = chunk_addr {
@@ -361,13 +360,13 @@ impl Session {
                     | QueryResponse::GetRegisterOwner((Err(_), _))
                     | QueryResponse::GetRegisterUserPermissions((Err(_), _))
                     | QueryResponse::GetChunk(Err(_)) => {
-                        debug!("QueryResponse error received (but may be overridden by a non-error response from another elder): {:#?}", &response);
+                        debug!("QueryResponse error received from {peer_address:?} (but may be overridden by a non-error response from another elder): {:#?}", &response);
                         error_response = Some(response);
                         discarded_responses += 1;
                     }
 
                     QueryResponse::GetRegister((Ok(ref register), _)) => {
-                        debug!("okay got register");
+                        debug!("okay got register from {peer_address:?}");
                         // TODO: properly merge all registers
                         if let Some(QueryResponse::GetRegister((Ok(prior_response), _))) =
                             &valid_response
@@ -382,7 +381,7 @@ impl Session {
                         }
                     }
                     QueryResponse::ReadRegister((Ok(ref register_set), _)) => {
-                        debug!("okay _read_ register");
+                        debug!("okay _read_ register from {peer_address:?}");
                         // TODO: properly merge all registers
                         if let Some(QueryResponse::ReadRegister((Ok(prior_response), _))) =
                             &valid_response
@@ -397,7 +396,7 @@ impl Session {
                         }
                     }
                     QueryResponse::SpentProofShares((Ok(ref spentproof_set), _)) => {
-                        debug!("okay _read_ spentproofs");
+                        debug!("okay _read_ spentproofs from {peer_address:?}");
                         // TODO: properly merge all registers
                         if let Some(QueryResponse::SpentProofShares((Ok(prior_response), _))) =
                             &valid_response

@@ -59,7 +59,7 @@ pub struct Client {
     dbc_owner: Owner,
     session: Session,
     pub(crate) query_timeout: Duration,
-    pub(crate) max_retries: usize,
+    pub(crate) max_backoff_interval: Duration,
     pub(crate) cmd_timeout: Duration,
     chunks_cache: Arc<RwLock<ChunksCache>>,
 }
