@@ -28,10 +28,10 @@ jobs:
       - cargo-deny
       - e2e
       - e2e-split
-      - unit
+      # - unit
       - checks
       - lint
-      - upload_event_file
+      # - upload_event_file
     runs-on: ubuntu-latest
     steps:
       - name: CI succeeded
@@ -122,85 +122,85 @@ jobs:
         # See https://doc.rust-lang.org/rustdoc/lints.html for lints that are 'warning' by default.
         run: RUSTDOCFLAGS="--deny=warnings" cargo doc --no-deps
 
-  unit:
-    if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
-    name: Unit Tests
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v2
+  # unit:
+  #   if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
+  #   name: Unit Tests
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-latest, windows-latest, macos-latest]
+  #   steps:
+  #     - uses: actions/checkout@v2
 
-      - name: Install Rust
-        id: toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+  #     - name: Install Rust
+  #       id: toolchain
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: stable
+  #         override: true
 
-      - uses: Swatinem/rust-cache@v1
-        continue-on-error: true
-        with:
-          cache-on-failure: true
-          sharedKey: ${{github.run_id}}-unit
+  #     - uses: Swatinem/rust-cache@v1
+  #       continue-on-error: true
+  #       with:
+  #         cache-on-failure: true
+  #         sharedKey: ${{github.run_id}}-unit
 
-      - name: Build interface tests before running
-        run: cd sn_interface && cargo test --no-run --release
-        timeout-minutes: 50
+  #     - name: Build interface tests before running
+  #       run: cd sn_interface && cargo test --no-run --release
+  #       timeout-minutes: 50
 
-      - name: Run sn_interface tests
-        timeout-minutes: 25
-        uses: maidsafe/cargo-nextest@main
-        with:
-          test-run-name: unit-tests-${{ matrix.os }}
-          profile: ci
-          junit-path: junit.xml
-          package: sn_interface
-          release: true
+  #     - name: Run sn_interface tests
+  #       timeout-minutes: 25
+  #       uses: maidsafe/cargo-nextest@main
+  #       with:
+  #         test-run-name: unit-tests-${{ matrix.os }}
+  #         profile: ci
+  #         junit-path: junit.xml
+  #         package: sn_interface
+  #         release: true
 
-      - name: Build dysfunction tests before running
-        run: cd sn_dysfunction && cargo test --no-run --release
-        timeout-minutes: 50
+  #     - name: Build dysfunction tests before running
+  #       run: cd sn_dysfunction && cargo test --no-run --release
+  #       timeout-minutes: 50
 
-      - name: Run sn_dysfunction unit tests
-        timeout-minutes: 15
-        uses: maidsafe/cargo-nextest@main
-        with:
-          test-run-name: dysfunction-unit-tests-${{ matrix.os }}
-          profile: ci
-          junit-path: junit.xml
-          package: sn_dysfunction
-          release: true
-      - name: Build node tests before running
-        run: cd sn_node && cargo test --no-run --release
-        timeout-minutes: 50
+  #     - name: Run sn_dysfunction unit tests
+  #       timeout-minutes: 15
+  #       uses: maidsafe/cargo-nextest@main
+  #       with:
+  #         test-run-name: dysfunction-unit-tests-${{ matrix.os }}
+  #         profile: ci
+  #         junit-path: junit.xml
+  #         package: sn_dysfunction
+  #         release: true
+  #     - name: Build node tests before running
+  #       run: cd sn_node && cargo test --no-run --release
+  #       timeout-minutes: 50
 
-      - name: Run node unit tests
-        timeout-minutes: 20
-        uses: maidsafe/cargo-nextest@main
-        with:
-          test-run-name: unit-tests-${{ matrix.os }}
-          profile: ci
-          junit-path: junit.xml
-          package: sn_node
-          release: true
+  #     - name: Run node unit tests
+  #       timeout-minutes: 20
+  #       uses: maidsafe/cargo-nextest@main
+  #       with:
+  #         test-run-name: unit-tests-${{ matrix.os }}
+  #         profile: ci
+  #         junit-path: junit.xml
+  #         package: sn_node
+  #         release: true
 
-      - name: Build cli tests before running
-        run: cd sn_cli && cargo test --no-run --release
-        timeout-minutes: 50
+  #     - name: Build cli tests before running
+  #       run: cd sn_cli && cargo test --no-run --release
+  #       timeout-minutes: 50
 
-      - name: Run CLI unit tests
-        uses: maidsafe/cargo-nextest@main
-        timeout-minutes: 25
-        with:
-          test-run-name: cli-unit-tests-${{ matrix.os }}
-          profile: ci
-          junit-path: junit.xml
-          package: sn_cli
-          bin: safe
-          release: true
+  #     - name: Run CLI unit tests
+  #       uses: maidsafe/cargo-nextest@main
+  #       timeout-minutes: 25
+  #       with:
+  #         test-run-name: cli-unit-tests-${{ matrix.os }}
+  #         profile: ci
+  #         junit-path: junit.xml
+  #         package: sn_cli
+  #         bin: safe
+  #         release: true
 
   e2e:
     if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
@@ -784,15 +784,15 @@ jobs:
   # This is required for publishing test results that come from forks. The actual publishing of the
   # results occurs in another workflow that will be triggered when this one finishes. Uploading this
   # 'event file' is necessary for the triggering to occur.
-  upload_event_file:
-    if: always()
-    name: Upload event file
-    needs: [unit, e2e, e2e-split, api, cli]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Upload event file
-        uses: actions/upload-artifact@main
-        with:
-          name: event-file
-          path: ${{ github.event_path }}
+  # upload_event_file:
+  #   if: always()
+  #   name: Upload event file
+  #   needs: [unit, e2e, e2e-split, api, cli]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Upload event file
+  #       uses: actions/upload-artifact@main
+  #       with:
+  #         name: event-file
+  #         path: ${{ github.event_path }}
