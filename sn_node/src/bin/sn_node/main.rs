@@ -103,9 +103,7 @@ async fn main() -> Result<()> {
         comm
     };
 
-
     let send_msg_channel = comm.send_msg_channel();
-
 
     // SO here we have comm...
     // we need that in a thread with its own event loop

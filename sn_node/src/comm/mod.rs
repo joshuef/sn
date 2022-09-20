@@ -30,7 +30,7 @@ use dashmap::DashMap;
 use qp2p::{Endpoint, IncomingConnections};
 use std::{collections::BTreeSet, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
-    sync::mpsc::{self, Receiver, Sender},
+    sync::mpsc::{self, error::TryRecvError, Receiver, Sender},
     task,
 };
 
@@ -39,10 +39,12 @@ pub struct Comm {
     our_endpoint: Endpoint,
     msg_listener: MsgListener,
     sessions: Arc<DashMap<Peer, PeerSession>>,
-    outgoing_msg_channel: mpsc::Sender<UsrMsgBytes>,
-    inbox: mpsc::Receiver<UsrMsgBytes>
-
+    outgoing_msg_channel: mpsc::Sender<OutgoingMsg>,
+    inbox: mpsc::Receiver<OutgoingMsg>,
 }
+
+/// peer, msg_id, bytes, is_msg_for_client
+pub type OutgoingMsg = (Peer, MsgId, UsrMsgBytes, bool);
 
 impl Comm {
     #[tracing::instrument(skip_all)]
@@ -141,8 +143,35 @@ impl Comm {
     }
 
     /// Get the channel to send msgs
-    pub fn send_msg_channel(&self) -> mpsc::Sender<UsrMsgBytes> {
+    pub fn send_msg_channel(&self) -> mpsc::Sender<OutgoingMsg> {
         self.outgoing_msg_channel.clone()
+    }
+
+    /// Get the channel to send msgs. Parse inbound connections etc.
+    pub async fn run_comm_loop(&mut self) -> Result<()> {
+        loop {
+            match self.inbox.try_recv() {
+                Ok((peer, msg_id, bytes, is_msg_for_client)) => {
+                    // tokio::spawn(async move{
+                    if let Err(err) = self
+                        .send_out_bytes(peer, msg_id, bytes, is_msg_for_client)
+                        .await
+                    {
+                        error!("Error during send to {peer:?}, {msg_id:?}: {err:?}");
+                    }
+
+                    // });
+                }
+                Err(TryRecvError::Empty) => {
+                    // do nothing else
+                    return Ok(());
+                }
+                Err(TryRecvError::Disconnected) => {
+                    error!("Senders to `incoming_cmds_from_apis` have disconnected.");
+                    return Err(Error::MsgChannelDropped);
+                }
+            }
+        }
     }
 
     /// Tests whether the peer is reachable.
@@ -383,7 +412,7 @@ fn setup(our_endpoint: Endpoint, receive_msg: Sender<MsgEvent>) -> (Comm, MsgLis
         msg_listener: msg_listener.clone(),
         sessions: Arc::new(DashMap::new()),
         inbox,
-        outgoing_msg_channel
+        outgoing_msg_channel,
     };
 
     // TODO get event loop and get this in

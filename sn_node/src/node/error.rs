@@ -38,6 +38,9 @@ pub enum Error {
     /// This should not be possible as the channel is stored in node, and used to process incoming msgs
     #[error("No more Msgs will be received or processed. MsgSender has been dropped. ")]
     MsgChannelDropped,
+    /// This should not be possible as the channel is stored in node, and used to process incoming msgs
+    #[error("No more Msgs will be sent or processed. Comm sender has been dropped. ")]
+    CommChannelDropped,
     /// We shortcircuit and ignore older len prefixes to avoid that
     /// during a split DKG messages are still ongoing post-split
     /// and are sent to the neighbouring section, which causes an AE loop as
