@@ -260,6 +260,7 @@ impl Session {
                             let received = DashSet::new();
                             let _prior = received.insert((src_peer.addr(), response));
                             let _prev = queries.insert(op_id, Arc::new(received));
+                            debug!("op_id added :{op_id:?}")
                         }
                     } else {
                         warn!(

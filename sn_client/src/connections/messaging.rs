@@ -291,7 +291,7 @@ impl Session {
 
         loop {
             debug!(
-                "looping send responses, attempt: #{response_checks} for op_id: {operation_id:?}"
+                "looping send responses, attempt: #{response_checks} for {msg_id:?} op_id: {operation_id:?}"
             );
             if let Some(response) = self
                 .check_query_responses(msg_id, operation_id, elders.clone(), chunk_addr)
@@ -304,10 +304,7 @@ impl Session {
             //stop mad looping
             tokio::time::sleep(Duration::from_millis(50)).await;
 
-            if response_checks > 20 {
-                // if error_response.is_some(){
-                //     return Ok(er)
-                // }
+            if response_checks > 40 {
                 return Err(Error::NoResponse(elders));
             }
             response_checks += 1;
@@ -330,7 +327,7 @@ impl Session {
             let responses = entry.value();
 
             // lets see if we have a positive response...
-            debug!("response so far: {:?}", responses);
+            debug!("response so far to {msg_id:?}: {:?}", responses);
 
             for refmulti in responses.iter() {
                 let (peer_address, response) = refmulti.key().clone();
