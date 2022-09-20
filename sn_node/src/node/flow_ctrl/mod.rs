@@ -165,6 +165,11 @@ impl FlowCtrl {
                     error!("{error:?}");
                     break;
                 }
+
+                if let Err(error) = self.enqueue_new_incoming_msgs().await {
+                    error!("{error:?}");
+                    break;
+                }
             }
 
             self.enqueue_cmds_for_standard_periodic_checks(
