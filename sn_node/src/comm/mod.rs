@@ -304,7 +304,7 @@ impl Comm {
                     // transient connection issue. We don't treat this as a failed recipient, but we sleep a little longer here.
                     // Retries are managed by the peer session, where it will open a new connection.
                     debug!("Transient error when sending to peer {}: {}", peer, error);
-                    log_sleep!(Duration::from_millis(200));
+                    // log_sleep!(Duration::from_millis(200));
                     continue; // moves on to awaiting a new change
                 }
                 SendStatus::MaxRetriesReached => {

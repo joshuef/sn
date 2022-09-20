@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
         .local_addr
         .unwrap_or_else(|| SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)));
 
-    let (comm) = if config.is_first() {
+    let mut comm = if config.is_first() {
         Comm::first_node(
             local_addr,
             config.network_config().clone(),
@@ -109,6 +109,9 @@ async fn main() -> Result<()> {
     // we need that in a thread with its own event loop
     // and we spawn a freash thread just for that
     // with a sender available outside...
+    let _handle = tokio::spawn(async move {
+        comm.run_comm_loop().await
+    });
 
     let _guard = log::init_node_logging(&config)?;
     trace!("Initial node config: {config:?}");
