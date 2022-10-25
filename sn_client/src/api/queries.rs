@@ -104,11 +104,10 @@ impl Client {
                 )
                 .await;
 
-            // In the next attempt, try the next adult, further away.
-            query.adult_index += 1;
-            // There should not be more than a certain amount of adults holding copies of the data. Retry the closest adult again.
-            if query.adult_index >= data_copy_count() {
-                // we dont want to retry beyond data_copy_count adults so
+            // There should not be more than a certain amount of adults holding
+            // copies of the data. Retry the closest adult again.
+            if query.adult_index >= data_copy_count() - 1 {
+                // we don't want to retry beyond data_copy_count Adults
                 return res;
             }
 
@@ -126,6 +125,8 @@ impl Client {
                     }
                 }
 
+                // In the next attempt, try the next adult, further away.
+                query.adult_index += 1;
                 debug!("Sleeping before trying query again: {delay:?} sleep for {query:?}");
                 sleep(delay).await;
             } else {

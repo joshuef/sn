@@ -379,7 +379,10 @@ impl Session {
             }
         }
 
-        Err(Error::NoResponse(elders))
+        Err(Error::NoResponse {
+            msg_id,
+            peers: elders,
+        })
     }
 
     #[instrument(skip_all, level = "debug")]
@@ -626,7 +629,7 @@ impl Session {
                                 break Err(Error::ChoasSendFail)
                             }
                             Err(SendToOneError::Connection(error)) => {
-                                break Err(Error::QuicP2pConnection { peer, error });
+                                break Err(Error::QuicP2pConnection { peer, error, msg_id });
                             }
                             Err(SendToOneError::Send(error @ SendError::ConnectionLost(_))) => {
                                 warn!("Connection lost to {peer:?} (new link?: {force_new_link}): {error}");
@@ -634,7 +637,7 @@ impl Session {
                                 // Unless we were forcing a new link to the peer up front, let's
                                 // retry (only once) to reconnect to this peer and send the msg.
                                 if force_new_link {
-                                    break Err(Error::QuicP2pSend { peer, error });
+                                    break Err(Error::QuicP2pSend { peer, error, msg_id });
                                 } else {
                                     // let's retry once by forcing a new connection to this peer
                                     force_new_link = true;
@@ -646,7 +649,7 @@ impl Session {
                                 }
                             }
                             Err(SendToOneError::Send(error)) => {
-                                break Err(Error::QuicP2pSend { peer, error });
+                                break Err(Error::QuicP2pSend { peer, error, msg_id });
                             }
                         }
                     };

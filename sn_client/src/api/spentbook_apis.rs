@@ -78,7 +78,10 @@ impl Client {
                 );
                 if attempts >= MAX_SPEND_DBC_ATTEMPS {
                     error!("DBC spend request failed after {attempts} attempts");
-                    return Err(Error::DbcSpendRetryAttemptsExceeded(attempts));
+                    return Err(Error::DbcSpendRetryAttemptsExceeded {
+                        attempts,
+                        key_image,
+                    });
                 }
                 let network = self.session.network.read().await;
                 let (proof_chain, _) = network

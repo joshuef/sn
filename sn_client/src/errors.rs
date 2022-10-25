@@ -15,6 +15,7 @@ use sn_interface::{
 };
 
 use bls::PublicKey;
+use sn_dbc::KeyImage;
 use std::io;
 use thiserror::Error;
 use xor_name::XorName;
@@ -111,8 +112,13 @@ pub enum Error {
     #[error("Timeout occurred when trying to verify chunk at xorname address {0} was uploaded")]
     ChunkUploadValidationTimeout(XorName),
     /// Failed to obtain a response from Elders.
-    #[error("Failed to obtain any response from: {0:?}")]
-    NoResponse(Vec<Peer>),
+    #[error("Failed to obtain any response for {msg_id:?} from: {peers:?}")]
+    NoResponse {
+        /// MsgId of the msg sent
+        msg_id: MsgId,
+        /// Peers the msg was sent to
+        peers: Vec<Peer>,
+    },
     /// Timeout when awaiting command ACK from Elders.
     #[error("Timeout when awaiting command ACK from Elders for data address {0}")]
     CmdAckValidationTimeout(XorName),
@@ -138,7 +144,7 @@ pub enum Error {
     CmdError {
         /// The source of an error msg
         source: ErrorMsg,
-        /// MsgId of the cmd
+        /// MsgId of the cmd sent
         msg_id: MsgId,
     },
     /// Errors occurred when serialising or deserialising msgs
@@ -163,6 +169,8 @@ pub enum Error {
         peer: Peer,
         /// The error encountered when attempting to stablish the connection
         error: qp2p::ConnectionError,
+        /// MsgId of the msg that was going to be sent
+        msg_id: MsgId,
     },
     /// QuicP2p Send error.
     #[error("Failed to send a message to node {peer:?}: {error}.")]
@@ -171,6 +179,8 @@ pub enum Error {
         peer: Peer,
         /// The error encountered when attempting to send the message
         error: qp2p::SendError,
+        /// MsgId of the msg attempted to send
+        msg_id: MsgId,
     },
     /// Bincode error
     #[error(transparent)]
@@ -195,8 +205,13 @@ pub enum Error {
     #[error("A signed section authority provider was not found for section key {0:?}")]
     SignedSapNotFound(PublicKey),
     /// Occurs if a DBC spend command eventually fails after a number of retry attempts.
-    #[error("The DBC spend request failed after {0} attempts")]
-    DbcSpendRetryAttemptsExceeded(u8),
+    #[error("The DBC spend request failed after {attempts} attempts for key_image: {key_image:?}")]
+    DbcSpendRetryAttemptsExceeded {
+        /// Number of attemtps made
+        attempts: u8,
+        /// The key_image that was attempted to spend
+        key_image: KeyImage,
+    },
     /// Occurs if a section key is not found when searching the sections DAG.
     #[error("Section key {0:?} was not found in the sections DAG")]
     SectionsDagKeyNotFound(PublicKey),
