@@ -28,7 +28,7 @@ use sn_interface::{
 use backoff::{backoff::Backoff, ExponentialBackoff};
 use bytes::Bytes;
 use futures::future::join_all;
-use qp2p::{Close, ConnectionError, SendError};
+use qp2p::SendError;
 use rand::{rngs::OsRng, seq::SliceRandom};
 use std::{collections::BTreeSet, time::Duration};
 use tokio::sync::mpsc;
@@ -587,128 +587,101 @@ impl Session {
         nodes: Vec<Peer>,
         wire_msg: WireMsg,
         msg_id: MsgId,
-        force_new_link: bool,
+        mut force_new_link: bool,
         resp_tx: mpsc::Sender<MsgResponse>,
     ) -> Result<()> {
+        debug!("---> send msg {msg_id:?} going... will force new?: {force_new_link}");
         let bytes = wire_msg.serialize()?;
 
-        debug!("---> send msg going... will force new?: {force_new_link}");
-        let mut last_error = None;
         // Send message to all Elders concurrently
-        let mut tasks = Vec::default();
+        let tasks = nodes
+            .clone()
+            .into_iter()
+            .map(|peer| {
+                let session = self.clone();
+                let bytes = bytes.clone();
+                let resp_tx_clone = resp_tx.clone();
 
-        let mut successful_sends = 0usize;
+                tokio::spawn(async move {
+                    let mut link = session
+                        .peer_links
+                        .get_or_create_link(&peer, force_new_link)
+                        .await;
 
-        for peer in nodes.clone() {
-            let session = self.clone();
-            let bytes = bytes.clone();
+                    let result = loop {
+                        match link.send_bi(bytes.clone()).await {
+                            Ok(recv_stream) => {
+                                // let's spawn a task for each bi-stream to listen for responses
+                                Self::spawn_recv_stream_listener(
+                                    session.clone(),
+                                    msg_id,
+                                    peer,
+                                    recv_stream,
+                                    resp_tx_clone,
+                                );
+                                break Ok(());
+                            }
+                            #[cfg(features = "chaos")]
+                            Err(SendToOneError::ChaosNoConnection) => {
+                                break Err(Error::ChoasSendFail)
+                            }
+                            Err(SendToOneError::Connection(error)) => {
+                                break Err(Error::QuicP2pConnection { peer, error });
+                            }
+                            Err(SendToOneError::Send(error @ SendError::ConnectionLost(_))) => {
+                                warn!("Connection lost to {peer:?} (new link?: {force_new_link}): {error}");
 
-            let task_handle = tokio::spawn(async move {
-                let session_clone = session.clone();
+                                // Unless we were forcing a new link to the peer up front, let's
+                                // retry (only once) to reconnect to this peer and send the msg.
+                                if force_new_link {
+                                    break Err(Error::QuicP2pSend { peer, error });
+                                } else {
+                                    // let's retry once by forcing a new connection to this peer
+                                    force_new_link = true;
+                                    link = session
+                                        .peer_links
+                                        .get_or_create_link(&peer, force_new_link)
+                                        .await;
+                                    continue;
+                                }
+                            }
+                            Err(SendToOneError::Send(error)) => {
+                                break Err(Error::QuicP2pSend { peer, error });
+                            }
+                        }
+                    };
 
-                let link = session_clone
-                    .peer_links
-                    .get_or_create_link(&peer, force_new_link)
-                    .await;
-
-                let result = match link.send_bi(bytes.clone()).await {
-                    Ok(recv) => Ok(recv),
-                    Err(SendToOneError::Connection(err)) => {
-                        Err(Error::QuicP2pConnection { peer, error: err })
+                    if let Err(err) = &result {
+                        session.peer_links.remove_link_from_peer_links(&peer).await;
+                        warn!("Issue when sending {msg_id:?} to {peer:?}: {err:?}");
                     }
-                    Err(SendToOneError::Send(err)) => Err(Error::QuicP2pSend { peer, error: err }),
-                    #[cfg(features = "chaos")]
-                    Err(SendToOneError::ChaosNoConnection) => Err(Error::ChoasSendFail),
-                };
 
-                (peer, result)
-            });
-
-            tasks.push(task_handle);
-        }
+                    result
+                })
+            })
+            .collect::<Vec<_>>();
 
         // Let's await for all messages to be sent
         let results = join_all(tasks).await;
 
-        for r in results {
-            match r {
-                Ok((peer, send_result)) => match send_result {
-                    Err(Error::QuicP2pSend {
-                        peer,
-                        error:
-                            SendError::ConnectionLost(ConnectionError::Closed(Close::Application {
-                                reason,
-                                error_code,
-                            })),
-                    }) => {
-                        warn!(
-                            "Connection was closed by node {}, reason: {:?}",
-                            peer.name(),
-                            String::from_utf8(reason.to_vec())
-                        );
-                        last_error = Some(Error::QuicP2pSend {
-                            peer,
-                            error: SendError::ConnectionLost(ConnectionError::Closed(
-                                Close::Application { reason, error_code },
-                            )),
-                        });
-                        self.peer_links.remove_link_from_peer_links(&peer).await;
-                    }
-                    Err(Error::QuicP2pSend {
-                        peer,
-                        error: SendError::ConnectionLost(error),
-                    }) => {
-                        warn!("Connection to {} was lost: {:?}", peer.name(), error);
-                        last_error = Some(Error::QuicP2pSend {
-                            peer,
-                            error: SendError::ConnectionLost(error),
-                        });
-
-                        self.peer_links.remove_link_from_peer_links(&peer).await;
-                    }
-                    Err(error) => {
-                        let peer_name = peer.name();
-                        warn!(
-                            "Issue during {:?} send to {}: {:?}",
-                            msg_id, peer_name, error
-                        );
-                        last_error = Some(error);
-                        if let Some(peer) = self.peer_links.get_peer_by_name(&peer_name).await {
-                            self.peer_links.remove_link_from_peer_links(&peer).await;
-                        }
-                    }
-                    Ok(recv_stream) => {
-                        successful_sends += 1;
-                        // let's spawn a task for each bi-stream to listen for responses
-                        Self::spawn_recv_stream_listener(
-                            self.clone(),
-                            msg_id,
-                            peer,
-                            recv_stream,
-                            resp_tx.clone(),
-                        );
-                    }
-                },
-                Err(join_error) => {
-                    warn!("Tokio join error as we send: {:?}", join_error)
-                }
-            }
-        }
-
-        let failures = nodes.len() - successful_sends;
+        let nodes_len = nodes.len();
+        let mut last_error = None;
+        let mut failures = nodes_len;
+        results.into_iter().for_each(|result| match result {
+            Ok(Err(error)) => last_error = Some(error),
+            Ok(Ok(())) => failures -= 1,
+            Err(join_error) => warn!("Tokio join error as we send: {join_error:?}"),
+        });
 
         if failures > 0 {
             trace!(
-                "Sending the message ({:?}) from {} to {}/{} of the nodes failed: {:?}",
-                msg_id,
+                "Sending the message ({msg_id:?}) from {} to {failures}/{nodes_len} of the \
+                nodes failed: {nodes:?}",
                 self.endpoint.public_addr(),
-                failures,
-                nodes.len(),
-                nodes,
             );
 
             if let Some(error) = last_error {
-                warn!("The relevant error is: {error}");
+                warn!("The last error is: {error}");
                 return Err(error);
             }
         }

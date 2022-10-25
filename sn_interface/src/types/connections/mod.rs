@@ -137,6 +137,7 @@ impl PeerLinks {
         let links = self.links.read().await;
         links.get(id).cloned()
     }
+
     pub async fn get_peer_by_name(&self, name: &XorName) -> Option<Peer> {
         let links = self.links.read().await;
 
