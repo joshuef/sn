@@ -16,7 +16,7 @@ use tokio::time::sleep;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let client = Client::builder().build().await?;
+    let mut client = Client::builder().build().await?;
 
     let pk = client.public_key();
     println!("Client Public Key: {}", pk);

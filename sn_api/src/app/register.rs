@@ -30,7 +30,7 @@ impl Safe {
     // === Register data operations ===
     /// Create a Register on the network
     pub async fn register_create(
-        &self,
+        &mut self,
         name: Option<XorName>,
         tag: u64,
         content_type: ContentType,
@@ -51,7 +51,7 @@ impl Safe {
         }
 
         // The Register's owner will be the client's public key
-        let client = self.get_safe_client()?;
+        let mut client = self.get_safe_client()?;
         let owner = User::Key(client.public_key());
 
         // Store the Register on the network
@@ -71,7 +71,7 @@ impl Safe {
     }
 
     /// Read value from a Register on the network
-    pub async fn register_read(&self, url: &str) -> Result<BTreeSet<(EntryHash, Entry)>> {
+    pub async fn register_read(&mut self, url: &str) -> Result<BTreeSet<(EntryHash, Entry)>> {
         debug!("Getting Register data from: {:?}", url);
         let safeurl = self.parse_and_resolve_url(url).await?;
 
@@ -79,7 +79,7 @@ impl Safe {
     }
 
     /// Read value from a Register on the network by its hash
-    pub async fn register_read_entry(&self, url: &str, hash: EntryHash) -> Result<Entry> {
+    pub async fn register_read_entry(&mut self, url: &str, hash: EntryHash) -> Result<Entry> {
         debug!("Getting Register data from: {:?}", url);
         let safeurl = self.parse_and_resolve_url(url).await?;
 
@@ -90,7 +90,7 @@ impl Safe {
     /// Supports version hashes:
     /// e.g. safe://mysafeurl?v=ce56a3504c8f27bfeb13bdf9051c2e91409230ea
     pub(crate) async fn register_fetch_entries(
-        &self,
+        &mut self,
         url: &SafeUrl,
     ) -> Result<BTreeSet<(EntryHash, Entry)>> {
         debug!("Fetching Register entries from {}", url);
@@ -105,7 +105,7 @@ impl Safe {
             None => {
                 debug!("No version so take latest entry from Register at: {}", url);
                 let address = self.get_register_address(url)?;
-                let client = self.get_safe_client()?;
+                let mut client = self.get_safe_client()?;
                 match client.read_register(address).await {
                     Ok(entry) => Ok(entry),
                     Err(ClientError::NetworkDataError(SafeNdError::NoSuchEntry(_))) => Err(
@@ -145,14 +145,14 @@ impl Safe {
 
     /// Fetch a Register from a `SafeUrl` without performing any type of URL resolution
     pub(crate) async fn register_fetch_entry(
-        &self,
+        &mut self,
         url: &SafeUrl,
         hash: EntryHash,
     ) -> Result<Entry> {
         // TODO: allow to specify the hash with the SafeUrl as well: safeurl.content_hash(),
         // e.g. safe://mysafeurl#ce56a3504c8f27bfeb13bdf9051c2e91409230ea
         let address = self.get_register_address(url)?;
-        let client = self.get_safe_client()?;
+        let mut client = self.get_safe_client()?;
         client
             .get_register_entry(address, hash)
             .await
@@ -175,7 +175,7 @@ impl Safe {
 
     /// Write value to a Register on the network
     pub async fn register_write(
-        &self,
+        &mut self,
         url: &str,
         entry: Entry,
         parents: BTreeSet<EntryHash>,
@@ -186,7 +186,7 @@ impl Safe {
             return Ok(EntryHash(rand::thread_rng().gen::<[u8; 32]>()));
         }
 
-        let client = self.get_safe_client()?;
+        let mut client = self.get_safe_client()?;
         let (entry_hash, op_batch) = match client
             .write_to_local_register(address, entry, parents)
             .await
@@ -245,7 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_create() -> Result<()> {
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let xorurl = safe.register_create(None, 25_000, ContentType::Raw).await?;
 
@@ -267,7 +267,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_owner_permissions() -> Result<()> {
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let xorname = xor_name::rand::random();
 
@@ -280,7 +280,7 @@ mod tests {
         assert!(received_data.is_empty());
 
         // now we check that trying to write to the same Registers with different owner shall fail
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         match safe
             .register_write(&xorurl, b"dummy-pub-data".to_vec(), Default::default())

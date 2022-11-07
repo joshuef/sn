@@ -20,7 +20,7 @@ use walkdir::{DirEntry, WalkDir};
 const MAX_RECURSIVE_DEPTH: usize = 10_000;
 
 // Upload a file to the Network
-pub(crate) async fn upload_file_to_net(safe: &Safe, path: &Path) -> Result<XorUrl> {
+pub(crate) async fn upload_file_to_net(safe: &mut Safe, path: &Path) -> Result<XorUrl> {
     let data = fs::read(path).map_err(|err| {
         Error::InvalidInput(format!("Failed to read file from local location: {}", err))
     })?;
@@ -42,7 +42,7 @@ pub(crate) async fn upload_file_to_net(safe: &Safe, path: &Path) -> Result<XorUr
     if let Err(Error::ClientError(ClientError::NotEnoughChunksRetrieved { .. })) = result {
         // Let's obtain the xorurl with using dry-run mode.
         // Use a dry runner only for this next operation
-        let dry_runner = Safe::dry_runner(Some(safe.xorurl_base));
+        let mut dry_runner = Safe::dry_runner(Some(safe.xorurl_base));
         let xorurl = dry_runner.store_bytes(data, mime_type_for_xorurl).await?;
 
         Err(Error::ContentUploadVerificationFailed(xorurl))
@@ -60,7 +60,7 @@ pub(crate) fn normalise_path_separator(from: &str) -> String {
 // and if not requested as a `dry_run` upload the files to the network filling up
 // the list of files with their corresponding XOR-URLs
 pub(crate) async fn file_system_dir_walk(
-    safe: &Safe,
+    safe: &mut Safe,
     location: &Path,
     recursive: bool,
     follow_links: bool,
@@ -170,7 +170,7 @@ fn valid_depth(entry: &DirEntry, max_depth: usize) -> bool {
 // and if not as a `dry_run` upload the file to the network and putting
 // the obtained XOR-URL in the single file list returned
 pub(crate) async fn file_system_single_file(
-    safe: &Safe,
+    safe: &mut Safe,
     location: &Path,
 ) -> Result<ProcessedFiles> {
     info!("Reading file {}", location.display());

@@ -60,7 +60,11 @@ pub enum NrsSubCommands {
     },
 }
 
-pub async fn nrs_commander(cmd: NrsSubCommands, output_fmt: OutputFmt, safe: &Safe) -> Result<()> {
+pub async fn nrs_commander(
+    cmd: NrsSubCommands,
+    output_fmt: OutputFmt,
+    safe: &mut Safe,
+) -> Result<()> {
     match cmd {
         NrsSubCommands::Register { name, link } => {
             run_register_subcommand(name, link, safe, output_fmt).await
@@ -78,7 +82,7 @@ pub async fn nrs_commander(cmd: NrsSubCommands, output_fmt: OutputFmt, safe: &Sa
 async fn run_register_subcommand(
     name: String,
     link: Option<String>,
-    safe: &Safe,
+    safe: &mut Safe,
     output_fmt: OutputFmt,
 ) -> Result<()> {
     match safe.nrs_create(&name).await {
@@ -136,7 +140,7 @@ async fn run_add_subcommand(
     link: Option<String>,
     register_top_name: bool,
     default: bool,
-    safe: &Safe,
+    safe: &mut Safe,
     output_fmt: OutputFmt,
 ) -> Result<()> {
     let link = get_from_arg_or_stdin(link, Some("...awaiting link URL from stdin"))?;
@@ -186,7 +190,7 @@ async fn run_add_subcommand(
     Ok(())
 }
 
-async fn run_remove_subcommand(name: String, safe: &Safe, output_fmt: OutputFmt) -> Result<()> {
+async fn run_remove_subcommand(name: String, safe: &mut Safe, output_fmt: OutputFmt) -> Result<()> {
     match safe.nrs_remove(&name).await {
         Ok(url) => {
             let version = url
@@ -226,7 +230,7 @@ async fn run_remove_subcommand(name: String, safe: &Safe, output_fmt: OutputFmt)
 
 async fn associate_url_with_public_name(
     public_name: &str,
-    safe: &Safe,
+    safe: &mut Safe,
     url: &SafeUrl,
 ) -> Result<SafeUrl> {
     match safe.nrs_associate(public_name, url).await {
@@ -249,7 +253,7 @@ async fn associate_url_with_public_name(
 
 async fn add_public_name_for_url(
     public_name: &str,
-    safe: &Safe,
+    safe: &mut Safe,
     url: &SafeUrl,
 ) -> Result<(SafeUrl, bool)> {
     match safe.nrs_add(public_name, url).await {

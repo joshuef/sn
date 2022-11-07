@@ -18,7 +18,10 @@ use log::{debug, warn};
 use std::collections::BTreeSet;
 
 impl Safe {
-    pub(crate) async fn resolve_nrs_map_container(&self, input_url: SafeUrl) -> Result<SafeData> {
+    pub(crate) async fn resolve_nrs_map_container(
+        &mut self,
+        input_url: SafeUrl,
+    ) -> Result<SafeData> {
         let (target_url, nrs_map) = self
             .nrs_get(input_url.public_name(), input_url.content_version())
             .await
@@ -55,7 +58,7 @@ impl Safe {
     }
 
     pub(crate) async fn resolve_multimap(
-        &self,
+        &mut self,
         input_url: SafeUrl,
         retrieve_data: bool,
     ) -> Result<SafeData> {
@@ -86,7 +89,7 @@ impl Safe {
     }
 
     pub(crate) async fn resolve_raw(
-        &self,
+        &mut self,
         input_url: SafeUrl,
         metadata: Option<FileInfo>,
         retrieve_data: bool,
@@ -148,7 +151,7 @@ impl Safe {
     }
 
     pub(crate) async fn resolve_mediatype(
-        &self,
+        &mut self,
         input_url: SafeUrl,
         metadata: Option<FileInfo>,
         retrieve_data: bool,
@@ -176,7 +179,7 @@ impl Safe {
     }
 
     pub(crate) async fn resolve_file_container(
-        &self,
+        &mut self,
         mut input_url: SafeUrl,
         resolve_path: bool,
     ) -> Result<SafeData> {
@@ -250,7 +253,7 @@ impl Safe {
     }
 
     async fn retrieve_data(
-        &self,
+        &mut self,
         input_url: &SafeUrl,
         retrieve_data: bool,
         media_type: Option<String>,

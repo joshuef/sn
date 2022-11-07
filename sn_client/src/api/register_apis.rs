@@ -41,7 +41,7 @@ impl Client {
     /// Incrementing the WAL index as successful writes are sent out. Stops at the first error.
     /// Starts publishing from the index when called again with the same WAL.
     #[instrument(skip(self), level = "debug")]
-    pub async fn publish_register_ops(&self, wal: RegisterWriteAheadLog) -> Result<(), Error> {
+    pub async fn publish_register_ops(&mut self, wal: RegisterWriteAheadLog) -> Result<(), Error> {
         for cmd in &wal {
             self.send_cmd(cmd.clone()).await?;
         }
@@ -89,7 +89,7 @@ impl Client {
     /// network until the WAL is published with `publish_register_ops`
     #[instrument(skip(self, children), level = "debug")]
     pub async fn write_to_local_register(
-        &self,
+        &mut self,
         address: Address,
         entry: Entry,
         children: BTreeSet<EntryHash>,
@@ -130,7 +130,7 @@ impl Client {
 
     /// Get the entire Register from the Network
     #[instrument(skip(self), level = "debug")]
-    pub async fn get_register(&self, address: Address) -> Result<Register, Error> {
+    pub async fn get_register(&mut self, address: Address) -> Result<Register, Error> {
         // Let's fetch the Register from the network
         let query = DataQueryVariant::Register(RegisterQuery::Get(address));
         let query_result = self.send_query(query.clone()).await?;
@@ -148,7 +148,7 @@ impl Client {
     /// Get the latest entry (or entries if branching)
     #[instrument(skip(self), level = "debug")]
     pub async fn read_register(
-        &self,
+        &mut self,
         address: Address,
     ) -> Result<BTreeSet<(EntryHash, Entry)>, Error> {
         let query = DataQueryVariant::Register(RegisterQuery::Read(address));
@@ -165,7 +165,7 @@ impl Client {
     /// Get an entry from a Register on the Network by its hash
     #[instrument(skip(self), level = "debug")]
     pub async fn get_register_entry(
-        &self,
+        &mut self,
         address: Address,
         hash: EntryHash,
     ) -> Result<Entry, Error> {
@@ -188,7 +188,7 @@ impl Client {
 
     /// Get the owner of a Register.
     #[instrument(skip(self), level = "debug")]
-    pub async fn get_register_owner(&self, address: Address) -> Result<User, Error> {
+    pub async fn get_register_owner(&mut self, address: Address) -> Result<User, Error> {
         let query = DataQueryVariant::Register(RegisterQuery::GetOwner(address));
         let query_result = self.send_query(query.clone()).await?;
         match query_result.response {
@@ -209,7 +209,7 @@ impl Client {
     /// Get the set of Permissions in a Register for a specific user.
     #[instrument(skip(self), level = "debug")]
     pub async fn get_register_permissions_for_user(
-        &self,
+        &mut self,
         address: Address,
         user: User,
     ) -> Result<Permissions, Error> {
@@ -228,7 +228,7 @@ impl Client {
 
     /// Get the Policy of a Register.
     #[instrument(skip(self), level = "debug")]
-    pub async fn get_register_policy(&self, address: Address) -> Result<Policy, Error> {
+    pub async fn get_register_policy(&mut self, address: Address) -> Result<Policy, Error> {
         let query = DataQueryVariant::Register(RegisterQuery::GetPolicy(address));
         let query_result = self.send_query(query.clone()).await?;
         match query_result.response {
@@ -296,7 +296,7 @@ mod tests {
         init_logger();
         let _outer_span = tracing::info_span!("test__register_batching").entered();
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
         let name = xor_name::rand::random();
         let tag = 15000;
         let owner = User::Key(client.public_key());
@@ -344,7 +344,7 @@ mod tests {
         let delay = Duration::from_secs(network_assert_delay);
         debug!("Running network asserts with delay of {:?}", delay);
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
         let name = xor_name::rand::random();
         let tag = 15000;
         let owner = User::Key(client.public_key());
@@ -368,7 +368,7 @@ mod tests {
         init_logger();
         let _outer_span = tracing::info_span!("test__measure_upload_times").entered();
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         let name = xor_name::rand::random();
         let tag = 10;
@@ -405,7 +405,7 @@ mod tests {
         init_logger();
         let _outer_span = tracing::info_span!("test__register_basics").entered();
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
         let name = xor_name::rand::random();
         let tag = 15000;
         let owner = User::Key(client.public_key());
@@ -442,7 +442,7 @@ mod tests {
         init_logger();
         let _outer_span = tracing::info_span!("test__register_permissions").entered();
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         let name = xor_name::rand::random();
         let tag = 15000;
@@ -493,7 +493,7 @@ mod tests {
         let start_span =
             tracing::info_span!("test__register_write_without_publish_start").entered();
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         let name = xor_name::rand::random();
         let tag = 10;
@@ -549,7 +549,7 @@ mod tests {
         init_logger();
         let start_span = tracing::info_span!("test__register_write_start").entered();
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         let name = xor_name::rand::random();
         let tag = 10;
@@ -638,7 +638,7 @@ mod tests {
         init_logger();
         let _outer_span = tracing::info_span!("test__register_owner").entered();
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         let name = xor_name::rand::random();
         let tag = 10;
@@ -660,7 +660,7 @@ mod tests {
     async fn ae_checks_register_test() -> Result<()> {
         init_logger();
         let _outer_span = tracing::info_span!("ae_checks_register_test").entered();
-        let client = create_test_client()
+        let mut client = create_test_client()
             .await
             .context("test client creation failed")?;
 

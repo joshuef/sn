@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
     let file_path = create_tmp_file()?;
 
     // The Safe instance is what will give us access to the network API.
-    let safe = Safe::connected(None, None, None, None).await?;
+    let mut safe = Safe::connected(None, None, None, None).await?;
 
     // We can now upload the file to the network, using the following information
     let dst = None; // root path at destination container

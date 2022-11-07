@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     println!("Fetching file from Safe with URL: {}", url);
 
     // The Safe instance is what will give us access to the network API.
-    let safe = Safe::connected(None, None, None, None).await?;
+    let mut safe = Safe::connected(None, None, None, None).await?;
 
     println!("Connected to Safe!");
 

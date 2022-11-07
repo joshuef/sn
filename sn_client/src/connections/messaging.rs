@@ -6,23 +6,24 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::{MsgResponse, QueryResult, Session};
-
+use super::{QueryResult, Session};
 use crate::{Error, Result};
-
+use async_recursion::async_recursion;
+use itertools::Itertools;
+use qp2p::UsrMsgBytes;
+use sn_interface::{
+    messaging::{
+        data::{ClientMsg, DataQuery, DataQueryVariant, QueryResponse},
+        system::{AntiEntropyKind, NodeMsg},
+        ClientAuth, Dst, MsgId, MsgKind, MsgType, WireMsg,
+    },
+    network_knowledge::{supermajority, SectionTreeUpdate},
+    types::{log_markers::LogMarker, ChunkAddress, Peer},
+};
 #[cfg(feature = "traceroute")]
 use sn_interface::{
     messaging::{Entity, Traceroute},
     types::PublicKey,
-};
-
-use sn_interface::{
-    messaging::{
-        data::{DataQuery, DataQueryVariant, QueryResponse},
-        ClientAuth, Dst, MsgId, MsgKind, WireMsg,
-    },
-    network_knowledge::supermajority,
-    types::{ChunkAddress, Peer},
 };
 
 use backoff::{backoff::Backoff, ExponentialBackoff};
@@ -30,7 +31,7 @@ use bytes::Bytes;
 use futures::future::join_all;
 use rand::{rngs::OsRng, seq::SliceRandom};
 use std::{collections::BTreeSet, time::Duration};
-use tokio::sync::mpsc;
+
 use tracing::{debug, error, trace, warn};
 use xor_name::XorName;
 
@@ -40,6 +41,9 @@ pub(crate) const NUM_OF_ELDERS_SUBSET_FOR_QUERIES: usize = 3;
 // Number of bootstrap nodes to attempt to contact per batch (if provided by the node_config)
 pub(crate) const NODES_TO_CONTACT_PER_STARTUP_BATCH: usize = 3;
 
+// Duration of wait for the node to have chance to pickup network knowledge at the beginning
+const INITIAL_WAIT: u64 = 1;
+
 impl Session {
     #[instrument(
         skip(self, auth, payload, client_pk),
@@ -47,7 +51,7 @@ impl Session {
         name = "session send cmd"
     )]
     pub(crate) async fn send_cmd(
-        &self,
+        &mut self,
         dst_address: XorName,
         auth: ClientAuth,
         payload: Bytes,
@@ -82,20 +86,15 @@ impl Session {
         // Don't immediately fail if sending to one elder fails. This could prevent further sends
         // and further responses coming in...
         // Failing directly here could cause us to miss a send success
-        let (resp_tx, resp_rx) = mpsc::channel(elders_len);
         let send_msg_res = self
-            .send_msg(elders.clone(), wire_msg, msg_id, force_new_link, resp_tx)
-            .await;
+            .send_many_msgs_and_await_responses(elders.clone(), wire_msg, msg_id, force_new_link)
+            .await?;
         trace!("Cmd msg {:?} sent", msg_id);
-
-        if let Err(err) = send_msg_res {
-            trace!("Error when sending cmd msg out: {err:?}");
-        }
 
         // We are not wait for the receive of majority of cmd Acks.
         // This could be further strict to wait for ALL the Acks get received.
         // The period is expected to have AE completed, hence no extra wait is required.
-        self.we_have_sufficient_acks_for_cmd(msg_id, elders.clone(), resp_rx)
+        self.we_have_sufficient_acks_for_cmd(msg_id, elders.clone(), send_msg_res)
             .await
     }
 
@@ -105,52 +104,64 @@ impl Session {
         &self,
         msg_id: MsgId,
         elders: Vec<Peer>,
-        mut resp_rx: mpsc::Receiver<MsgResponse>,
+        responses: Vec<(Peer, MsgType)>, // mut resp_rx: mpsc::Receiver<MsgResponse>,
     ) -> Result<()> {
         debug!("----> init of check for acks for {:?}", msg_id);
         let expected_acks = elders.len();
         let mut received_acks = BTreeSet::default();
         let mut received_errors = BTreeSet::default();
 
-        while let Some(msg_resp) = resp_rx.recv().await {
-            debug!("Handling msg_resp sent to ack wait channel: {msg_resp:?}");
-            let (src, result) = match msg_resp {
-                MsgResponse::CmdResponse(src, response) => (src, response.result().clone()),
-                MsgResponse::QueryResponse(src, resp) => {
-                    debug!("Ignoring unexpected query response received from {src:?} when awaiting a CmdAck: {resp:?}");
-                    continue;
-                }
-            };
-            match result {
-                Ok(()) => {
-                    let preexisting = !received_acks.insert(src) || received_errors.contains(&src);
-                    debug!(
-                        "ACK from {src:?} read from set for msg_id {msg_id:?} - preexisting??: {preexisting:?}",
-                    );
+        for (peer, msg_response) in responses {
+            let src = peer.addr();
+            match msg_response {
+                MsgType::Client {
+                    msg_id,
+                    auth: _,
+                    dst: _,
+                    msg:
+                        ClientMsg::CmdResponse {
+                            response,
+                            correlation_id: _,
+                        },
+                } => {
+                    match response.result() {
+                        Ok(()) => {
+                            debug!("got an OK result in the msg");
+                            let preexisting =
+                                !received_acks.insert(src) || received_errors.contains(&src);
+                            debug!(
+                                "ACK from {src:?} read from set for msg_id {msg_id:?} - preexisting??: {preexisting:?}",
+                            );
 
-                    if received_acks.len() >= expected_acks {
-                        trace!("Good! We've at or above {expected_acks} expected_acks");
-                        return Ok(());
+                            if received_acks.len() >= expected_acks {
+                                trace!("Good! We've at or above {expected_acks} expected_acks");
+                                return Ok(());
+                            }
+                        }
+                        Err(error) => {
+                            let _ = received_errors.insert(peer.addr());
+                            error!(
+                                "{msg_id:?} received error {error:?} from {src:?}, so far {} respones and {} of them are errors",
+                                received_acks.len() + received_errors.len(), received_errors.len()
+                            );
+
+                            // exit if too many errors:
+                            if received_errors.len() >= expected_acks {
+                                error!(
+                                    "Received majority of error response for cmd {:?}: {:?}",
+                                    msg_id, error
+                                );
+                                return Err(Error::CmdError {
+                                    source: error.clone(),
+                                    msg_id,
+                                });
+                            }
+                        }
                     }
                 }
-                Err(error) => {
-                    let _ = received_errors.insert(src);
-                    error!(
-                        "received error {:?} of cmd {:?} from {:?}, so far {} respones and {} of them are errors",
-                        error, msg_id, src, received_acks.len() + received_errors.len(), received_errors.len()
-                    );
-
-                    // exit if too many errors:
-                    if received_errors.len() >= expected_acks {
-                        error!(
-                            "Received majority of error response for cmd {:?}: {:?}",
-                            msg_id, error
-                        );
-                        return Err(Error::CmdError {
-                            source: error,
-                            msg_id,
-                        });
-                    }
+                _ => {
+                    // TODO: handle AE here...
+                    warn!("{msg_id:?} Unexpected response to Cmd. Ignoring: {msg_response:?} from {peer:?}");
                 }
             }
         }
@@ -189,7 +200,7 @@ impl Session {
     #[allow(clippy::too_many_arguments)]
     /// Send a `ClientMsg` to the network awaiting for the response.
     pub(crate) async fn send_query(
-        &self,
+        &mut self,
         query: DataQuery,
         auth: ClientAuth,
         payload: Bytes,
@@ -237,14 +248,9 @@ impl Session {
         #[cfg(feature = "traceroute")]
         wire_msg.append_trace(&mut Traceroute(vec![Entity::Client(client_pk)]));
 
-        let (resp_tx, resp_rx) = mpsc::channel(elders_len);
-        let send_response = self
-            .send_msg(elders.clone(), wire_msg, msg_id, force_new_link, resp_tx)
-            .await;
-
-        if send_response.is_err() {
-            trace!("Error when sending query msg out: {send_response:?}");
-        }
+        let send_responses = self
+            .send_many_msgs_and_await_responses(elders.clone(), wire_msg, msg_id, force_new_link)
+            .await?;
 
         // TODO:
         // We are now simply accepting the very first valid response we receive,
@@ -256,112 +262,123 @@ impl Session {
         // so we don't need more than one valid response to prevent from accepting invalid responses
         // from byzantine nodes, however for mutable data (non-Chunk responses) we will
         // have to review the approach.
-        self.check_query_responses(msg_id, elders.clone(), chunk_addr, resp_rx)
+        self.check_query_responses(send_responses, msg_id, elders.clone(), chunk_addr)
             .await
     }
 
     async fn check_query_responses(
         &self,
+        responses: Vec<(Peer, MsgType)>,
         msg_id: MsgId,
         elders: Vec<Peer>,
         chunk_addr: Option<ChunkAddress>,
-        mut resp_rx: mpsc::Receiver<MsgResponse>,
     ) -> Result<QueryResult> {
         let mut discarded_responses: usize = 0;
         let mut error_response = None;
         let mut valid_response = None;
         let elders_len = elders.len();
 
-        while let Some(msg_resp) = resp_rx.recv().await {
-            let (peer_address, response) = match msg_resp {
-                MsgResponse::QueryResponse(src, resp) => (src, resp),
-                MsgResponse::CmdResponse(ack_src, _error) => {
-                    debug!("Ignoring unexpected CmdAck response received from {ack_src:?} when awaiting a QueryResponse");
-                    continue;
-                }
-            };
+        for (peer, msg) in responses {
+            let peer_address = peer.addr();
+            match msg {
+                MsgType::Client {
+                    msg_id,
+                    auth: _,
+                    dst: _,
+                    msg:
+                        ClientMsg::QueryResponse {
+                            response,
+                            correlation_id: _,
+                        },
+                } => {
+                    match response {
+                        QueryResponse::GetChunk(Ok(chunk)) => {
+                            if let Some(chunk_addr) = chunk_addr {
+                                // We are dealing with Chunk query responses, thus we validate its hash
+                                // matches its xorname, if so, we don't need to await for more responses
+                                debug!("Chunk QueryResponse received is: {:#?}", chunk);
 
-            // lets see if we have a positive response...
-            debug!("response to {msg_id:?}: {:?}", response);
-
-            match *response {
-                QueryResponse::GetChunk(Ok(chunk)) => {
-                    if let Some(chunk_addr) = chunk_addr {
-                        // We are dealing with Chunk query responses, thus we validate its hash
-                        // matches its xorname, if so, we don't need to await for more responses
-                        debug!("Chunk QueryResponse received is: {:#?}", chunk);
-
-                        if chunk_addr.name() == chunk.name() {
-                            trace!("Valid Chunk received for {:?}", msg_id);
-                            valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
-                            break;
-                        } else {
-                            // the Chunk content doesn't match its XorName,
-                            // this is suspicious and it could be a byzantine node
-                            warn!("We received an invalid Chunk response from one of the nodes");
+                                if chunk_addr.name() == chunk.name() {
+                                    trace!("Valid Chunk received for {:?}", msg_id);
+                                    valid_response = Some(QueryResponse::GetChunk(Ok(chunk)));
+                                    break;
+                                } else {
+                                    // the Chunk content doesn't match its XorName,
+                                    // this is suspicious and it could be a byzantine node
+                                    warn!("We received an invalid Chunk response from one of the nodes");
+                                    discarded_responses += 1;
+                                }
+                            }
+                        }
+                        QueryResponse::GetRegister(Err(_))
+                        | QueryResponse::ReadRegister(Err(_))
+                        | QueryResponse::GetRegisterPolicy(Err(_))
+                        | QueryResponse::GetRegisterOwner(Err(_))
+                        | QueryResponse::GetRegisterUserPermissions(Err(_))
+                        | QueryResponse::GetChunk(Err(_)) => {
+                            debug!(
+                                "QueryResponse error #{discarded_responses} for {msg_id:?} received \
+                                (but may be overridden by a non-error response \
+                                from another elder): {:#?}",
+                                &response
+                            );
+                            error_response = Some(response);
                             discarded_responses += 1;
                         }
-                    }
-                }
-                QueryResponse::GetRegister(Err(_))
-                | QueryResponse::ReadRegister(Err(_))
-                | QueryResponse::GetRegisterPolicy(Err(_))
-                | QueryResponse::GetRegisterOwner(Err(_))
-                | QueryResponse::GetRegisterUserPermissions(Err(_))
-                | QueryResponse::GetChunk(Err(_)) => {
-                    debug!(
-                        "QueryResponse error #{discarded_responses} for {msg_id:?} received \
-                        from {peer_address:?} (but may be overridden by a non-error response \
-                        from another elder): {:#?}",
-                        &response
-                    );
-                    error_response = Some(*response);
-                    discarded_responses += 1;
-                }
-                QueryResponse::GetRegister(Ok(ref register)) => {
-                    debug!("okay got register from {peer_address:?}");
-                    // TODO: properly merge all registers
-                    if let Some(QueryResponse::GetRegister(Ok(prior_response))) = &valid_response {
-                        if register.size() > prior_response.size() {
-                            debug!("longer register");
-                            // keep this new register
-                            valid_response = Some(*response);
+
+                        QueryResponse::GetRegister(Ok(ref register)) => {
+                            debug!("okay got register from {peer_address:?}");
+                            // TODO: properly merge all registers
+                            if let Some(QueryResponse::GetRegister(Ok(prior_response))) =
+                                &valid_response
+                            {
+                                if register.size() > prior_response.size() {
+                                    debug!("longer register");
+                                    // keep this new register
+                                    valid_response = Some(response);
+                                }
+                            } else {
+                                valid_response = Some(response);
+                            }
                         }
-                    } else {
-                        valid_response = Some(*response);
-                    }
-                }
-                QueryResponse::ReadRegister(Ok(ref register_set)) => {
-                    debug!("okay _read_ register from {peer_address:?}");
-                    // TODO: properly merge all registers
-                    if let Some(QueryResponse::ReadRegister(Ok(prior_response))) = &valid_response {
-                        if register_set.len() > prior_response.len() {
-                            debug!("longer register retrieved");
-                            // keep this new register
-                            valid_response = Some(*response);
+                        QueryResponse::ReadRegister(Ok(ref register_set)) => {
+                            debug!("okay _read_ register from {peer_address:?}");
+                            // TODO: properly merge all registers
+                            if let Some(QueryResponse::ReadRegister(Ok(prior_response))) =
+                                &valid_response
+                            {
+                                if register_set.len() > prior_response.len() {
+                                    debug!("longer register retrieved");
+                                    // keep this new register
+                                    valid_response = Some(response);
+                                }
+                            } else {
+                                valid_response = Some(response);
+                            }
                         }
-                    } else {
-                        valid_response = Some(*response);
-                    }
-                }
-                QueryResponse::SpentProofShares(Ok(ref spentproof_set)) => {
-                    debug!("okay _read_ spentproofs from {peer_address:?}");
-                    // TODO: properly merge all registers
-                    if let Some(QueryResponse::SpentProofShares(Ok(prior_response))) =
-                        &valid_response
-                    {
-                        if spentproof_set.len() > prior_response.len() {
-                            debug!("longer spentproof response retrieved");
-                            // keep this new register
-                            valid_response = Some(*response);
+                        QueryResponse::SpentProofShares(Ok(ref spentproof_set)) => {
+                            debug!("okay _read_ spentproofs from {peer_address:?}");
+                            // TODO: properly merge all registers
+                            if let Some(QueryResponse::SpentProofShares(Ok(prior_response))) =
+                                &valid_response
+                            {
+                                if spentproof_set.len() > prior_response.len() {
+                                    // debug!("longer spentproof response retrieved");
+                                    // keep this new register
+                                    valid_response = Some(response);
+                                }
+                            } else {
+                                valid_response = Some(response);
+                            }
                         }
-                    } else {
-                        valid_response = Some(*response);
+                        response => {
+                            // we got a valid response
+                            valid_response = Some(response)
+                        }
                     }
                 }
-                response => {
-                    // we got a valid response
-                    valid_response = Some(response)
+                _ => {
+                    warn!("{msg_id:?} Non query response message returned {msg:?}. Ignoring it.");
                 }
             }
         }
@@ -387,7 +404,7 @@ impl Session {
 
     #[instrument(skip_all, level = "debug")]
     pub(crate) async fn make_contact_with_nodes(
-        &self,
+        &mut self,
         nodes: Vec<Peer>,
         section_pk: bls::PublicKey,
         dst_address: XorName,
@@ -418,8 +435,8 @@ impl Session {
             .take(NODES_TO_CONTACT_PER_STARTUP_BATCH)
             .collect();
 
-        let (resp_tx, _rx) = mpsc::channel(nodes.len());
-        self.send_msg(initial_contacts, wire_msg.clone(), msg_id, false, resp_tx)
+        let _responses = self
+            .send_many_msgs_and_await_responses(initial_contacts, wire_msg.clone(), msg_id, false)
             .await?;
 
         let mut knowledge_checks = 0;
@@ -436,6 +453,9 @@ impl Session {
 
         // this seems needed for custom settings to take effect
         backoff.reset();
+
+        // wait here to give a chance for AE responses to come in and be parsed
+        tokio::time::sleep(Duration::from_secs(INITIAL_WAIT)).await;
 
         info!("Client startup... awaiting some network knowledge");
 
@@ -484,8 +504,13 @@ impl Session {
                 };
 
                 trace!("Sending out another batch of initial contact msgs to new nodes");
-                let (resp_tx, _rx) = mpsc::channel(next_contacts.len());
-                self.send_msg(next_contacts, wire_msg.clone(), msg_id, false, resp_tx)
+                let _respones = self
+                    .send_many_msgs_and_await_responses(
+                        next_contacts,
+                        wire_msg.clone(),
+                        msg_id,
+                        false,
+                    )
                     .await?;
 
                 let next_wait = backoff.next_backoff();
@@ -582,65 +607,112 @@ impl Session {
     }
 
     #[instrument(skip_all, level = "trace")]
-    pub(super) async fn send_msg(
-        &self,
+    /// All operations to the network return a response, either an ACK or a QueryResult.
+    /// This sends a message to one node only
+    pub(super) async fn send_msg_and_await_response(
+        &mut self,
+        peer: Peer,
+        peer_index: usize,
+        wire_msg: WireMsg,
+        msg_id: MsgId,
+        force_new_link: bool,
+    ) -> Result<MsgType> {
+        debug!("---> send msg {msg_id:?} going... will force new?: {force_new_link}");
+        let bytes = wire_msg.serialize()?;
+
+        let session = self.clone();
+        let bytes = bytes.clone();
+
+        let link = session
+            .peer_links
+            .get_or_create_link(&peer, force_new_link)
+            .await;
+
+        debug!("Trying to send msg to link {msg_id:?} to {peer:?}");
+        let result = {
+            match link.send_bi(bytes.clone(), msg_id).await {
+                Ok(mut recv_stream) => {
+                    debug!("That's {msg_id:?} sent to {peer:?}... spawning recieve listener");
+
+                    let stream_id = recv_stream.id();
+                    debug!("{msg_id:?}  Waiting for response msg on {stream_id} from {peer:?}");
+                    let res = Self::read_msg_from_recvstream(&mut recv_stream).await;
+
+                    // check for AE here...
+                    if let Ok(MsgType::Node {
+                        msg_id,
+                        dst: _,
+                        msg,
+                    }) = res
+                    {
+                        trace!("{msg_id:?} System msg recieved...");
+                        let result = self.handle_system_msg(msg, peer, peer_index).await?;
+
+                        if let Some(res) = result {
+                            trace!("{msg_id:?} Final response after handling system msg...");
+                            return Ok(res);
+                        } else {
+                            return Err(Error::NoResponse {
+                                msg_id,
+                                peers: vec![peer],
+                            });
+                        }
+                    }
+
+                    // TODO: ???? once we drop the stream, do we know the connection is closed ???
+                    trace!("{} to {}", LogMarker::StreamClosed, peer.addr());
+
+                    res
+                }
+                #[cfg(features = "chaos")]
+                Err(SendToOneError::ChaosNoConnection) => break Err(Error::ChoasSendFail),
+                Err(error) => {
+                    error!("Error sending {msg_id:?} bidi to {peer:?}: {error:?}");
+                    Err(Error::FailedToInitateBiDiStream(msg_id))
+                }
+            }
+        };
+
+        if let Err(err) = &result {
+            session.peer_links.remove_link_from_peer_links(&peer).await;
+            warn!("Issue when sending {msg_id:?} to {peer:?}: {err:?}");
+        }
+
+        result
+    }
+
+    #[instrument(skip_all, level = "trace")]
+    /// All operations to the network return a response, either an ACK or a QueryResult
+    pub(super) async fn send_many_msgs_and_await_responses(
+        &mut self,
         nodes: Vec<Peer>,
         wire_msg: WireMsg,
         msg_id: MsgId,
         force_new_link: bool,
-        resp_tx: mpsc::Sender<MsgResponse>,
-    ) -> Result<()> {
+    ) -> Result<Vec<(Peer, MsgType)>> {
         debug!("---> send msg {msg_id:?} going... will force new?: {force_new_link}");
-        let bytes = wire_msg.serialize()?;
 
         let mut tasks = vec![];
         let nodes_len = nodes.len();
+        let mut last_error = None;
+        let pub_addr = self.endpoint.public_addr();
 
         for (peer_index, peer) in nodes.iter().enumerate() {
-            let session = self.clone();
-            let bytes = bytes.clone();
-            let resp_tx_clone = resp_tx.clone();
+            let mut session = self.clone();
+            let wire_msg = wire_msg.clone();
 
             let task = async move {
-                let link = session
-                    .peer_links
-                    .get_or_create_link(peer, force_new_link)
+                let msg = session
+                    .send_msg_and_await_response(
+                        *peer,
+                        peer_index,
+                        wire_msg,
+                        msg_id,
+                        force_new_link,
+                    )
                     .await;
 
-                debug!("Trying to send msg to link {msg_id:?} to {peer:?}");
-                let result = {
-                    match link.send_bi(bytes.clone(), msg_id).await {
-                        Ok(recv_stream) => {
-                            debug!(
-                                "That's {msg_id:?} sent to {peer:?}... spawning recieve listener"
-                            );
-                            // let's spawn a task for each bi-stream to listen for responses
-                            Self::spawn_recv_stream_listener(
-                                session.clone(),
-                                msg_id,
-                                *peer,
-                                peer_index,
-                                recv_stream,
-                                resp_tx_clone,
-                            );
-
-                            Ok(())
-                        }
-                        #[cfg(features = "chaos")]
-                        Err(SendToOneError::ChaosNoConnection) => Err(Error::ChoasSendFail),
-                        Err(error) => {
-                            error!("Error sending {msg_id:?} bidi to {peer:?}: {error:?}");
-                            Err(Error::FailedToInitateBiDiStream(msg_id))
-                        }
-                    }
-                };
-
-                if let Err(err) = &result {
-                    session.peer_links.remove_link_from_peer_links(peer).await;
-                    warn!("Issue when sending {msg_id:?} to {peer:?}: {err:?}");
-                }
-
-                result
+                (*peer, msg)
             };
 
             tasks.push(task)
@@ -649,18 +721,23 @@ impl Session {
         // Let's await for all messages to be sent
         let results = join_all(tasks).await;
 
-        let mut last_error = None;
         let mut failures = nodes_len;
-        results.into_iter().for_each(|result| match result {
+        // otherwise we can parse out the inner result now
+        let mut final_msgs = vec![];
+
+        results.into_iter().for_each(|(peer, result)| match result {
             Err(error) => last_error = Some(error),
-            Ok(()) => failures -= 1,
+            Ok(msg) => {
+                failures -= 1;
+
+                final_msgs.push((peer, msg));
+            }
         });
 
         if failures > 0 {
             trace!(
-                "Sending the message ({msg_id:?}) from {} to {failures}/{nodes_len} of the \
-                nodes failed: {nodes:?}",
-                self.endpoint.public_addr(),
+                "Sending the message ({msg_id:?}) from {pub_addr} to {failures}/{nodes_len} of the \
+                nodes failed: {nodes:?}"
             );
 
             if let Some(error) = last_error {
@@ -669,7 +746,95 @@ impl Session {
             }
         }
 
-        Ok(())
+        Ok(final_msgs)
+    }
+
+    async fn handle_system_msg(
+        &mut self,
+        msg: NodeMsg,
+        src_peer: Peer,
+        src_peer_index: usize,
+    ) -> Result<Option<MsgType>, Error> {
+        match msg {
+            NodeMsg::AntiEntropy {
+                section_tree_update,
+                kind:
+                    AntiEntropyKind::Redirect { bounced_msg } | AntiEntropyKind::Retry { bounced_msg },
+            } => {
+                debug!("AE-Redirect/Retry msg received");
+                let result = self
+                    .handle_ae_msg(section_tree_update, bounced_msg, src_peer, src_peer_index)
+                    .await;
+                if result.is_err() {
+                    error!("Failed to handle AE msg from {src_peer:?}, {result:?}");
+                }
+                result
+            }
+            msg_type => {
+                warn!("Unexpected msg type received: {msg_type:?}");
+                Ok(None)
+            }
+        }
+    }
+
+    // Handle Anti-Entropy Redirect or Retry msgs
+    #[instrument(skip_all, level = "debug")]
+    #[async_recursion]
+    async fn handle_ae_msg(
+        &mut self,
+        section_tree_update: SectionTreeUpdate,
+        bounced_msg: UsrMsgBytes,
+        src_peer: Peer,
+        src_peer_index: usize,
+    ) -> Result<Option<MsgType>, Error> {
+        let target_sap = section_tree_update.signed_sap.value.clone();
+        debug!("Received Anti-Entropy from {src_peer}, with SAP: {target_sap:?}");
+
+        // Try to update our network knowledge first
+        self.update_network_knowledge(section_tree_update, src_peer)
+            .await;
+
+        if let Some((msg_id, elders, service_msg, dst, auth)) =
+            Self::new_target_elders(bounced_msg.clone(), &target_sap).await?
+        {
+            debug!("{msg_id:?} AE bounced msg going out again. Resending original message (sent to {src_peer:?}) to new section eldere");
+
+            // The actual order of elders doesn't really matter. All that matters is we pass each AE response
+            // we get through the same hoops, to then be able to ping a new elder on a 1-1 basis for the src_peer
+            // we initially targetted.
+            let deterministic_ordering = XorName::from_content(
+                b"Arbitrary string that we use to sort new SAP elders consistently",
+            );
+
+            // here we send this to only one elder for each AE message we get in. We _should_ have one per elder we sent to.
+            // deterministically sent to closest elder based upon the initial sender index
+            let ordered_elders = elders
+                .iter()
+                .sorted_by(|lhs, rhs| deterministic_ordering.cmp_distance(&lhs.name(), &rhs.name()))
+                .cloned()
+                .collect_vec();
+
+            let target_elder = ordered_elders.get(src_peer_index);
+
+            // there should always be one
+            if let Some(elder) = target_elder {
+                let payload = WireMsg::serialize_msg_payload(&service_msg)?;
+                let wire_msg =
+                    WireMsg::new_msg(msg_id, payload, MsgKind::Client(auth.into_inner()), dst);
+
+                debug!("Resending original message on AE-Redirect with updated details. Expecting an AE-Retry next");
+
+                let response = self
+                    .send_msg_and_await_response(*elder, src_peer_index, wire_msg, msg_id, false)
+                    .await?;
+
+                return Ok(Some(response));
+            } else {
+                return Err(Error::AntiEntropyNoSapElders);
+            }
+        }
+
+        Ok(None)
     }
 }
 

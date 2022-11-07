@@ -8,7 +8,7 @@ use sn_interface::{
     data_copy_count,
     messaging::{
         data::{ClientMsg, DataQuery, DataQueryVariant, QueryResponse},
-        WireMsg,
+        MsgId, WireMsg,
     },
     types::{Chunk, ChunkAddress},
 };
@@ -131,11 +131,13 @@ async fn send_query(client: &Client, query: DataQuery) -> Result<QueryResponse> 
     let msg = ClientMsg::Query(query.clone());
     let serialised_query = WireMsg::serialize_msg_payload(&msg)?;
     let signature = client.keypair().sign(&serialised_query);
+    let msg_id = MsgId::new();
     Ok(client
         .send_signed_query(
             query,
             client_pk,
             serialised_query.clone(),
+            msg_id,
             signature.clone(),
         )
         .await?

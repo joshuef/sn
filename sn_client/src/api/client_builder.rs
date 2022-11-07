@@ -8,7 +8,7 @@
 //! use sn_client::api::Client;
 //! use xor_name::XorName;
 //!
-//! let client = Client::builder().build().await?;
+//! let mut client = Client::builder().build().await?;
 //! let _bytes = client.read_bytes(XorName::from_content("example".as_bytes())).await?;
 //!
 //! # Ok(())
@@ -191,7 +191,7 @@ impl ClientBuilder {
             .dbc_owner
             .unwrap_or_else(|| Owner::from_random_secret_key(&mut rand::thread_rng()));
 
-        let client = Client {
+        let mut client = Client {
             keypair,
             dbc_owner,
             session,

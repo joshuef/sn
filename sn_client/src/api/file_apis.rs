@@ -29,7 +29,7 @@ use xor_name::XorName;
 impl Client {
     #[instrument(skip(self), level = "debug")]
     /// Reads [`Bytes`] from the network, whose contents are contained within on or more chunks.
-    pub async fn read_bytes(&self, address: XorName) -> Result<Bytes> {
+    pub async fn read_bytes(&mut self, address: XorName) -> Result<Bytes> {
         let chunk = self.get_chunk(&address).await?;
 
         // first try to deserialize a LargeFile, if it works, we go and seek it
@@ -50,7 +50,12 @@ impl Client {
     /// Passing `0` to position reads the data from the beginning,
     /// and the `length` is just an upper limit.
     #[instrument(skip_all, level = "trace")]
-    pub async fn read_from(&self, address: XorName, position: usize, length: usize) -> Result<Bytes>
+    pub async fn read_from(
+        &mut self,
+        address: XorName,
+        position: usize,
+        length: usize,
+    ) -> Result<Bytes>
     where
         Self: Sized,
     {
@@ -81,7 +86,7 @@ impl Client {
     }
 
     #[instrument(skip(self), level = "trace")]
-    pub(crate) async fn get_chunk(&self, name: &XorName) -> Result<Chunk> {
+    pub(crate) async fn get_chunk(&mut self, name: &XorName) -> Result<Chunk> {
         // first check it's not already in our Chunks' cache
         if let Some(chunk) = self
             .chunks_cache
@@ -140,7 +145,7 @@ impl Client {
     /// Directly writes [`Bytes`] to the network in the
     /// form of immutable chunks, without any batching.
     #[instrument(skip(self, bytes), level = "debug")]
-    pub async fn upload(&self, bytes: Bytes) -> Result<XorName> {
+    pub async fn upload(&mut self, bytes: Bytes) -> Result<XorName> {
         self.upload_bytes(bytes, false).await
     }
 
@@ -149,7 +154,7 @@ impl Client {
     /// It also attempts to verify that all the data was uploaded to the network before returning.
     /// It does this via running `read_bytes` with each chunk with `query_timeout` set.
     #[instrument(skip_all, level = "trace")]
-    pub async fn upload_and_verify(&self, bytes: Bytes) -> Result<XorName> {
+    pub async fn upload_and_verify(&mut self, bytes: Bytes) -> Result<XorName> {
         self.upload_bytes(bytes, true).await
     }
 
@@ -172,7 +177,7 @@ impl Client {
     // --------------------------------------------
 
     #[instrument(skip(self, bytes), level = "trace")]
-    async fn upload_bytes(&self, bytes: Bytes, verify: bool) -> Result<XorName> {
+    async fn upload_bytes(&mut self, bytes: Bytes, verify: bool) -> Result<XorName> {
         if let Ok(file) = LargeFile::new(bytes.clone()) {
             self.upload_large(file, verify).await
         } else {
@@ -188,7 +193,7 @@ impl Client {
         let (head_address, all_chunks) = Self::encrypt_large(large)?;
 
         let tasks = all_chunks.into_iter().map(|chunk| {
-            let client_clone = self.clone();
+            let mut client_clone = self.clone();
             task::spawn(async move {
                 let chunk_addr = *chunk.address().name();
                 client_clone.send_cmd(DataCmd::StoreChunk(chunk)).await?;
@@ -216,7 +221,7 @@ impl Client {
     /// Directly writes a [`SmallFile`] to the network in the
     /// form of a single chunk, without any batching.
     #[instrument(skip_all, level = "trace")]
-    async fn upload_small(&self, small: SmallFile, verify: bool) -> Result<XorName> {
+    async fn upload_small(&mut self, small: SmallFile, verify: bool) -> Result<XorName> {
         let chunk = Self::package_small(small)?;
         let address = *chunk.name();
         self.send_cmd(DataCmd::StoreChunk(chunk)).await?;
@@ -229,7 +234,7 @@ impl Client {
     }
 
     // Verify a chunk is stored at provided address
-    async fn verify_chunk_is_stored(&self, address: XorName) -> Result<()> {
+    async fn verify_chunk_is_stored(&mut self, address: XorName) -> Result<()> {
         // `read_bytes` could return earlier than query_timeout
         // with `DataNotFound` eg, but this could just mean that the data has not yet
         // reached adults...and so, we retry once but within the timeout limit set
@@ -254,7 +259,7 @@ impl Client {
 
     // Gets and decrypts chunks from the network using nothing else but the data map,
     // then returns the raw data.
-    async fn read_all(&self, data_map: DataMap) -> Result<Bytes> {
+    async fn read_all(&mut self, data_map: DataMap) -> Result<Bytes> {
         let encrypted_chunks = Self::try_get_chunks(self, data_map.infos()).await?;
         let bytes = self_encryption::decrypt_full_set(&data_map, &encrypted_chunks)?;
         Ok(bytes)
@@ -263,7 +268,7 @@ impl Client {
     // Gets a subset of chunks from the network, decrypts and
     // reads `len` bytes of the data starting at given `pos` of original file.
     #[instrument(skip_all, level = "trace")]
-    async fn seek(&self, data_map: DataMap, pos: usize, len: usize) -> Result<Bytes> {
+    async fn seek(&mut self, data_map: DataMap, pos: usize, len: usize) -> Result<Bytes> {
         let info = self_encryption::seek_info(data_map.file_size(), pos, len);
         let range = &info.index_range;
         let all_infos = data_map.infos();
@@ -285,12 +290,12 @@ impl Client {
 
     #[instrument(skip_all, level = "trace")]
     async fn try_get_chunks(
-        client: &Self,
+        client: &mut Self,
         chunks_info: Vec<ChunkInfo>,
     ) -> Result<Vec<EncryptedChunk>> {
         let expected_count = chunks_info.len();
         let tasks = chunks_info.into_iter().map(|chunk_info| {
-            let client = client.clone();
+            let mut client = client.clone();
             task::spawn(async move {
                 match client.get_chunk(&chunk_info.dst_hash).await {
                     Ok(chunk) => Ok(EncryptedChunk {
@@ -332,7 +337,7 @@ impl Client {
     /// If the DataMapLevel is not the first level mapping directly to the user's contents,
     /// the process repeats itself until it obtains the first level DataMapLevel.
     #[instrument(skip_all, level = "trace")]
-    async fn unpack_chunk(&self, mut chunk: Chunk) -> Result<DataMap> {
+    async fn unpack_chunk(&mut self, mut chunk: Chunk) -> Result<DataMap> {
         loop {
             match deserialize(chunk.value())? {
                 DataMapLevel::First(data_map) => {
@@ -389,7 +394,7 @@ mod tests {
         init_logger();
         let _start_span = tracing::info_span!("store_and_read_3kb").entered();
 
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         let file = LargeFile::new(random_bytes(MIN_ENCRYPTABLE_BYTES))?;
 
@@ -415,7 +420,7 @@ mod tests {
     async fn seek_with_unknown_length() -> Result<()> {
         init_logger();
         let _outer_span = tracing::info_span!("seek_with_unknown_length").entered();
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         // create content which is stored as LargeFile, i.e. its size is larger than MIN_ENCRYPTABLE_BYTES
         let size = 2 * MIN_ENCRYPTABLE_BYTES;
@@ -424,7 +429,7 @@ mod tests {
         let address = client.upload_and_verify(file.bytes()).await?;
 
         let pos = 512;
-        let read_data = read_from_pos(&file, address, pos, usize::MAX, &client).await?;
+        let read_data = read_from_pos(&file, address, pos, usize::MAX, &mut client).await?;
 
         assert_eq!(read_data.len(), size - pos);
         compare(file.bytes().split_off(pos), read_data);
@@ -436,7 +441,7 @@ mod tests {
     async fn seek_in_data() -> Result<()> {
         init_logger();
         let _outer_span = tracing::info_span!("seek_in_data").entered();
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         for i in 1..5 {
             let size = i * MIN_ENCRYPTABLE_BYTES;
@@ -451,13 +456,13 @@ mod tests {
                 // Read first part
                 let read_data_1 = {
                     let pos = 0;
-                    read_from_pos(&file, address, pos, len, &client).await?
+                    read_from_pos(&file, address, pos, len, &mut client).await?
                 };
 
                 // Read second part
                 let read_data_2 = {
                     let pos = len;
-                    read_from_pos(&file, address, pos, len, &client).await?
+                    read_from_pos(&file, address, pos, len, &mut client).await?
                 };
 
                 // Join parts
@@ -479,7 +484,7 @@ mod tests {
         init_logger();
         let _start_span = tracing::info_span!("store_and_read_5mb_from_many_clients").entered();
 
-        let uploader = create_test_client().await?;
+        let mut uploader = create_test_client().await?;
         // create file with random bytes 5mb
         let bytes = random_bytes(5 * 1024 * 1024);
         let file = LargeFile::new(bytes)?;
@@ -495,7 +500,7 @@ mod tests {
 
         let mut tasks = vec![];
 
-        for client in clients {
+        for mut client in clients {
             let handle: Instrumented<tokio::task::JoinHandle<Result<()>>> =
                 tokio::spawn(async move {
                     match client.read_bytes(address).await {
@@ -582,7 +587,7 @@ mod tests {
         debug!("Running network asserts with delay of {:?}", delay);
 
         let bytes = random_bytes(MIN_ENCRYPTABLE_BYTES / 3);
-        let client = create_test_client().await?;
+        let mut client = create_test_client().await?;
 
         let mut the_logs = crate::testnet_grep::NetworkLogState::new()?;
 
@@ -609,40 +614,40 @@ mod tests {
         init_logger();
         let size = MIN_ENCRYPTABLE_BYTES / 3;
         let _outer_span = tracing::info_span!("store_and_read_1kb", size).entered();
-        let client = try_create_test_client().await;
-        store_and_read(&client, size).await;
+        let mut client = try_create_test_client().await;
+        store_and_read(&mut client, size).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn store_and_read_1mb() {
         init_logger();
         let _outer_span = tracing::info_span!("store_and_read_1mb").entered();
-        let client = try_create_test_client().await;
-        store_and_read(&client, 1024 * 1024).await;
+        let mut client = try_create_test_client().await;
+        store_and_read(&mut client, 1024 * 1024).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn ae_checks_file_test() {
         init_logger();
         let _outer_span = tracing::info_span!("ae_checks_file_test").entered();
-        let client = try_create_test_client().await;
-        store_and_read(&client, 10 * 1024 * 1024).await;
+        let mut client = try_create_test_client().await;
+        store_and_read(&mut client, 10 * 1024 * 1024).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn store_and_read_10mb() {
         init_logger();
         let _outer_span = tracing::info_span!("store_and_read_10mb").entered();
-        let client = try_create_test_client().await;
-        store_and_read(&client, 10 * 1024 * 1024).await;
+        let mut client = try_create_test_client().await;
+        store_and_read(&mut client, 10 * 1024 * 1024).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn store_and_read_20mb() {
         init_logger();
         let _outer_span = tracing::info_span!("store_and_read_20mb").entered();
-        let client = try_create_test_client().await;
-        store_and_read(&client, 20 * 1024 * 1024).await;
+        let mut client = try_create_test_client().await;
+        store_and_read(&mut client, 20 * 1024 * 1024).await;
     }
 
     #[ignore = "too hectic for CI so far"]
@@ -650,8 +655,8 @@ mod tests {
     async fn store_and_read_40mb() {
         init_logger();
         let _outer_span = tracing::info_span!("store_and_read_40mb").entered();
-        let client = try_create_test_client().await;
-        store_and_read(&client, 40 * 1024 * 1024).await;
+        let mut client = try_create_test_client().await;
+        store_and_read(&mut client, 40 * 1024 * 1024).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -659,8 +664,8 @@ mod tests {
     async fn store_and_read_100mb() {
         init_logger();
         let _outer_span = tracing::info_span!("store_and_read_100mb").entered();
-        let client = try_create_test_client().await;
-        store_and_read(&client, 100 * 1024 * 1024).await;
+        let mut client = try_create_test_client().await;
+        store_and_read(&mut client, 100 * 1024 * 1024).await;
     }
 
     // Essentially a load test, seeing how much parallel batting the nodes can take.
@@ -721,7 +726,7 @@ mod tests {
     // We use `expect()` from within this function instead of returning a `Result` since
     // there is an issue in Rust which prevents more info being reported when `Err` is returned:
     // https://github.com/rust-lang/rust/issues/69517
-    async fn store_and_read(client: &Client, size: usize) {
+    async fn store_and_read(client: &mut Client, size: usize) {
         // cannot use scope as var w/ macro
         let _ = tracing::info_span!("store_and_read_bytes", size).entered();
 
@@ -756,7 +761,7 @@ mod tests {
         address: XorName,
         pos: usize,
         len: usize,
-        client: &Client,
+        client: &mut Client,
     ) -> Result<Bytes> {
         let read_data = client.read_from(address, pos, len).await?;
         let mut expected = file.bytes();

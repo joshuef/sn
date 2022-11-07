@@ -73,7 +73,7 @@ impl Client {
     ///
     /// In case of an existing SecretKey the client will attempt to retrieve the history of the key's balance in order to be ready for any token operations.
     #[instrument(skip_all, level = "debug")]
-    pub async fn connect(&self) -> Result<(), Error> {
+    pub async fn connect(&mut self) -> Result<(), Error> {
         // TODO: The message being sent below is a temporary solution to fetch network info for
         // the client. Ideally the client should be able to send proper AE-Probe messages to the
         // trigger the AE flows.

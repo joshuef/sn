@@ -42,7 +42,7 @@ impl Client {
     /// that the section can use to update itself.
     #[instrument(skip(self, tx, spent_proofs, spent_transactions), level = "debug")]
     pub async fn spend_dbc(
-        &self,
+        &mut self,
         key_image: KeyImage,
         tx: RingCtTransaction,
         spent_proofs: BTreeSet<SpentProof>,
@@ -107,7 +107,7 @@ impl Client {
     /// Return the set of spent proof shares if the provided DBC's key image is spent
     #[instrument(skip(self), level = "debug")]
     pub async fn spent_proof_shares(
-        &self,
+        &mut self,
         key_image: KeyImage,
     ) -> Result<Vec<SpentProofShare>, Error> {
         let address = SpentbookAddress::new(XorName::from_content(&key_image.to_bytes()));
@@ -141,7 +141,7 @@ mod tests {
     async fn verify_spent_proof_share(
         key_image: &bls::PublicKey,
         tx: &RingCtTransaction,
-        client: &Client,
+        client: &mut Client,
     ) -> Result<()> {
         // The query could be too close to the spend which make adult only accumulated
         // part of shares. To avoid assertion faiure, more attempts are needed.
@@ -181,7 +181,7 @@ mod tests {
 
         let genesis_dbc = read_genesis_dbc_from_first_node()?;
         let dbc_owner = genesis_dbc.owner_base().clone();
-        let client = create_test_client_with(None, Some(dbc_owner.clone()), None).await?;
+        let mut client = create_test_client_with(None, Some(dbc_owner.clone()), None).await?;
 
         let genesis_key_image = genesis_dbc.key_image_bearer()?;
 
@@ -210,6 +210,6 @@ mod tests {
             )
             .await?;
 
-        verify_spent_proof_share(key_image, tx, &client).await
+        verify_spent_proof_share(key_image, tx, &mut client).await
     }
 }

@@ -80,7 +80,7 @@ pub enum WalletSubCommands {
 pub async fn wallet_commander(
     cmd: WalletSubCommands,
     output_fmt: OutputFmt,
-    safe: &Safe,
+    safe: &mut Safe,
     config: &Config,
 ) -> Result<()> {
     match cmd {

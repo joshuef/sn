@@ -117,14 +117,14 @@ impl Safe {
     /// This is updated by as Anti-Entropy/update messages are received from the network.
     /// Any user of this API is responsible for caching it so it can use it for any new `Safe`
     /// instance, preventing it from learning all this information from the network all over again.
-    pub async fn section_tree(&self) -> Result<SectionTree> {
+    pub async fn section_tree(&mut self) -> Result<SectionTree> {
         let section_tree = self.get_safe_client()?.section_tree().await;
         Ok(section_tree)
     }
 
     // Private helper to obtain the Client instance
-    pub(crate) fn get_safe_client(&self) -> Result<&Client> {
-        match &self.client {
+    pub(crate) fn get_safe_client(&mut self) -> Result<Client> {
+        match self.client.clone() {
             Some(client) => Ok(client),
             None => Err(Error::ConnectionError(APP_NOT_CONNECTED.to_string())),
         }

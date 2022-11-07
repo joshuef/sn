@@ -179,7 +179,7 @@ pub async fn run_split() -> Result<()> {
     let post_churn_interval_to_allow_replication = Duration::from_secs(30);
     sleep(post_churn_interval_to_allow_replication).await;
 
-    let client = Client::builder().build().await?;
+    let mut client = Client::builder().build().await?;
 
     for (address, hash) in all_data_put {
         println!("...reading bytes at address {:?} ...", address);
@@ -214,7 +214,7 @@ pub async fn run_split() -> Result<()> {
 }
 
 async fn upload_data() -> Result<(XorName, [u8; 32])> {
-    let client = Client::builder().build().await?;
+    let mut client = Client::builder().build().await?;
 
     let bytes = random_bytes(FILE_SIZE_LENGTH);
 

@@ -106,7 +106,7 @@ async fn reissue_bearer_dbcs() -> Result<Vec<(Dbc, Token)>> {
         })
         .collect();
 
-    let safe = new_safe_instance().await?;
+    let mut safe = new_safe_instance().await?;
     let (output_dbcs, _) = safe
         .reissue_dbcs(
             vec![GENESIS_DBC.clone()],
@@ -142,7 +142,7 @@ impl TestDataFilesContainer {
         files: impl IntoIterator<Item = &'a str>,
     ) -> Result<TestDataFilesContainer> {
         let mut map: HashMap<String, SafeUrl> = HashMap::new();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
         let (container_xorurl, _, files_map) = safe
             .files_container_create_from("./testdata", None, false, false)
             .await?;

@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 #![warn(clippy::unwrap_used)]
+#![recursion_limit = "256"]
 
 #[cfg(feature = "app")]
 mod app;

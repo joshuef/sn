@@ -30,7 +30,7 @@ impl Client {
     /// This is part of the public API, for the user to
     /// provide the serialised and already signed cmd.
     pub async fn send_signed_cmd(
-        &self,
+        &mut self,
         dst_address: XorName,
         client_pk: PublicKey,
         serialised_cmd: Bytes,
@@ -62,7 +62,7 @@ impl Client {
     /// The provided `DataCmd` is serialised and signed with the
     /// keypair this Client instance has been setup with.
     #[instrument(skip_all, level = "debug", name = "client-api send cmd")]
-    pub async fn send_cmd(&self, cmd: DataCmd) -> Result<(), Error> {
+    pub async fn send_cmd(&mut self, cmd: DataCmd) -> Result<(), Error> {
         let client_pk = self.public_key();
         let dst_name = cmd.dst_name();
 

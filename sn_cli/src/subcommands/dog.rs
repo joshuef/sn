@@ -26,7 +26,7 @@ pub struct DogCommands {
     location: Option<String>,
 }
 
-pub async fn dog_commander(cmd: DogCommands, output_fmt: OutputFmt, safe: &Safe) -> Result<()> {
+pub async fn dog_commander(cmd: DogCommands, output_fmt: OutputFmt, safe: &mut Safe) -> Result<()> {
     let link = get_from_arg_or_stdin(cmd.location, None)?;
     let url = get_target_url(&link)?;
     debug!("Running dog for: {}", &url);

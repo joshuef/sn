@@ -27,14 +27,18 @@ const MULTIMAP_REMOVED_MARK: &[u8] = b"";
 
 impl Safe {
     /// Create a Multimap on the network
-    pub async fn multimap_create(&self, name: Option<XorName>, type_tag: u64) -> Result<XorUrl> {
+    pub async fn multimap_create(
+        &mut self,
+        name: Option<XorName>,
+        type_tag: u64,
+    ) -> Result<XorUrl> {
         debug!("Creating a Multimap");
         self.register_create(name, type_tag, ContentType::Multimap)
             .await
     }
 
     /// Return the value of a Multimap on the network corresponding to the key provided
-    pub async fn multimap_get_by_key(&self, url: &str, key: &[u8]) -> Result<Multimap> {
+    pub async fn multimap_get_by_key(&mut self, url: &str, key: &[u8]) -> Result<Multimap> {
         debug!("Getting value by key from Multimap at: {}", url);
         let safeurl = self.parse_and_resolve_url(url).await?;
 
@@ -43,7 +47,7 @@ impl Safe {
 
     /// Return the value of a Multimap on the network corresponding to the hash provided
     pub async fn multimap_get_by_hash(
-        &self,
+        &mut self,
         url: &str,
         hash: EntryHash,
     ) -> Result<MultimapKeyValue> {
@@ -57,7 +61,7 @@ impl Safe {
     ///
     /// The filtered result is a Multimap itself.
     pub(crate) async fn fetch_multimap_values_by_key(
-        &self,
+        &mut self,
         safeurl: &SafeUrl,
         key: &[u8],
     ) -> Result<Multimap> {
@@ -70,7 +74,7 @@ impl Safe {
 
     /// Insert a key-value pair into a Multimap on the network
     pub async fn multimap_insert(
-        &self,
+        &mut self,
         multimap_url: &str,
         entry: MultimapKeyValue,
         replace: BTreeSet<EntryHash>,
@@ -100,7 +104,7 @@ impl Safe {
             return Ok(EntryHash(rand::thread_rng().gen::<[u8; 32]>()));
         }
 
-        let client = self.get_safe_client()?;
+        let mut client = self.get_safe_client()?;
 
         let (entry_hash, op_batch) = client
             .write_to_local_register(address, data, replace)
@@ -116,7 +120,7 @@ impl Safe {
     /// Note that they are still stored on the network as history is kept,
     /// and you can still access them with their `EntryHash`
     pub async fn multimap_remove(
-        &self,
+        &mut self,
         url: &str,
         to_remove: BTreeSet<EntryHash>,
     ) -> Result<EntryHash> {
@@ -137,7 +141,7 @@ impl Safe {
             return Ok(EntryHash(rand::thread_rng().gen::<[u8; 32]>()));
         }
 
-        let client = self.get_safe_client()?;
+        let mut client = self.get_safe_client()?;
 
         let (entry_hash, op_batch) = client
             .write_to_local_register(address, MULTIMAP_REMOVED_MARK.to_vec(), to_remove)
@@ -151,7 +155,7 @@ impl Safe {
     // Crate's helper to return the value of a Multimap on
     // the network without resolving the SafeUrl,
     // filtering by hash if a version is provided
-    pub(crate) async fn fetch_multimap(&self, safeurl: &SafeUrl) -> Result<Multimap> {
+    pub(crate) async fn fetch_multimap(&mut self, safeurl: &SafeUrl) -> Result<Multimap> {
         let entries = match self.register_fetch_entries(safeurl).await {
             Ok(data) => {
                 debug!("Multimap retrieved with {} entries...", data.len());
@@ -192,7 +196,7 @@ impl Safe {
     // the network without resolving the SafeUrl,
     // optionally filtering by hash and/or key.
     pub(crate) async fn fetch_multimap_value_by_hash(
-        &self,
+        &mut self,
         safeurl: &SafeUrl,
         hash: EntryHash,
     ) -> Result<MultimapKeyValue> {
@@ -237,7 +241,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multimap_create() -> Result<()> {
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let xorurl = safe.multimap_create(None, 25_000).await?;
 
@@ -251,7 +255,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multimap_insert() -> Result<()> {
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
         let key = b"key".to_vec();
         let val = b"value".to_vec();
         let key_val = (key.clone(), val.clone());
@@ -293,7 +297,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multimap_get_by_hash() -> Result<()> {
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
         let key = b"key".to_vec();
         let val = b"value".to_vec();
         let key_val = (key.clone(), val.clone());

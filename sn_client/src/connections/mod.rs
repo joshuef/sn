@@ -11,22 +11,12 @@ mod messaging;
 
 use crate::Result;
 use sn_interface::{
-    messaging::data::{CmdResponse, QueryResponse},
-    network_knowledge::SectionTree,
-    types::PeerLinks,
+    messaging::data::QueryResponse, network_knowledge::SectionTree, types::PeerLinks,
 };
 
 use qp2p::{Config as QuicP2pConfig, Endpoint};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
-
-// Use for internal communication between the bi-stream response listener threads
-// and the thread waiting to aggregate responses
-#[derive(Debug)]
-pub(super) enum MsgResponse {
-    CmdResponse(SocketAddr, Box<CmdResponse>),
-    QueryResponse(SocketAddr, Box<QueryResponse>),
-}
 
 #[derive(Debug)]
 pub struct QueryResult {

@@ -29,7 +29,7 @@ impl Client {
     /// Send a Query to the network and await a response.
     /// Queries are automatically retried using exponential backoff if the timeout is hit.
     #[instrument(skip(self), level = "debug")]
-    pub async fn send_query(&self, query: DataQueryVariant) -> Result<QueryResult, Error> {
+    pub async fn send_query(&mut self, query: DataQueryVariant) -> Result<QueryResult, Error> {
         self.send_query_with_retry(query, true).await
     }
 
@@ -37,7 +37,7 @@ impl Client {
     /// Queries are not retried if the timeout is hit.
     #[instrument(skip(self), level = "debug")]
     pub async fn send_query_without_retry(
-        &self,
+        &mut self,
         query: DataQueryVariant,
     ) -> Result<QueryResult, Error> {
         self.send_query_with_retry(query, false).await
@@ -48,7 +48,7 @@ impl Client {
     // This function is a private helper.
     #[instrument(skip(self), level = "debug")]
     async fn send_query_with_retry(
-        &self,
+        &mut self,
         query: DataQueryVariant,
         retry: bool,
     ) -> Result<QueryResult, Error> {
@@ -140,8 +140,9 @@ impl Client {
     /// Send a Query to the network and await a response.
     /// This is part of a public API, for the user to
     /// provide the serialised and already signed query.
+    /// Mutability here is to update the client w/ AE changes if required
     pub async fn send_signed_query(
-        &self,
+        &mut self,
         query: DataQuery,
         client_pk: PublicKey,
         serialised_query: Bytes,
@@ -163,7 +164,7 @@ impl Client {
     // If no destination section is provided, it will be derived from the query content.
     #[allow(clippy::too_many_arguments)]
     async fn send_signed_query_to_section(
-        &self,
+        &mut self,
         query: DataQuery,
         client_pk: PublicKey,
         serialised_query: Bytes,

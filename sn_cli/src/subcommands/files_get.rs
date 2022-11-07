@@ -118,7 +118,7 @@ impl Default for ProgressIndicator {
 // This command is really similar to cp or scp, and people are fine
 // using those without a report.  So it doesn't seem especially urgent.
 pub async fn process_get_command(
-    safe: &Safe,
+    safe: &mut Safe,
     source: XorUrl,
     dst: Option<String>,
     exists: FileExistsAction,
@@ -315,7 +315,7 @@ fn prompt_yes_no(prompt_msg: &str, default: &str) -> bool {
 /// TODO: In the future, this will have options for preserving symlinks and
 /// file attributes.
 async fn files_container_get_files(
-    safe: &Safe,
+    safe: &mut Safe,
     url: &str,
     dirpath: &str,
     callback: impl FnMut(&FilesGetStatus) -> bool,
@@ -444,7 +444,7 @@ fn ensure_parent_dir_exists(path: &str) -> Result<()> {
 ///
 /// TODO: In the future, this will have options for preserving file attributes.
 async fn files_map_get_files(
-    safe: &Safe,
+    safe: &mut Safe,
     files_map: &FilesMap,
     dirpath: &str,
     mut callback: impl FnMut(&FilesGetStatus) -> bool,
@@ -616,7 +616,12 @@ fn denormalize_slashes(p: &str) -> String {
 // Downloads a file from the network to a given file path
 // xorurl must point to a file
 // size (in bytes) must be provided
-async fn download_file_from_net(safe: &Safe, xorurl: &str, path: &Path, size: u64) -> Result<u64> {
+async fn download_file_from_net(
+    safe: &mut Safe,
+    xorurl: &str,
+    path: &Path,
+    size: u64,
+) -> Result<u64> {
     debug!("downloading file {} to {}", xorurl, path.display());
 
     // TODO: download the file by concurrently (spawning tasks/threads) pulling chunks.
@@ -683,7 +688,7 @@ fn create_dir_all(dir_path: &Path) -> Result<()> {
 
 /// # Get Public or Private file
 /// Get immutable files from the network.
-pub async fn files_get(safe: &Safe, url: &str, range: Range) -> Result<Vec<u8>> {
+pub async fn files_get(safe: &mut Safe, url: &str, range: Range) -> Result<Vec<u8>> {
     match SafeUrl::from_url(url)?.data_type() {
         DataType::File => {
             let bytes = safe.files_get(url, range).await?;

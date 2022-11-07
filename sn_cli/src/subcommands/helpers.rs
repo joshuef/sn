@@ -151,7 +151,7 @@ pub fn gen_processed_files_table(
 
 // Reads a Multimap, deserialises it as a Wallet, fetching and listing
 // each of the contained spendable balances (DBCs), returning a Table ready to print out.
-pub async fn gen_wallet_table(safe: &Safe, multimap: &Multimap) -> Result<Table> {
+pub async fn gen_wallet_table(safe: &mut Safe, multimap: &Multimap) -> Result<Table> {
     let mut table = Table::new();
     table.add_row(&vec![
         "Spendable balance name",

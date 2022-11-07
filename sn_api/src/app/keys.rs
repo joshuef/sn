@@ -18,7 +18,11 @@ use xor_name::XorName;
 
 impl Safe {
     /// Check the XOR/NRS-URL corresponds to the public key derived from the provided client id.
-    pub async fn validate_sk_for_url(&self, secret_key: &SecretKey, url: &str) -> Result<String> {
+    pub async fn validate_sk_for_url(
+        &mut self,
+        secret_key: &SecretKey,
+        url: &str,
+    ) -> Result<String> {
         let derived_xorname = match secret_key {
             SecretKey::Ed25519(sk) => {
                 let pk: ed25519_dalek::PublicKey = sk.into();

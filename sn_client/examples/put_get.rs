@@ -84,7 +84,7 @@ pub async fn run_chunk_soak() -> Result<()> {
         "put data len is same as we tried to put"
     );
 
-    let client = Client::builder().build().await?;
+    let mut client = Client::builder().build().await?;
 
     println!("Now we retrieve the data");
 
@@ -136,7 +136,10 @@ async fn upload_data_using_fresh_client(iteration: usize) -> Result<(XorName, [u
     upload_data_using_client(client, iteration).await
 }
 
-async fn upload_data_using_client(client: Client, iteration: usize) -> Result<(XorName, [u8; 32])> {
+async fn upload_data_using_client(
+    mut client: Client,
+    iteration: usize,
+) -> Result<(XorName, [u8; 32])> {
     let one_mb = 1024 * 1024;
     // start small and build up
     let bytes = random_bytes(one_mb * iteration);

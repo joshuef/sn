@@ -32,7 +32,7 @@ impl Safe {
     /// Returns the NRS SafeUrl: `safe://{top_name}
     /// Note that this NRS SafeUrl is not linked to anything yet. You just registered the topname here.
     /// You can now associate public_names (with that topname) to links using `nrs_associate` or `nrs_add`
-    pub async fn nrs_create(&self, top_name: &str) -> Result<SafeUrl> {
+    pub async fn nrs_create(&mut self, top_name: &str) -> Result<SafeUrl> {
         info!("Creating an NRS map for: {}", top_name);
 
         let mut nrs_url = validate_nrs_top_name(top_name)?;
@@ -62,7 +62,7 @@ impl Safe {
     /// Errors out if the topname is not registered.
     /// Returns the versioned NRS `SafeUrl` (containing a `VersionHash`) now pointing to the provided link:
     /// `safe://{public_name}?v={version_hash}`
-    pub async fn nrs_associate(&self, public_name: &str, link: &SafeUrl) -> Result<SafeUrl> {
+    pub async fn nrs_associate(&mut self, public_name: &str, link: &SafeUrl) -> Result<SafeUrl> {
         info!(
             "Associating public name \"{}\" to \"{}\" in NRS map container",
             public_name, link
@@ -96,7 +96,7 @@ impl Safe {
     /// Returns the versioned NRS `SafeUrl` (containing a `VersionHash`) now pointing to the provided link:
     /// `safe://{public_name}?v={version_hash}`
     /// Also returns a bool to indicate whether it registered the topname in the process or not.
-    pub async fn nrs_add(&self, public_name: &str, link: &SafeUrl) -> Result<(SafeUrl, bool)> {
+    pub async fn nrs_add(&mut self, public_name: &str, link: &SafeUrl) -> Result<(SafeUrl, bool)> {
         info!(
             "Adding public name \"{}\" to \"{}\" in an NRS map container",
             public_name, link
@@ -127,7 +127,7 @@ impl Safe {
     /// Returns a versioned NRS `SafeUrl` (containing a `VersionHash`) pointing to the latest version
     /// (including the deletion) for the provided public name.
     /// `safe://{public_name}?v={version_hash}`
-    pub async fn nrs_remove(&self, public_name: &str) -> Result<SafeUrl> {
+    pub async fn nrs_remove(&mut self, public_name: &str) -> Result<SafeUrl> {
         info!(
             "Removing public name \"{}\" from NRS map container",
             public_name
@@ -163,7 +163,7 @@ impl Safe {
     /// Otherwise, it returns an error.
     /// Returns the associated `SafeUrl` for the given public name for that version along with an `NrsMap`
     pub async fn nrs_get(
-        &self,
+        &mut self,
         public_name: &str,
         version: Option<VersionHash>,
     ) -> Result<(Option<SafeUrl>, NrsMap)> {
@@ -191,7 +191,7 @@ impl Safe {
 
     /// Get the mapping of all subNames and their associated `SafeUrl` for the Nrs Map Container at the given public name
     pub async fn nrs_get_subnames_map(
-        &self,
+        &mut self,
         public_name: &str,
         version: Option<VersionHash>,
     ) -> Result<NrsMap> {
@@ -377,7 +377,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_create() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let url = safe.nrs_create(&site_name).await?;
 
@@ -387,7 +387,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_nrs_create_with_invalid_topname() -> Result<()> {
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let invalid_top_name = "atffdgasd/d";
         assert_matches!(
@@ -401,7 +401,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_create_with_duplicate_topname() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         safe.nrs_create(&site_name).await?;
         let _ = safe.nrs_get_subnames_map(&site_name, None).await?;
@@ -415,7 +415,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_associate_with_topname() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container([]).await?;
 
@@ -439,7 +439,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_associate_with_subname() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container(["/testdata/test.md"])
             .await
@@ -479,7 +479,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_associate_with_multiple_subnames() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container =
             TestDataFilesContainer::get_container(["/testdata/test.md", "/testdata/another.md"])
@@ -524,7 +524,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_associate_with_non_versioned_files_container_link() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container([]).await?;
         let mut url = files_container.url.clone();
@@ -544,7 +544,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_associate_with_non_versioned_nrs_container_link() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let public_name = &format!("test.{site_name}");
         let mut nrs_container_url = safe.nrs_create(&site_name).await?;
@@ -561,7 +561,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_associate_with_register_link() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let register_link = safe
             .register_create(None, NRS_MAP_TYPE_TAG, ContentType::Raw)
@@ -584,7 +584,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_associate_with_invalid_url() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container(["/testdata/test.md"]).await?;
         let public_name = &format!("test./{site_name}");
@@ -606,7 +606,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_add_with_subname() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container(["/testdata/test.md"]).await?;
         let public_name = &format!("test.{site_name}");
@@ -638,7 +638,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_remove_with_subname() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container =
             TestDataFilesContainer::get_container(["/testdata/test.md", "/testdata/another.md"])
@@ -682,7 +682,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_remove_with_topname() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container([]).await?;
 
@@ -706,7 +706,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_conflicting_names() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         // let's create an empty files container so we have a valid to link
         let (link, _, _) = safe
@@ -827,7 +827,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_get_with_duplicate_subname_versions() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container([
             "/testdata/test.md",
@@ -884,7 +884,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_get_with_topname_link() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container([]).await?;
 
@@ -904,7 +904,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_get_with_nrs_map_container_link() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container([]).await?;
 
@@ -922,7 +922,7 @@ mod tests {
     #[tokio::test]
     async fn test_nrs_get_when_topname_has_no_link() -> Result<()> {
         let site_name = random_nrs_name();
-        let safe = new_safe_instance().await?;
+        let mut safe = new_safe_instance().await?;
 
         let files_container = TestDataFilesContainer::get_container(["/testdata/test.md"]).await?;
 
