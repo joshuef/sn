@@ -91,7 +91,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let runtime = Runtime::new().unwrap();
     group.sample_size(10);
 
-    let mut client = match runtime.block_on(create_client()) {
+    let client = match runtime.block_on(create_client()) {
         Ok(client) => client,
         Err(err) => {
             println!("Failed to create client with {:?}", err);
@@ -103,9 +103,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     // upload and read
     group.bench_with_input(
         "upload and read 3072b",
-        &(&seed, client),
-        |b, (seed, mut client)| {
+        &(&seed, client.clone()),
+        |b, (seed, client)| {
             b.to_async(&runtime).iter(|| async {
+                let mut client = client.clone();
                 let bytes = grows_vec_to_bytes(seed, 3072);
                 match upload_and_read_bytes(&mut client, bytes).await {
                     Ok(_) => {}
@@ -116,9 +117,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     );
     group.bench_with_input(
         "upload and read 1mb",
-        &(&seed, client),
-        |b, (seed, mut client)| {
+        &(&seed, client.clone()),
+        |b, (seed, client)| {
             b.to_async(&runtime).iter(|| async {
+                let mut client = client.clone();
                 let bytes = grows_vec_to_bytes(seed, 1024 * 1024);
                 match upload_and_read_bytes(&mut client, bytes).await {
                     Ok(_) => {}
@@ -129,9 +131,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     );
     group.bench_with_input(
         "upload and read 10mb",
-        &(&seed, client),
-        |b, (seed, mut client)| {
+        &(&seed, client.clone()),
+        |b, (seed, client)| {
             b.to_async(&runtime).iter(|| async {
+                let mut client = client.clone();
                 let bytes = grows_vec_to_bytes(seed, 1024 * 1024 * 10);
                 match upload_and_read_bytes(&mut client, bytes).await {
                     Ok(_) => {}
@@ -142,33 +145,50 @@ fn criterion_benchmark(c: &mut Criterion) {
     );
 
     // only upload
-    group.bench_with_input("upload 3072b", &(&seed, client), |b, (seed, mut client)| {
-        b.to_async(&runtime).iter(|| async {
-            let bytes = grows_vec_to_bytes(seed, 3072);
-            match client.upload(bytes).await {
-                Ok(_) => {}
-                Err(error) => println!("3072b upload bench failed with {:?}", error),
-            }
-        });
-    });
-    group.bench_with_input("upload 1mb", &(&seed, client), |b, (seed, mut client)| {
-        b.to_async(&runtime).iter(|| async {
-            let bytes = grows_vec_to_bytes(seed, 1024 * 1024);
-            match client.upload(bytes).await {
-                Ok(_) => {}
-                Err(error) => println!("1mb upload bench failed with {:?}", error),
-            }
-        });
-    });
-    group.bench_with_input("upload 10mb", &(&seed, client), |b, (seed, mut client)| {
-        b.to_async(&runtime).iter(|| async {
-            let bytes = grows_vec_to_bytes(seed, 1024 * 1024 * 10);
-            match client.upload(bytes).await {
-                Ok(_) => {}
-                Err(error) => println!("10mb upload bench failed with {:?}", error),
-            }
-        });
-    });
+    group.bench_with_input(
+        "upload 3072b",
+        &(&seed, client.clone()),
+        |b, (seed, client)| {
+            b.to_async(&runtime).iter(|| async {
+                let mut client = client.clone();
+                let bytes = grows_vec_to_bytes(seed, 3072);
+                match &client.upload(bytes).await {
+                    Ok(_) => {}
+                    Err(error) => println!("3072b upload bench failed with {:?}", error),
+                }
+            });
+        },
+    );
+    group.bench_with_input(
+        "upload 1mb",
+        &(&seed, client.clone()),
+        |b, (seed, client)| {
+            b.to_async(&runtime).iter(|| async move {
+                let mut client = client.clone();
+                let bytes = grows_vec_to_bytes(seed, 1024 * 1024);
+                match client.upload(bytes).await {
+                    Ok(_) => {}
+                    Err(error) => println!("1mb upload bench failed with {:?}", error),
+                }
+            });
+        },
+    );
+    group.bench_with_input(
+        "upload 10mb",
+        &(&seed, client.clone()),
+        |b, (seed, client)| {
+            b.to_async(&runtime).iter(|| async move {
+                let mut client = client.clone();
+                let bytes = grows_vec_to_bytes(seed, 1024 * 1024 * 10);
+                match client.upload(bytes).await {
+                    Ok(_) => {}
+                    Err(error) => {
+                        println!("10mb upload bench failed with {:?}", error);
+                    }
+                }
+            });
+        },
+    );
     group.finish()
 }
 
