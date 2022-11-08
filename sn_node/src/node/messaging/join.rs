@@ -9,9 +9,12 @@
 use crate::node::{flow_ctrl::cmds::Cmd, messaging::Peers, MyNode, Result};
 
 use sn_interface::{
-    messaging::system::{
-        JoinAsRelocatedRequest, JoinAsRelocatedResponse, JoinRejectionReason, JoinRequest,
-        JoinResponse, NodeMsg,
+    messaging::{
+        system::{
+            JoinAsRelocatedRequest, JoinAsRelocatedResponse, JoinRejectionReason, JoinRequest,
+            JoinResponse, NodeMsg,
+        },
+        MsgId,
     },
     network_knowledge::{
         MembershipState, NodeState, SectionAuthUtils, SectionTreeUpdate, MIN_ADULT_AGE,
@@ -26,14 +29,18 @@ use tokio::sync::RwLock;
 impl MyNode {
     pub(crate) async fn handle_join_request(
         node: Arc<RwLock<MyNode>>,
+        msg_id: MsgId,
         peer: Peer,
         join_request: JoinRequest,
     ) -> Result<Option<Cmd>> {
-        debug!("Handling join. Received {:?} from {}", join_request, peer);
+        debug!(
+            "{msg_id:?} Handling join. Received {:?} from {}",
+            join_request, peer
+        );
 
         let node_read_lock = node.read().await;
 
-        debug!("Handling join. node read for {join_request:?}");
+        debug!("{msg_id:?} Handling join. node read lock got for {join_request:?}");
 
         let provided_section_key = join_request.section_key();
 
@@ -44,6 +51,7 @@ impl MyNode {
         // is outdated in which case we'll reply with `JoinResponse::Retry`
         // with the up-to-date info.
         if node_read_lock.is_not_elder() && section_key_matches {
+            debug!("{msg_id:?} Ignoring join as we're not an elder");
             // Note: We don't bounce this message because the current bounce-resend
             // mechanism wouldn't preserve the original SocketAddr which is needed for
             // properly handling this message.
@@ -54,10 +62,10 @@ impl MyNode {
 
         let our_prefix = node_read_lock.network_knowledge.prefix();
         if !our_prefix.matches(&peer.name()) {
-            debug!("Redirecting JoinRequest from {peer} - name doesn't match our prefix {our_prefix:?}.");
+            debug!("{msg_id:?} Redirecting JoinRequest from {peer} - name doesn't match our prefix {our_prefix:?}.");
             let retry_sap = node_read_lock.matching_section(&peer.name())?;
             let msg = NodeMsg::JoinResponse(Box::new(JoinResponse::Redirect(retry_sap)));
-            trace!("Sending {:?} to {}", msg, peer);
+            trace!("{msg_id:?} Sending {:?} to {}", msg, peer);
             trace!("{}", LogMarker::SendJoinRedirected);
             return Ok(Some(
                 node_read_lock.send_system_msg(msg, Peers::Single(peer)),
@@ -65,7 +73,7 @@ impl MyNode {
         }
 
         if !node_read_lock.joins_allowed {
-            debug!("Rejecting JoinRequest from {peer} - joins currently not allowed.");
+            debug!("{msg_id:?} Rejecting JoinRequest from {peer} - joins currently not allowed.");
             let msg = NodeMsg::JoinResponse(Box::new(JoinResponse::Rejected(
                 JoinRejectionReason::JoinsDisallowed,
             )));
@@ -78,17 +86,17 @@ impl MyNode {
 
         let is_age_valid = node_read_lock.verify_joining_node_age(&peer);
 
-        trace!("our_prefix={our_prefix:?}, is_age_valid={is_age_valid:?}");
+        trace!("{msg_id:?} our_prefix={our_prefix:?}, is_age_valid={is_age_valid:?}");
 
         if !section_key_matches {
             trace!("{}", LogMarker::SendJoinRetryNotCorrectKey);
-            trace!("JoinRequest from {peer} doesn't have our latest section_key {our_section_key:?}, provided {provided_section_key:?}.");
+            trace!("{msg_id:?} JoinRequest from {peer} doesn't have our latest section_key {our_section_key:?}, provided {provided_section_key:?}.");
         }
 
         if !is_age_valid {
             trace!("{}", LogMarker::SendJoinRetryAgeIssue);
             trace!(
-                "JoinRequest from {peer} (with age {}) has invalid age",
+                "{msg_id:?} JoinRequest from {peer} (with age {}) has invalid age",
                 peer.age()
             );
         }
@@ -99,7 +107,11 @@ impl MyNode {
             let msg = NodeMsg::JoinResponse(Box::new(JoinResponse::Retry {
                 section_tree_update: SectionTreeUpdate::new(signed_sap, proof_chain),
             }));
-            trace!("Sending {:?} to {}", msg, peer);
+            trace!(
+                "{msg_id:?} Mismatch of key or age: Sending {:?} to {}",
+                msg,
+                peer
+            );
             return Ok(Some(
                 node_read_lock.send_system_msg(msg, Peers::Single(peer)),
             ));
@@ -110,7 +122,10 @@ impl MyNode {
 
         // drop readlock and get write lock
         drop(node_read_lock);
+
+        debug!("{msg_id:?} Node read lock dropped during join");
         let mut node = node.write().await;
+        debug!("{msg_id:?} Node write lock got during join");
 
         Ok(node.propose_membership_change(node_state))
     }

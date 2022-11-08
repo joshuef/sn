@@ -106,7 +106,7 @@ impl NodeTestApi {
         self.cmd_channel
             .send((cmd, vec![]))
             .await
-            .map_err(|_| Error::CmdSendError)?;
+            .map_err(|_| Error::PeerSessionCmdSendError)?;
 
         Ok(())
     }

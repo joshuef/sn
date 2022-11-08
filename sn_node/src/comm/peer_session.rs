@@ -91,7 +91,7 @@ impl PeerSession {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        response.map_err(|_e| Error::CmdSendError)
+        response.map_err(|_e| Error::CmdSendError(msg_id))
     }
 
     #[instrument(skip(self, bytes))]

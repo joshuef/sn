@@ -14,6 +14,7 @@ use sn_dbc::Error as DbcError;
 use sn_interface::{
     messaging::data::{DataQuery, Error as ErrorMsg},
     messaging::system::DkgSessionId,
+    messaging::MsgId,
     types::{convert_dt_error_to_error_msg, DataAddress, Peer},
 };
 
@@ -152,8 +153,11 @@ pub enum Error {
     #[error("Network data error:: {0}")]
     NetworkData(#[from] sn_interface::types::Error),
     /// Error Sending Cmd in to node for processing
-    #[error("Error sending Cmd to node for processing {0:?}.")]
+    #[error("Error sending Cmd to another node for processing {0:?}.")]
     CmdSendError(MsgId),
+    /// Error Sending Cmd in to node for processing
+    #[error("Error sending Cmd for comms processing.")]
+    PeerSessionCmdSendError,
     /// Network Knowledge error.
     #[error("Network data error:: {0}")]
     NetworkKnowledge(#[from] sn_interface::network_knowledge::Error),
