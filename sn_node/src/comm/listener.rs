@@ -76,14 +76,19 @@ impl MsgListener {
                             continue;
                         }
                     };
+                    let mut is_from_client = false;
                     let src_name = match wire_msg.kind() {
-                        MsgKind::Client(auth) => auth.public_key.into(),
+                        MsgKind::Client(auth) => {
+                            is_from_client = true;
+                            auth.public_key.into()
+                        }
                         MsgKind::Node(name)
                         | MsgKind::ClientDataResponse(name)
                         | MsgKind::NodeDataResponse(name) => *name,
                     };
 
-                    if first {
+                    // we don't want to store PeerSessions from clients
+                    if first && !is_from_client {
                         first = false;
                         let _ = self
                             .add_connection

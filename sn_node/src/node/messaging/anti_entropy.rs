@@ -395,7 +395,9 @@ impl MyNode {
             }
         };
 
+        debug!("[NODE READ] Latest context read");
         let latest_context = node.read().await.context();
+        debug!("[NODE READ] Latest context got.");
         // Only trigger reorganize data when there is a membership change happens.
         if updated && !latest_context.is_elder {
             // only done if adult, since as an elder we dont want to get any more

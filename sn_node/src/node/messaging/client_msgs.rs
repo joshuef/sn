@@ -109,7 +109,7 @@ impl MyNode {
             .query(query, User::Key(auth.public_key))
             .await;
 
-        trace!("data query response at adult is: {:?}", response);
+        trace!("{msg_id:?} data query response at adult is: {:?}", response);
         let msg = NodeDataResponse::QueryResponse {
             response,
             operation_id,
@@ -127,6 +127,7 @@ impl MyNode {
 
         if let Some(send_stream) = send_stream {
             // send response on the stream
+            trace!("{msg_id:?} Sending response to {requesting_elder:?}");
             let stream_prio = 10;
             let mut send_stream = send_stream.lock().await;
             send_stream.set_priority(stream_prio);
@@ -137,6 +138,7 @@ impl MyNode {
             if let Err(error) = send_stream.finish().await {
                 error!("Could not close response {stream_id} with {requesting_elder:?}, for {msg_id:?}: {error:?}");
             }
+            trace!("{msg_id:?} Response sent: to {requesting_elder:?}");
         } else {
             error!("Send stream missing from {requesting_elder:?}, data request response was not sent out.")
         }

@@ -113,6 +113,10 @@ impl Comm {
 
         let sessions = self.sessions.clone();
 
+        // TODO: Is there an optimium we should actually have.
+        // Assuming we dont store clients... can we test for this
+        trace!("Sessions known of: {:?}", sessions.len());
+
         // TODO: we could cache the handles above and check them as part of loop...
         let _handle = tokio::spawn(async move {
             match watcher {
