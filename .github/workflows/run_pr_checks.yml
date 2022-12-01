@@ -199,9 +199,9 @@ jobs:
         env:
           RUST_LOG: "sn_node,sn_consensus,sn_dysfunction=trace,sn_interface=trace"
 
-      - name: Wait for all nodes to join
+      - name: Wait for section split
         shell: bash
-        run: ./resources/scripts/wait_for_nodes_to_join.sh
+        run: ./resources/scripts/wait_for_section_split.sh
         timeout-minutes: 5
 
       - name: Build all tests before running non ubuntu
@@ -392,6 +392,10 @@ jobs:
         run: ./resources/scripts/wait_for_nodes_to_join.sh
         timeout-minutes: 5
 
+      - name: Wait for section split
+        run: ./resources/scripts/wait_for_section_split.sh
+        timeout-minutes: 2
+
       - name: Build all tests before running
         run: cargo test --no-run --release --features check-replicas --package sn_api
         timeout-minutes: 50
@@ -496,6 +500,10 @@ jobs:
         shell: bash
         run: ./resources/scripts/wait_for_nodes_to_join.sh
         timeout-minutes: 5
+
+      - name: Wait for section split
+        run: ./resources/scripts/wait_for_section_split.sh
+        timeout-minutes: 2
 
       - name: Generate keys for test run
         run: cargo run --release --bin safe keys create --for-cli
