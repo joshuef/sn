@@ -111,7 +111,7 @@ impl Dispatcher {
             Cmd::TrackNodeIssueInDysfunction { name, issue } => {
                 let node = self.node.read().await;
                 debug!("[NODE READ]: dysf tracking read got");
-                node.log_node_issue(name, issue).await;
+                node.log_node_issue(name, issue);
                 Ok(vec![])
             }
             Cmd::HandleMsg {
@@ -177,10 +177,10 @@ impl Dispatcher {
             }
             Cmd::HandleFailedSendToNode { peer, msg_id } => {
                 warn!("Message sending failed to {peer}, for {msg_id:?}");
-                debug!("[NODE READ]: HandleFailedSendToNode agreements read...");
                 let node = self.node.read().await;
                 debug!("[NODE READ]: HandleFailedSendToNode agreements read got...");
-                node.handle_failed_send(&peer.addr()).await;
+                node.handle_failed_send(&peer.addr());
+
                 Ok(vec![])
             }
             Cmd::HandleDkgOutcome {

@@ -365,11 +365,11 @@ mod core {
                 // So, shall only track the side that we are in as well.
                 if zero_dkg_id.elders.contains_key(&self.info().name()) {
                     for candidate in zero_dkg_id.elders.keys() {
-                        self.log_dkg_issue(*candidate).await;
+                        self.log_node_issue(*candidate, IssueType::Dkg);
                     }
                 } else if one_dkg_id.elders.contains_key(&self.info().name()) {
                     for candidate in one_dkg_id.elders.keys() {
-                        self.log_dkg_issue(*candidate).await;
+                        self.log_node_issue(*candidate, IssueType::Dkg);
                     }
                 }
 
@@ -422,7 +422,7 @@ mod core {
                 };
                 // track init of DKG
                 for candidate in session_id.elders.keys() {
-                    self.log_dkg_issue(*candidate).await;
+                    self.log_node_issue(*candidate, IssueType::Dkg);
                 }
 
                 vec![session_id]
@@ -662,48 +662,31 @@ mod core {
         }
 
         /// Log an issue in dysfunction
-        pub(crate) async fn log_node_issue(&self, name: XorName, issue: IssueType) {
+        /// Spawns a process to send this incase the channel may be full, we don't hold up
+        /// processing around this (as this can be called during dkg eg)
+        pub(crate) fn log_node_issue(&self, name: XorName, issue: IssueType) {
             trace!("Logging issue {issue:?} in dysfunction for {name}");
-            if let Err(error) = self
-                .dysfunction_cmds_sender
-                .send(DysCmds::TrackIssue(name, issue))
-                .await
-            {
-                warn!("Could not send DysCmds through dysfunctional_cmds_tx: {error}");
-            }
-        }
-
-        /// Log a communication problem
-        pub(crate) async fn log_comm_issue(&self, name: XorName) {
-            self.log_node_issue(name, IssueType::Communication).await
-        }
-
-        /// Log a dkg issue (ie, an initialised but unfinished dkg round for a given participant)
-        pub(crate) async fn log_dkg_issue(&self, name: XorName) {
-            self.log_node_issue(name, IssueType::Dkg).await
+            let dysf_sender = self.dysfunction_cmds_sender.clone();
+            // TODO: do we need to kill the node if we fail tracking dysf?
+            let _handle = tokio::spawn(async move {
+                if let Err(error) = dysf_sender.send(DysCmds::TrackIssue(name, issue)).await {
+                    // Log the issue, and error. We need to be wary of actually hitting this.
+                    error!("Could not send DysCmds through dysfunctional_cmds_tx: {error}");
+                }
+            });
         }
 
         /// Sends `DysCmds::UntrackIssue` cmd
-        async fn untrack_node_issue(&self, name: XorName, issue: IssueType) {
-            if let Err(error) = self
-                .dysfunction_cmds_sender
-                .send(DysCmds::UntrackIssue(name, issue))
-                .await
-            {
-                warn!("Could not send DysCmds through dysfunctional_cmds_tx: {error}");
-            }
-        }
-
-        /// Log a dkg session as responded to
-        pub(crate) async fn log_dkg_session(&self, name: XorName) {
-            trace!("Logging Dkg session as responded to in dysfunction for {name}");
-            self.untrack_node_issue(name, IssueType::Dkg).await
-        }
-
-        /// Log a AE update message as responded to
-        pub(crate) async fn log_ae_update_msg(&self, name: XorName) {
-            trace!("Logging AE update message as responded to in dysfunction for {name}");
-            self.untrack_node_issue(name, IssueType::AeProbeMsg).await
+        /// Spawns a process to send this incase the channel may be full, we don't hold up
+        /// processing around this (as this can be called during dkg eg)
+        pub(crate) fn untrack_node_issue(&self, name: XorName, issue: IssueType) {
+            let dysf_sender = self.dysfunction_cmds_sender.clone();
+            // TODO: do we need to kill the node if we fail tracking dysf?
+            let _handle = tokio::spawn(async move {
+                if let Err(error) = dysf_sender.send(DysCmds::UntrackIssue(name, issue)).await {
+                    error!("Could not send DysCmds through dysfunctional_cmds_tx: {error}");
+                }
+            });
         }
 
         #[allow(unused)]

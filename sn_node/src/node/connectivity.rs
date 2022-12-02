@@ -7,12 +7,13 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{flow_ctrl::cmds::Cmd, MyNode, Proposal, Result};
+use sn_dysfunction::IssueType;
 use std::{collections::BTreeSet, net::SocketAddr};
 use xor_name::XorName;
 
 impl MyNode {
     /// Track comms issue if this is a peer we know and care about
-    pub(crate) async fn handle_failed_send(&self, addr: &SocketAddr) {
+    pub(crate) fn handle_failed_send(&self, addr: &SocketAddr) {
         let name = if let Some(peer) = self.network_knowledge.find_member_by_addr(addr) {
             debug!("Lost known peer {}", peer);
             peer.name()
@@ -21,7 +22,7 @@ impl MyNode {
             return;
         };
 
-        self.log_comm_issue(name).await;
+        self.log_node_issue(name, IssueType::Communication);
     }
 
     pub(crate) fn cast_offline_proposals(&mut self, names: &BTreeSet<XorName>) -> Result<Vec<Cmd>> {
