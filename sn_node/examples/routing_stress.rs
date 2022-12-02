@@ -15,6 +15,7 @@ use sn_interface::{
 use sn_node::node::{
     cfg::create_test_max_capacity_and_root_storage, new_test_api, Config, Event as RoutingEvent,
     MembershipEvent, MessagingEvent, NodeElderChange, NodeTestApi as NodeApi,
+    STANDARD_CHANNEL_SIZE,
 };
 
 use bls::PublicKey;
@@ -122,7 +123,7 @@ async fn main() -> Result<()> {
 
             let schedule = ChurnSchedule::parse(&opts.schedule)?;
 
-            let (event_tx, mut event_rx) = mpsc::channel(20);
+            let (event_tx, mut event_rx) = mpsc::channel(STANDARD_CHANNEL_SIZE);
             let mut network = Network::new();
 
             // Create the genesis node

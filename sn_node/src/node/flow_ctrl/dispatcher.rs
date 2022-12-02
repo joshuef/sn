@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{messaging::Peers, Cmd, Error, MyNode, Result};
+use crate::node::{messaging::Peers, Cmd, Error, MyNode, Result, STANDARD_CHANNEL_SIZE};
 
 use sn_interface::{
     messaging::{system::NodeMsg, Dst, MsgId, MsgKind, WireMsg},
@@ -33,7 +33,7 @@ pub(crate) struct Dispatcher {
 impl Dispatcher {
     /// Creates dispatcher and returns a receiver for enqueing DataAddresses for replication to specific peers
     pub(crate) fn new(node: Arc<RwLock<MyNode>>) -> (Self, Receiver<(Vec<DataAddress>, Peer)>) {
-        let (data_replication_sender, data_replication_receiver) = channel(1_000);
+        let (data_replication_sender, data_replication_receiver) = channel(STANDARD_CHANNEL_SIZE);
         (
             Self {
                 node,

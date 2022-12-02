@@ -20,7 +20,7 @@ use crate::node::{
     },
     join_network,
     logging::{log_ctx::LogCtx, run_system_logger},
-    Config, Error, MyNode, Result,
+    Config, Error, MyNode, Result, STANDARD_CHANNEL_SIZE,
 };
 use crate::UsedSpace;
 
@@ -144,15 +144,16 @@ async fn bootstrap_node(
     root_storage_dir: &Path,
     join_timeout: Duration,
 ) -> Result<(Arc<RwLock<MyNode>>, CmdChannel, EventReceiver)> {
-    let (connection_event_tx, mut connection_event_rx) = mpsc::channel(10_000);
-    let (dysfunction_cmds_sender, dysfunction_cmds_receiver) = mpsc::channel::<DysCmds>(20);
+    let (incoming_msg_pipe, mut incoming_msg_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
+    let (dysfunction_cmds_sender, dysfunction_cmds_receiver) =
+        mpsc::channel::<DysCmds>(STANDARD_CHANNEL_SIZE);
 
     let (event_sender, event_receiver) = event_channel::new(EVENT_CHANNEL_SIZE);
 
     let comm = Comm::new(
         config.local_addr(),
         config.network_config().clone(),
-        connection_event_tx,
+        incoming_msg_pipe,
     )
     .await?;
 
@@ -169,7 +170,7 @@ async fn bootstrap_node(
         bootstrap_normal_node(
             config,
             comm,
-            &mut connection_event_rx,
+            &mut incoming_msg_receiver,
             join_timeout,
             event_sender.clone(),
             used_space,
@@ -184,7 +185,7 @@ async fn bootstrap_node(
     let cmd_ctrl = CmdCtrl::new(dispatcher);
     let cmd_channel = FlowCtrl::start(
         cmd_ctrl,
-        connection_event_rx,
+        incoming_msg_receiver,
         data_replication_receiver,
         (dysfunction_cmds_sender, dysfunction_cmds_receiver),
     )
@@ -260,7 +261,7 @@ async fn bootstrap_genesis_node(
 async fn bootstrap_normal_node(
     config: &Config,
     comm: Comm,
-    connection_event_rx: &mut tokio::sync::mpsc::Receiver<MsgFromPeer>,
+    incoming_msg_receiver: &mut tokio::sync::mpsc::Receiver<MsgFromPeer>,
     join_timeout: Duration,
     event_sender: EventSender,
     used_space: UsedSpace,
@@ -285,7 +286,7 @@ async fn bootstrap_normal_node(
     let (info, network_knowledge) = join_network(
         joining_node,
         &comm,
-        connection_event_rx,
+        incoming_msg_receiver,
         section_tree,
         join_timeout,
     )

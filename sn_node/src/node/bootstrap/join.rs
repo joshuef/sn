@@ -8,7 +8,7 @@
 
 use crate::comm::{Comm, MsgFromPeer};
 use crate::log_sleep;
-use crate::node::{messages::WireMsgUtils, Error, Result};
+use crate::node::{messages::WireMsgUtils, Error, Result, STANDARD_CHANNEL_SIZE};
 
 use sn_interface::{
     messaging::{
@@ -42,7 +42,7 @@ pub(crate) async fn join_network(
     section_tree: SectionTree,
     join_timeout: Duration,
 ) -> Result<(MyNodeInfo, NetworkKnowledge)> {
-    let (outgoing_msgs_sender, outgoing_msgs_receiver) = mpsc::channel(100);
+    let (outgoing_msgs_sender, outgoing_msgs_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
     let span = trace_span!("bootstrap");
     let joiner = Joiner::new(node, outgoing_msgs_sender, incoming_msgs, section_tree);

@@ -7,8 +7,8 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::flow_ctrl::FlowCtrl;
+use crate::node::STANDARD_CHANNEL_SIZE;
 use sn_dysfunction::{DysfunctionDetection, IssueType};
-
 use std::collections::BTreeSet;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use xor_name::XorName;
@@ -33,7 +33,7 @@ impl FlowCtrl {
         mut dysfunction: DysfunctionDetection,
         mut dys_cmds_from_node: Receiver<DysCmds>,
     ) -> Receiver<BTreeSet<XorName>> {
-        let (dys_nodes_sender, dys_nodes_receiver) = mpsc::channel(20);
+        let (dys_nodes_sender, dys_nodes_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let _ = tokio::task::spawn(async move {
             while let Some(cmd) = dys_cmds_from_node.recv().await {

@@ -27,6 +27,9 @@ mod node_starter;
 mod node_test_api;
 mod relocation;
 
+/// Standard channel size, to allow for large swings in throughput
+pub static STANDARD_CHANNEL_SIZE: usize = 100_000;
+
 use self::{
     bootstrap::join_network,
     core::MyNode,

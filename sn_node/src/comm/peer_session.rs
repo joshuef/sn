@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use super::Link;
 
-use crate::node::{Error, Result};
+use crate::node::{Error, Result, STANDARD_CHANNEL_SIZE};
 
 use qp2p::RetryConfig;
 use qp2p::SendStream;
@@ -46,7 +46,7 @@ pub(crate) struct PeerSession {
 
 impl PeerSession {
     pub(crate) fn new(link: Link) -> PeerSession {
-        let (sender, receiver) = mpsc::channel(1000);
+        let (sender, receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let _ =
             tokio::task::spawn(PeerSessionWorker::new(link.clone(), sender.clone()).run(receiver));
