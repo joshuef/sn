@@ -107,11 +107,6 @@ async fn main() -> Result<()> {
         );
     }
 
-    assert_eq!(
-        config.network_config.forward_port,
-        !command_line_args.skip_auto_port_forwarding
-    );
-
     if command_line_args.max_msg_size_allowed.is_some() {
         assert_eq!(
             command_line_args.max_msg_size_allowed,
@@ -149,20 +144,6 @@ async fn main() -> Result<()> {
         assert_eq!(
             file_config.network_config.keep_alive_interval,
             config.network_config.keep_alive_interval
-        )
-    }
-
-    if command_line_args.upnp_lease_duration.is_some() {
-        assert_eq!(
-            command_line_args
-                .upnp_lease_duration
-                .map(|i| Duration::from_millis(i.into())),
-            config.network_config.upnp_lease_duration
-        )
-    } else {
-        assert_eq!(
-            file_config.network_config.upnp_lease_duration,
-            config.network_config.upnp_lease_duration
         )
     }
 

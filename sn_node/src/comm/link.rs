@@ -9,7 +9,7 @@
 use super::MsgListener;
 
 use dashmap::DashMap;
-use qp2p::{Connection, Endpoint, RetryConfig, UsrMsgBytes};
+use qp2p::{Connection, Endpoint, UsrMsgBytes};
 use sn_interface::messaging::MsgId;
 use sn_interface::types::{log_markers::LogMarker, Peer};
 use std::sync::Arc;
@@ -33,7 +33,7 @@ pub(crate) struct Link {
     listener: MsgListener,
 }
 
-pub(crate) type LinkConnections = Arc<DashMap<ConnId, Connection>>;
+pub(crate) type LinkConnections = Arc<DashMap<ConnId, Arc<Connection>>>;
 
 impl Link {
     pub(crate) fn new(peer: Peer, endpoint: Endpoint, listener: MsgListener) -> Self {
@@ -49,7 +49,7 @@ impl Link {
         peer: Peer,
         endpoint: Endpoint,
         listener: MsgListener,
-        conn: Connection,
+        conn: Arc<Connection>,
     ) -> Self {
         let mut instance = Self::new(peer, endpoint, listener);
         instance.insert(conn);
@@ -60,7 +60,7 @@ impl Link {
         &self.peer
     }
 
-    pub(crate) fn add(&mut self, conn: Connection) {
+    pub(crate) fn add(&mut self, conn: Arc<Connection>) {
         self.insert(conn);
     }
 
@@ -71,8 +71,7 @@ impl Link {
     pub(crate) async fn send_with_connection(
         bytes: UsrMsgBytes,
         priority: i32,
-        retry_config: Option<&RetryConfig>,
-        conn: Connection,
+        conn: Arc<Connection>,
         connections: LinkConnections,
     ) -> Result<(), SendToOneError> {
         trace!(
@@ -81,7 +80,7 @@ impl Link {
             conn.id()
         );
 
-        match conn.send_with(bytes, priority, retry_config).await {
+        match conn.send_with(bytes, priority).await {
             Ok(()) => Ok(()),
             Err(error) => {
                 error!(
@@ -185,58 +184,61 @@ impl Link {
     pub(crate) async fn get_or_connect(
         &mut self,
         msg_id: MsgId,
-    ) -> Result<Connection, SendToOneError> {
+    ) -> Result<Arc<Connection>, SendToOneError> {
         if self.connections.is_empty() {
             debug!(
                 "{msg_id:?} attempting to create a connection to {:?}",
                 self.peer
             );
-            self.create_connection(msg_id).await
+            return self.create_connection(msg_id).await;
+        }
+
+        trace!(
+            "{msg_id:?} Grabbing a connection from link.. {:?}",
+            self.peer()
+        );
+        // TODO: add in simple connection check when available.
+        // we can then remove dead conns easily and return only valid conns
+        let connections = &self.connections;
+        let mut dead_conns = vec![];
+        let mut live_conn = None;
+
+        for entry in connections.iter() {
+            let conn = entry.value().clone();
+            let conn_id = conn.id();
+
+            let is_valid = conn.open_bi().await.is_ok();
+
+            if !is_valid {
+                dead_conns.push(conn_id);
+                continue;
+            }
+            //we have a conn
+            live_conn = Some(conn);
+            break;
+        }
+
+        // cleanup dead conns
+        for dead_conn in dead_conns {
+            let _gone = self.connections.remove(&dead_conn);
+        }
+
+        if let Some(conn) = live_conn {
+            trace!("{msg_id:?} live connection found to {:?}", self.peer());
+            Ok(conn)
         } else {
             trace!(
-                "{msg_id:?} Grabbing a connection from link.. {:?}",
+                "{msg_id:?} No live connection found to {:?}, creating a new one.",
                 self.peer()
             );
-            // TODO: add in simple connection check when available.
-            // we can then remove dead conns easily and return only valid conns
-            let connections = &self.connections;
-            let mut dead_conns = vec![];
-            let mut live_conn = None;
-
-            for entry in connections.iter() {
-                let conn = entry.value().clone();
-                let conn_id = conn.id();
-
-                let is_valid = conn.open_bi().await.is_ok();
-
-                if !is_valid {
-                    dead_conns.push(conn_id);
-                    continue;
-                }
-                //we have a conn
-                live_conn = Some(conn);
-                break;
-            }
-
-            // cleanup dead conns
-            for dead_conn in dead_conns {
-                let _gone = self.connections.remove(&dead_conn);
-            }
-
-            if let Some(conn) = live_conn {
-                trace!("{msg_id:?} live connection found to {:?}", self.peer());
-                Ok(conn)
-            } else {
-                trace!(
-                    "{msg_id:?} No live connection found to {:?}, creating a new one.",
-                    self.peer()
-                );
-                self.create_connection(msg_id).await
-            }
+            self.create_connection(msg_id).await
         }
     }
 
-    async fn create_connection(&mut self, msg_id: MsgId) -> Result<Connection, SendToOneError> {
+    async fn create_connection(
+        &mut self,
+        msg_id: MsgId,
+    ) -> Result<Arc<Connection>, SendToOneError> {
         debug!("{msg_id:?} create conn attempt to {:?}", self.peer);
         let (conn, incoming_msgs) = self
             .endpoint
@@ -251,6 +253,8 @@ impl Link {
             conn.id()
         );
 
+        let conn = Arc::new(conn);
+
         self.insert(conn.clone());
 
         self.listener.listen(conn.clone(), incoming_msgs);
@@ -258,7 +262,7 @@ impl Link {
         Ok(conn)
     }
 
-    fn insert(&mut self, conn: Connection) {
+    fn insert(&mut self, conn: Arc<Connection>) {
         let id = conn.id();
         debug!("Inserting connection into link store: {id:?}");
 

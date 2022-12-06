@@ -25,7 +25,7 @@ use tracing::Instrument;
 pub(crate) enum ListenerEvent {
     Connected {
         peer: Peer,
-        connection: qp2p::Connection,
+        connection: Arc<qp2p::Connection>,
     },
 }
 
@@ -47,13 +47,17 @@ impl MsgListener {
     }
 
     #[tracing::instrument(skip_all)]
-    pub(crate) fn listen(&self, conn: qp2p::Connection, incoming_msgs: ConnectionIncoming) {
+    pub(crate) fn listen(&self, conn: Arc<qp2p::Connection>, incoming_msgs: ConnectionIncoming) {
         let clone = self.clone();
         let _ = task::spawn(clone.listen_internal(conn, incoming_msgs).in_current_span());
     }
 
     #[tracing::instrument(skip_all)]
-    async fn listen_internal(self, conn: qp2p::Connection, mut incoming_msgs: ConnectionIncoming) {
+    async fn listen_internal(
+        self,
+        conn: Arc<qp2p::Connection>,
+        mut incoming_msgs: ConnectionIncoming,
+    ) {
         let conn_id = conn.id();
         let remote_address = conn.remote_address();
         let mut first = true;

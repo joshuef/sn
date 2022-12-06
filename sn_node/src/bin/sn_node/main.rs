@@ -119,19 +119,6 @@ async fn run_node(config: &Config) -> Result<()> {
     let (_node, mut rejoin_network_rx) = loop {
         match start_node(config, join_timeout).await {
             Ok(result) => break result,
-            Err(NodeError::CannotConnectEndpoint(qp2p::EndpointError::Upnp(error))) => {
-                return Err(error).suggestion(
-                    "You can disable port forwarding by supplying --skip-auto-port-forwarding. Without port\n\
-                    forwarding, your machine must be publicly reachable by the given\n\
-                    --public-addr. If your machine is not publicly reachable, you may have to\n\
-                    adjust your router settings to either:\n\
-                    \n\
-                    - Resolve the error (e.g. by enabling UPnP).\n\
-                    - Manually configure port forwarding, such that your machine is publicly \
-                      reachable, and supplying that address with --public-addr."
-                        .header("Disable port forwarding or change your router settings"),
-                );
-            }
             Err(NodeError::TryJoinLater) => {
                 let message = format!(
                     "The network is not accepting nodes right now. \

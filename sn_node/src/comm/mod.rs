@@ -74,7 +74,6 @@ impl Comm {
     #[cfg(not(test))]
     pub(crate) async fn is_reachable(&self, peer: &SocketAddr) -> Result<(), Error> {
         let qp2p_config = qp2p::Config {
-            forward_port: false,
             ..Default::default()
         };
 
@@ -263,7 +262,7 @@ impl Comm {
 
     /// Any number of incoming qp2p:Connections can be added.
     /// We will eventually converge to the same one in our comms with the peer.
-    async fn add_incoming(&self, peer: &Peer, conn: Connection) {
+    async fn add_incoming(&self, peer: &Peer, conn: Arc<Connection>) {
         debug!(
             "Adding incoming conn to {peer:?} w/ conn_id : {:?}",
             conn.id()
@@ -371,7 +370,7 @@ fn listen_for_incoming_msgs(
                 connection.id()
             );
 
-            msg_listener.listen(connection, incoming_msgs);
+            msg_listener.listen(Arc::new(connection), incoming_msgs);
         }
     });
 }
