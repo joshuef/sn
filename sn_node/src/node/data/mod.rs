@@ -9,4 +9,4 @@
 mod capacity;
 mod records;
 
-pub(crate) use self::capacity::{Capacity, MIN_LEVEL_WHEN_FULL};
+pub(crate) use self::capacity::Capacity;

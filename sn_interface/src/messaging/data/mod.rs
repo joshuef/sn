@@ -9,15 +9,14 @@
 //! Data messages and their possible responses.
 
 mod cmd;
-mod data_exchange;
 mod errors;
 mod query;
 mod register;
 mod spentbook;
+mod storage_threshold;
 
 pub use self::{
     cmd::DataCmd,
-    data_exchange::{MetadataExchange, StorageLevel},
     errors::{Error, Result},
     query::{DataQuery, DataQueryVariant},
     register::{
@@ -25,6 +24,7 @@ pub use self::{
         SignedRegisterEdit,
     },
     spentbook::{SpentbookCmd, SpentbookQuery},
+    storage_threshold::StorageThreshold,
 };
 
 use crate::network_knowledge::SectionTreeUpdate;

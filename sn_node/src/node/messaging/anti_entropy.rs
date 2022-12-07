@@ -12,10 +12,11 @@ use bls::PublicKey as BlsPublicKey;
 use itertools::Itertools;
 use qp2p::{SendStream, UsrMsgBytes};
 use sn_dysfunction::IssueType;
+use sn_interface::messaging::data::StorageThreshold;
 use sn_interface::{
     messaging::{
         data::ClientDataResponse,
-        system::{AntiEntropyKind, NodeDataCmd, NodeMsg},
+        system::{AntiEntropyKind, NodeEvent, NodeMsg},
         Dst, MsgId, MsgType, WireMsg,
     },
     network_knowledge::SectionTreeUpdate,
@@ -23,7 +24,7 @@ use sn_interface::{
 };
 use std::{collections::BTreeSet, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
-use xor_name::{Prefix, XorName};
+use xor_name::XorName;
 
 // Returned by `check_for_entropy` private helper to indicate the
 // type of AE response that needs to be sent back to either to the client/Node
@@ -187,14 +188,20 @@ impl MyNode {
         MyNode::send_system_msg(ae_msg, Peers::Multiple(recipients), context.clone())
     }
 
-    /// Send `MetadataExchange` packet to the specified nodes
-    pub(crate) fn send_metadata_updates(&self, recipients: BTreeSet<Peer>, prefix: &Prefix) -> Cmd {
-        let metadata = self.get_metadata_of(prefix);
-        MyNode::send_system_msg(
-            NodeMsg::NodeDataCmd(NodeDataCmd::ReceiveMetadata { metadata }),
-            Peers::Multiple(recipients),
-            self.context(),
-        )
+    /// Send `StorageThresholdReached` event to the specified nodes
+    pub(crate) fn report_us_as_full(&self, recipients: BTreeSet<Peer>) -> Cmd {
+        let context = self.context();
+        let node_id = PublicKey::from(context.keypair.public);
+        let our_name = XorName::from(node_id);
+
+        // we report to the recipients that our storage threshold has been reached
+        let msg = NodeMsg::NodeEvent(NodeEvent::StorageThresholdReached {
+            section: our_name,
+            node_id,
+            level: StorageThreshold::new(),
+        });
+
+        MyNode::send_system_msg(msg, Peers::Multiple(recipients), context)
     }
 
     #[instrument(skip_all)]
@@ -224,19 +231,13 @@ impl MyNode {
             // Using previous_key as dst_section_key as newly promoted
             // sibling Elders shall still in the state of pre-split.
             let previous_section_key = prev_context.network_knowledge.section_key();
-            let sibling_prefix = sibling_sap.prefix();
 
-            let mut cmds =
-                vec![self.send_metadata_updates(promoted_sibling_elders.clone(), &sibling_prefix)];
-
-            // Also send AE update to sibling section's new Elders
-            cmds.push(MyNode::send_ae_update_to_nodes(
+            // Send AE update to sibling section's new Elders
+            Ok(vec![MyNode::send_ae_update_to_nodes(
                 prev_context,
                 promoted_sibling_elders,
                 previous_section_key,
-            ));
-
-            Ok(cmds)
+            )])
         } else {
             error!("Failed to get sibling SAP during split.");
             Ok(vec![])

@@ -7,17 +7,14 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{
-    node::{
-        core::NodeContext, flow_ctrl::cmds::Cmd, messaging::Peers, MyNode, Result,
-        MIN_LEVEL_WHEN_FULL,
-    },
+    node::{core::NodeContext, flow_ctrl::cmds::Cmd, messaging::Peers, MyNode, Result},
     storage::Error as StorageError,
 };
 use qp2p::SendStream;
 use sn_dysfunction::IssueType;
 use sn_interface::{
     messaging::{
-        data::{CmdResponse, StorageLevel},
+        data::{CmdResponse, StorageThreshold},
         system::{JoinResponse, NodeDataCmd, NodeDataQuery, NodeDataResponse, NodeEvent, NodeMsg},
         MsgId,
     },
@@ -366,21 +363,18 @@ impl MyNode {
                 trace!("Handling msg: DkgAE s{} from {}", session_id.sh(), sender);
                 node.handle_dkg_anti_entropy(session_id, sender)
             }
-            NodeMsg::NodeDataCmd(NodeDataCmd::RecordStorageLevel { node_id, level, .. }) => {
+            NodeMsg::NodeEvent(NodeEvent::StorageThresholdReached { node_id, level, .. }) => {
                 let mut node = node.write().await;
-                debug!("[NODE WRITE]: RecordStorage write gottt...");
-                let changed = node.set_storage_level(&node_id, level);
-                if changed && level.value() == MIN_LEVEL_WHEN_FULL {
+                debug!("[NODE WRITE]: StorageThresholdReached write gottt...");
+                let changed = node.set_adult_full(&node_id, level);
+                if changed {
                     // ..then we accept a new node in place of the full node
                     node.joins_allowed = true;
+                    if node.are_majority_of_adults_full() {
+                        // ..then we accept new nodes until we split
+                        node.joins_allowed_until_split = true;
+                    }
                 }
-                Ok(vec![])
-            }
-            NodeMsg::NodeDataCmd(NodeDataCmd::ReceiveMetadata { metadata }) => {
-                let mut node = node.write().await;
-                debug!("[NODE WRITE]: ReceveMeta write gottt...");
-                info!("Processing received MetadataExchange packet: {:?}", msg_id);
-                node.set_adult_levels(metadata);
                 Ok(vec![])
             }
             NodeMsg::NodeEvent(NodeEvent::CouldNotStoreData {
@@ -399,13 +393,16 @@ impl MyNode {
                 }
 
                 if full && !context.joins_allowed {
-                    let mut write_locked_node = node.write().await;
+                    let mut node = node.write().await;
                     debug!("[NODE WRITE]: CouldNotStore write gottt...");
-                    let changed = write_locked_node
-                        .set_storage_level(&node_id, StorageLevel::from(StorageLevel::MAX)?);
+                    let changed = node.set_adult_full(&node_id, StorageThreshold::new());
                     if changed {
                         // ..then we accept a new node in place of the full node
-                        write_locked_node.joins_allowed = true;
+                        node.joins_allowed = true;
+                        if node.are_majority_of_adults_full() {
+                            // ..then we accept new nodes until we split
+                            node.joins_allowed_until_split = true;
+                        }
                     }
                 }
 
@@ -481,19 +478,19 @@ impl MyNode {
     /// Advising the same
     pub(crate) fn record_storage_level_if_any(
         context: &NodeContext,
-        level: Option<StorageLevel>,
+        level: Option<StorageThreshold>,
     ) -> Result<Vec<Cmd>> {
         let mut cmds = vec![];
         if let Some(level) = level {
-            info!("Storage has now passed {} % used.", 10 * level.value());
+            info!("Storage has now reached {} % used.", level.value());
 
-            // Run a SetStorageLevel Cmd to actually update the DataStorage instance
-            cmds.push(Cmd::SetStorageLevel(level));
+            // Run a SetStorageThresholdReached Cmd to actually update the DataStorage instance
+            cmds.push(Cmd::SetStorageThresholdReached(level));
             let node_id = PublicKey::from(context.keypair.public);
             let node_xorname = XorName::from(node_id);
 
             // we ask the section to record the new level reached
-            let msg = NodeMsg::NodeDataCmd(NodeDataCmd::RecordStorageLevel {
+            let msg = NodeMsg::NodeEvent(NodeEvent::StorageThresholdReached {
                 section: node_xorname,
                 node_id,
                 level,

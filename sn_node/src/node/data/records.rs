@@ -8,7 +8,7 @@
 
 use crate::node::{
     core::NodeContext, flow_ctrl::dysfunction::DysCmds, messaging::Peers, Cmd, Error, MyNode,
-    Prefix, Result,
+    Result,
 };
 use crate::storage::Error as StorageError;
 
@@ -16,7 +16,7 @@ use sn_dysfunction::IssueType;
 use sn_interface::{
     data_copy_count,
     messaging::{
-        data::{ClientDataResponse, DataCmd, DataQuery, MetadataExchange, StorageLevel},
+        data::{ClientDataResponse, DataCmd, DataQuery, StorageThreshold},
         system::{NodeDataCmd, NodeDataQuery, NodeDataResponse, NodeEvent, NodeMsg, OperationId},
         AuthorityProof, ClientAuth, Dst, MsgId, MsgKind, MsgType, WireMsg,
     },
@@ -406,19 +406,13 @@ impl MyNode {
         wire_msg.serialize().map_err(|_| Error::InvalidMessage)
     }
 
-    pub(crate) fn get_metadata_of(&self, prefix: &Prefix) -> MetadataExchange {
-        // Load tracked adult_levels
-        let adult_levels = self.capacity.levels_matching(*prefix);
-        MetadataExchange { adult_levels }
-    }
-
-    pub(crate) fn set_adult_levels(&mut self, adult_levels: MetadataExchange) {
-        let MetadataExchange { adult_levels } = adult_levels;
-        self.capacity.set_adult_levels(adult_levels)
+    // Called on split
+    pub(crate) fn clear_full_adults(&mut self) {
+        self.capacity.clear_full_adults()
     }
 
     /// Registered holders not present in provided list of members
-    /// will be removed from `adult_storage_info` and no longer tracked for liveness.
+    /// will be removed from full nodes (if present) and no longer tracked for liveness.
     pub(crate) async fn liveness_retain_only(&mut self, members: BTreeSet<XorName>) {
         self.capacity.retain_members_only(&members);
         // stop tracking liveness of absent holders
@@ -434,7 +428,6 @@ impl MyNode {
     /// Adds the new adult to the Capacity and Liveness trackers.
     pub(crate) async fn add_new_adult_to_trackers(&mut self, adult: XorName) {
         info!("Adding new Adult: {adult} to trackers");
-        self.capacity.add_new_adult(adult);
         if let Err(error) = self
             .dysfunction_cmds_sender
             .send(DysCmds::AddNode(adult))
@@ -446,18 +439,29 @@ impl MyNode {
 
     /// Set storage level of a given node.
     /// Returns whether the level changed or not.
-    pub(crate) fn set_storage_level(&mut self, node_id: &PublicKey, level: StorageLevel) -> bool {
-        info!("Setting new storage level..");
-        let changed = self
-            .capacity
-            .set_adult_level(XorName::from(*node_id), level);
-        let avg_usage = self.capacity.avg_usage();
-        info!(
-            "Avg storage usage among Adults is between {}-{} %",
-            avg_usage * 10,
-            (avg_usage + 1) * 10
-        );
-        changed
+    pub(crate) fn set_adult_full(&mut self, node_id: &PublicKey, level: StorageThreshold) -> bool {
+        if level.value() >= StorageThreshold::THRESHOLD {
+            info!("Setting adult full..");
+            let changed = self.capacity.set_adult_full(XorName::from(*node_id));
+            info!("Adult full already set? {}", !changed);
+            return changed;
+        }
+        let adult_len = self.network_knowledge.adults().len();
+        if adult_len > 0 {
+            let full_len = self.capacity.full_adults().len();
+            let full_percent = 100.0 * full_len as f64 / adult_len as f64;
+            info!("Full adults {full_percent:.2} % ({full_len} of {adult_len})");
+        }
+
+        false
+    }
+
+    /// We say generally, that we assume that amongst a majority of adults at least one is honest.
+    /// So if > 50 % have reported full, then we consider all full (when using fixed size storage!).
+    pub(crate) fn are_majority_of_adults_full(&self) -> bool {
+        let adults_len = self.network_knowledge.adults().len();
+        let full_adults_len = self.capacity.full_adults().len();
+        full_adults_len > adults_len / 2
     }
 
     /// Used to fetch the list of holders for given name of data.

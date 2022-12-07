@@ -13,7 +13,7 @@ use sn_consensus::Decision;
 use sn_dysfunction::IssueType;
 use sn_interface::{
     messaging::{
-        data::{ClientMsg, StorageLevel},
+        data::{ClientMsg, StorageThreshold},
         system::{NodeMsg, SectionSig, SectionSigned},
         AuthorityProof, ClientAuth, MsgId, WireMsg,
     },
@@ -58,8 +58,8 @@ pub(crate) enum Cmd {
         wire_msg: WireMsg,
         send_stream: Option<Arc<Mutex<SendStream>>>,
     },
-    /// Update our own storage level
-    SetStorageLevel(StorageLevel),
+    /// Marks us as having reached storage threshold level.
+    SetStorageThresholdReached(StorageThreshold),
     /// Log a Node's Punishment
     TrackNodeIssueInDysfunction { name: XorName, issue: IssueType },
     UpdateNetworkAndHandleValidClientMsg {
@@ -175,7 +175,7 @@ impl Cmd {
         match self {
             Cmd::SendMsg { .. } => State::Comms,
             Cmd::SendLockingJoinMsg { .. } => State::Comms,
-            Cmd::SetStorageLevel { .. } => State::Node,
+            Cmd::SetStorageThresholdReached { .. } => State::Node,
             Cmd::HandleFailedSendToNode { .. } => State::Comms,
             Cmd::HandleMsg { .. } => State::HandleMsg,
             Cmd::UpdateNetworkAndHandleValidClientMsg { .. } => State::ClientMsg,
@@ -195,8 +195,8 @@ impl fmt::Display for Cmd {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             #[cfg(not(feature = "test-utils"))]
-            Cmd::SetStorageLevel(level) => {
-                write!(f, "SetStorageLevel {:?}", level)
+            Cmd::SetStorageThresholdReached(level) => {
+                write!(f, "SetStorageThresholdReached {:?}", level)
             }
             Cmd::HandleMsg { wire_msg, .. } => {
                 write!(f, "HandleMsg {:?}", wire_msg.msg_id())

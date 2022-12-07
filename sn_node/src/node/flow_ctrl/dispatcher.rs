@@ -219,11 +219,11 @@ impl Dispatcher {
                 debug!("[NODE WRITE]: propose offline write got");
                 node.cast_offline_proposals(&names)
             }
-            Cmd::SetStorageLevel(new_level) => {
+            Cmd::SetStorageThresholdReached(threshold) => {
                 let mut node = self.node.write().await;
-                debug!("[NODE WRITE]: Setting storage level");
+                debug!("[NODE WRITE]: Setting storage threshold reached");
 
-                node.data_storage.set_storage_level(new_level);
+                node.data_storage.set_threshold_reached(threshold);
 
                 Ok(vec![])
             }

@@ -30,10 +30,7 @@ mod relocation;
 /// Standard channel size, to allow for large swings in throughput
 pub static STANDARD_CHANNEL_SIZE: usize = 100_000;
 
-use self::{
-    bootstrap::join_network, core::MyNode, data::MIN_LEVEL_WHEN_FULL, flow_ctrl::cmds::Cmd,
-    node_starter::CmdChannel,
-};
+use self::{bootstrap::join_network, core::MyNode, flow_ctrl::cmds::Cmd, node_starter::CmdChannel};
 pub use self::{
     cfg::config_handler::Config,
     error::{Error, Result},
@@ -124,6 +121,7 @@ mod core {
         // Section handover consensus state (Some for Elders, None for others)
         pub(crate) handover_voting: Option<Handover>,
         pub(crate) joins_allowed: bool,
+        pub(crate) joins_allowed_until_split: bool,
         // Trackers
         pub(crate) capacity: Capacity,
         pub(crate) dysfunction_cmds_sender: mpsc::Sender<DysCmds>,
@@ -187,7 +185,7 @@ mod core {
                 network_knowledge: self.network_knowledge().clone(),
                 section_keys_provider: self.section_keys_provider.clone(),
                 comm: self.comm.clone(),
-                joins_allowed: self.joins_allowed,
+                joins_allowed: self.joins_allowed || self.joins_allowed_until_split,
                 data_storage: self.data_storage.clone(),
                 dysfunction_cmds_sender: self.dysfunction_cmds_sender.clone(),
             }
@@ -256,6 +254,7 @@ mod core {
                 relocate_state: None,
                 handover_voting: handover,
                 joins_allowed: true,
+                joins_allowed_until_split: false,
                 data_storage,
                 capacity: Capacity::default(),
                 dysfunction_cmds_sender,
@@ -554,7 +553,9 @@ mod core {
 
                         // Whenever there is an elders change, casting a round of joins_allowed
                         // proposals to sync this particular state.
-                        cmds.extend(self.propose(Proposal::JoinsAllowed(self.joins_allowed))?);
+                        cmds.extend(self.propose(Proposal::JoinsAllowed(
+                            self.joins_allowed || self.joins_allowed_until_split,
+                        ))?);
                     }
                 } else {
                     warn!("We're an elder but are missing our section key share, delaying elder state initialization until we receive it: sap={sap:?}");
@@ -639,17 +640,26 @@ mod core {
                 );
             }
 
-            // update new elders if we were an elder (regardless if still or not)
-            if new_elders && old.is_elder {
+            // when we split, the range of data of adults are responsible for is halved, i.e. their threshold is no longer reached.
+            if section_split && old.is_elder {
+                self.clear_full_adults();
+                self.joins_allowed_until_split = false;
+            }
+            if section_split && self.data_storage.is_threshold_reached() {
+                // would only be set if we were an adult..
+                self.data_storage.clear_threshold_reached();
+            }
+
+            // update new elders if we were an adult and our storage threshold has been reached
+            if new_elders && !old.is_elder && self.data_storage.is_threshold_reached() {
                 cmds.push(
-                    self.send_metadata_updates(
+                    self.report_us_as_full(
                         self.network_knowledge
                             .section_auth()
                             .elders()
-                            .filter(|peer| !old_elders.contains(&peer.name()))
+                            .filter(|peer| added_elders.contains(&peer.name()))
                             .cloned()
                             .collect(),
-                        &self.network_knowledge.prefix(),
                     ),
                 );
             };

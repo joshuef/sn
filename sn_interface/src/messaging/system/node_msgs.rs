@@ -8,7 +8,7 @@
 
 use super::OperationId;
 use crate::messaging::{
-    data::{DataQueryVariant, MetadataExchange, QueryResponse, StorageLevel},
+    data::{DataQueryVariant, QueryResponse, StorageThreshold},
     ClientAuth,
 };
 use crate::types::{DataAddress, PublicKey, ReplicatedData};
@@ -20,27 +20,12 @@ use xor_name::XorName;
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum NodeDataCmd {
-    /// Notify Elders on nearing max capacity
-    RecordStorageLevel {
-        /// Node Id
-        node_id: PublicKey,
-        /// Section to which the message needs to be sent to. (NB: this is the section of the node id).
-        section: XorName,
-        /// The storage level reported by the node.
-        level: StorageLevel,
-    },
     /// Tells an Adult to store a data
     ReplicateOneData(ReplicatedData),
     /// Tells an Adult to store a replica of some data set
     ReplicateDataBatch(Vec<ReplicatedData>),
     /// Tells an Adult to fetch and replicate data from the sender
     SendAnyMissingRelevantData(Vec<DataAddress>),
-    /// Sent to all promoted nodes (also sibling if any) after
-    /// a completed transition to a new constellation.
-    ReceiveMetadata {
-        /// Metadata
-        metadata: MetadataExchange,
-    },
 }
 
 /// Event message sent among nodes
@@ -55,6 +40,16 @@ pub enum NodeEvent {
         data: ReplicatedData,
         /// Whether store failed due to full
         full: bool,
+    },
+    #[cfg(any(feature = "chunks", feature = "registers"))]
+    /// Notify Elders on nearing max capacity
+    StorageThresholdReached {
+        /// Node Id
+        node_id: PublicKey,
+        /// Section to which the message needs to be sent to. (NB: this is the section of the node id).
+        section: XorName,
+        /// The storage level reported by the node.
+        level: StorageThreshold,
     },
 }
 

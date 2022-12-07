@@ -22,7 +22,7 @@ use registers::RegisterStorage;
 use sn_dbc::SpentProofShare;
 use sn_interface::{
     messaging::{
-        data::{DataQueryVariant, Error as MessagingError, RegisterQuery, StorageLevel},
+        data::{DataQueryVariant, Error as MessagingError, RegisterQuery, StorageThreshold},
         system::NodeQueryResponse,
     },
     types::{
@@ -46,7 +46,7 @@ pub struct DataStorage {
     chunks: ChunkStorage,
     registers: RegisterStorage,
     used_space: UsedSpace,
-    last_recorded_level: StorageLevel,
+    reported_threshold: Option<StorageThreshold>,
 }
 
 impl DataStorage {
@@ -56,14 +56,27 @@ impl DataStorage {
             chunks: ChunkStorage::new(path, used_space.clone())?,
             registers: RegisterStorage::new(path, used_space.clone())?,
             used_space,
-            last_recorded_level: StorageLevel::zero(),
+            reported_threshold: None,
         })
     }
 
-    /// Update the storage level on data storage
+    /// Returns whether the storage threshold has been reached or not.
+    pub(crate) fn is_threshold_reached(&self) -> bool {
+        self.reported_threshold.is_some()
+    }
+
+    /// Set the storage threshold reached flag
     /// (To avoid needing a write lock for general storage ops, we separate out this state operation)
-    pub fn set_storage_level(&mut self, new_level: StorageLevel) {
-        self.last_recorded_level = new_level;
+    pub fn set_threshold_reached(&mut self, threshold: StorageThreshold) {
+        if self.reported_threshold.is_none() {
+            self.reported_threshold = Some(threshold);
+        }
+    }
+
+    /// Clears the storage threshold reached flag
+    /// (To avoid needing a write lock for general storage ops, we separate out this state operation)
+    pub fn clear_threshold_reached(&mut self) {
+        self.reported_threshold = None;
     }
 
     /// Store data in the local store
@@ -73,7 +86,7 @@ impl DataStorage {
         data: &ReplicatedData,
         section_pk: PublicKey,
         node_keypair: Keypair,
-    ) -> Result<Option<StorageLevel>> {
+    ) -> Result<Option<StorageThreshold>> {
         debug!("Replicating {data:?}");
         match data {
             ReplicatedData::Chunk(chunk) => self.chunks.store(chunk).await?,
@@ -92,18 +105,13 @@ impl DataStorage {
             ReplicatedData::SpentbookLog(data) => self.registers.update(data).await?,
         };
 
-        // check if we've filled another approx. 10%-points of our storage
-        // if so, update the recorded level
-        let last_recorded_level = self.last_recorded_level;
-        if let Ok(next_level) = last_recorded_level.next() {
-            // used_space_ratio is a heavy task that's why we don't do it all the time
-            let used_space_ratio = self.used_space.ratio();
-            let used_space_level = 10.0 * used_space_ratio;
-            // every level represents 10 percentage points
-            if used_space_level as u8 >= next_level.value() {
-                debug!("Next level for storage has been reached");
-                return Ok(Some(next_level));
-            }
+        // check if we've reached the threshold of our storage
+        // if so, we will set the reported threshold
+        if self.reported_threshold.is_none()
+            && 100 * self.used_space.ratio() as u8 >= StorageThreshold::THRESHOLD
+        {
+            debug!("Adult storage threshold level has been reached");
+            return Ok(Some(StorageThreshold::new()));
         }
 
         Ok(None)
