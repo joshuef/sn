@@ -456,7 +456,7 @@ fn smoke() -> Result<()> {
     // NOTE: IF this value is being changed due to a change in the config,
     // the change in config also be handled in Config::merge()
     // and in examples/config_handling.rs
-    let expected_size = 109;
+    let expected_size = 55;
 
     assert_eq!(bincode::serialize(&Config::default())?.len(), expected_size);
     Ok(())
