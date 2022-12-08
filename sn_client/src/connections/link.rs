@@ -27,7 +27,6 @@ type ConnId = String;
 pub(crate) struct Link {
     peer: Peer,
     endpoint: Endpoint,
-    connections: Arc<RwLock<BTreeMap<ConnId, Connection>>>,
 }
 
 impl Link {
@@ -35,7 +34,6 @@ impl Link {
         Self {
             peer,
             endpoint,
-            connections: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 
@@ -71,26 +69,8 @@ impl Link {
 
     // Get a connection or create a fresh one
     async fn get_or_connect(&self, msg_id: MsgId) -> Result<Connection, LinkError> {
-        debug!("Attempting to get conn read lock... {msg_id:?}");
-        let empty_conns = self.connections.read().await.is_empty();
-        debug!("lock got {msg_id:?}");
-        if empty_conns {
-            // read again
-            // first caller will find none again, but the subsequent callers
-            // will access only after the first one finished creating a new connection
-            // thus will find a connection here:
-            debug!("{msg_id:?} creating conn with {:?}", self.peer);
             self.create_connection_if_none_exist(Some(msg_id)).await
-        } else {
-            debug!("{msg_id:?} connections do exist...");
-            // TODO: add in simple connection check when available.
-            // we can then remove dead conns easily and return only valid conns
-            let connections = self.connections.read().await;
-            let conn = connections.iter().next().map(|(_, c)| c.clone());
-            // we have to drop connection read here before we attempt to create (and write) connections
-            drop(connections);
-            Ok(conn.unwrap_or(self.create_connection_if_none_exist(Some(msg_id)).await?))
-        }
+
     }
 
     /// Uses qp2p to create a connection and stores it on Self.
@@ -103,16 +83,6 @@ impl Link {
         msg_id: Option<MsgId>,
     ) -> Result<Connection, LinkError> {
         let peer = self.peer;
-        // grab write lock to prevent many many conns being opened at once
-        debug!("[CONN WRITE]: {msg_id:?} to {peer:?}");
-        let mut conns = self.connections.write().await;
-        debug!("[CONN WRITE]: lock obtained {msg_id:?} to {peer:?}");
-
-        // let's double check we havent got a connection meanwhile
-        if let Some(conn) = conns.iter().next().map(|(_, c)| c.clone()) {
-            debug!("{msg_id:?} Connection already exists in Link, so returning that instead of creating a fresh connection");
-            return Ok(conn);
-        }
 
         debug!("{msg_id:?} creating connnnn to {peer:?}");
         let (conn, _incoming_msgs) = self
@@ -128,8 +98,6 @@ impl Link {
             conn.remote_address(),
             conn.id()
         );
-
-        let _ = conns.insert(conn.id(), conn.clone());
 
         Ok(conn)
     }
