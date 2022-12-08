@@ -236,8 +236,6 @@ impl PeerSessionWorker {
         }
 
         let queue = self.queue.clone();
-        let link_connections = self.link.connections.clone();
-        let conns_count = self.link.connections.len();
         let the_peer = *self.link.peer();
 
         let mut link = self.link.clone();
@@ -253,10 +251,6 @@ impl PeerSessionWorker {
 
                     // only increment connection attempts if our connections set is empty
                     // and so we'll be trying to create a fresh connection
-                    if link.connections.is_empty() {
-                        job.connection_retries += 1;
-                    }
-
                     job.reporter
                         .send(SendStatus::TransientError(format!("{error:?}")));
 
@@ -273,8 +267,7 @@ impl PeerSessionWorker {
             let connection_id = conn.id();
             debug!("Connection exists for sendjob: {id:?}, and has conn_id: {connection_id:?}");
 
-            let send_resp =
-                Link::send_with_connection(job.bytes.clone(), 0, conn, link_connections).await;
+            let send_resp = Link::send_with_connection(job.bytes.clone(), 0, conn).await;
 
             match send_resp {
                 Ok(_) => {
@@ -282,16 +275,10 @@ impl PeerSessionWorker {
                 }
                 Err(err) => {
                     if err.is_local_close() {
-                        debug!("Peer linked dropped when trying to send {:?}. But link has {:?} connections", id, conns_count );
+                        debug!("Peer linked dropped when trying to send {:?}.", id);
                         error!("the error on send :{err:?}");
-                        // we can retry if we've more connections!
-                        if conns_count <= 1 {
-                            debug!(
-                                "No connections left on this link to {:?}, terminating session.",
-                                the_peer
-                            );
-                            job.connection_retries += 1;
-                        }
+
+                        job.connection_retries += 1;
                     }
 
                     warn!(
