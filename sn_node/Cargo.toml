@@ -15,7 +15,7 @@ name = "data_storage"
 harness = false
 
 [features]
-default = [ "statemap" ]
+default = [ "statemap", "limit-network-size" ]
 limit-network-size = []
 chaos = []
 unstable-wiremsg-debuginfo = []
