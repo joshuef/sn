@@ -124,7 +124,7 @@ impl MsgListener {
                 }
                 Err(error) => {
                     // TODO: should we propagate this?
-                    warn!("Error on connection {conn_id} with {remote_address}: {error:?}");
+                    // warn!("Error on connection {conn_id} with {remote_address}: {error:?}");
                 }
             }
         }
