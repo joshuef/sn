@@ -149,7 +149,7 @@ impl FlowCtrl {
         (cmd_sender_channel, rejoin_network_rx)
     }
 
-    /// Listens on data_replication_receiver, sorts and batches data, generating SendMsg Cmds
+    /// Listens on data_replication_receiver on a new thread, sorts and batches data, generating SendMsg Cmds
     async fn send_out_data_for_replication(
         node_arc: Arc<RwLock<MyNode>>,
         node_data_storage: DataStorage,
@@ -160,7 +160,10 @@ impl FlowCtrl {
         let _ = tokio::task::spawn(async move {
             // is there a simple way to dedupe common data going to many peers?
             // is any overhead reduction worth the increased complexity?
-            while let Some((data_addresses, peer)) = data_replication_receiver.recv().await {
+            while let Some((mut data_addresses, peer)) = data_replication_receiver.recv().await {
+                // sort the addresses so that we're batching out closest data first
+                data_addresses.sort_by(|lhs, rhs| peer.name().cmp_distance(lhs.name(), rhs.name()));
+
                 // TODO: To what extent might we want to bundle these messages?
                 let data_batch_size = 10; // at most bundle 10 pieces of data together into one message
 
