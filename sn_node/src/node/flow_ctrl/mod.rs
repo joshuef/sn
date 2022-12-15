@@ -32,6 +32,7 @@ use sn_interface::{
     types::{log_markers::LogMarker, DataAddress, Peer},
 };
 
+use super::DataStorage;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use xor_name::XorName;
@@ -55,7 +56,7 @@ impl FlowCtrl {
     pub(crate) async fn start(
         cmd_ctrl: CmdCtrl,
         mut incoming_msg_events: mpsc::Receiver<MsgFromPeer>,
-        mut data_replication_receiver: mpsc::Receiver<(Vec<DataAddress>, Peer)>,
+        data_replication_receiver: mpsc::Receiver<(Vec<DataAddress>, Peer)>,
         dysfunction_cmds_channels: (mpsc::Sender<DysCmds>, mpsc::Receiver<DysCmds>),
     ) -> (
         mpsc::Sender<(Cmd, Vec<usize>)>,
@@ -68,7 +69,6 @@ impl FlowCtrl {
         let (rejoin_network_tx, rejoin_network_rx) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let node_identifier = node_context.info.name();
-        let node_data_storage = node_context.data_storage.clone();
 
         let dysfunction_channels = {
             let dysfunction = DysfunctionDetection::new(
@@ -102,8 +102,8 @@ impl FlowCtrl {
 
         let cmd_channel = cmd_sender_channel.clone();
         let cmd_channel_for_msgs = cmd_sender_channel.clone();
-        let cmd_channel_for_data_replication = cmd_sender_channel.clone();
 
+        let node_arc_for_replication = cmd_ctrl.node();
         // start a new thread to kick off incoming cmds
         let _ = tokio::task::spawn(async move {
             // Get a stable identifier for statemap naming. This is NOT the node's current name.
@@ -121,9 +121,43 @@ impl FlowCtrl {
             }
         });
 
+        Self::send_out_data_for_replication(
+            node_arc_for_replication,
+            node_context.data_storage,
+            data_replication_receiver,
+            cmd_sender_channel.clone(),
+        )
+        .await;
+
+        // start a new thread to convert msgs to Cmds
+        let _ = tokio::task::spawn(async move {
+            while let Some(peer_msg) = incoming_msg_events.recv().await {
+                let cmd = match Self::handle_new_msg_event(peer_msg).await {
+                    Ok(cmd) => cmd,
+                    Err(error) => {
+                        error!("Could not handle incoming msg event: {error:?}");
+                        continue;
+                    }
+                };
+
+                if let Err(error) = cmd_channel_for_msgs.send((cmd.clone(), vec![])).await {
+                    error!("Error sending msg onto cmd channel {error:?}");
+                }
+            }
+        });
+
+        (cmd_sender_channel, rejoin_network_rx)
+    }
+
+    /// Listens on data_replication_receiver, sorts and batches data, generating SendMsg Cmds
+    async fn send_out_data_for_replication(
+        node_arc: Arc<RwLock<MyNode>>,
+        node_data_storage: DataStorage,
+        mut data_replication_receiver: mpsc::Receiver<(Vec<DataAddress>, Peer)>,
+        cmd_channel_for_data_replication: mpsc::Sender<(Cmd, Vec<usize>)>,
+    ) {
         // start a new thread to kick off data replication
         let _ = tokio::task::spawn(async move {
-            // let pending_data_to_replicate_to_peers = BTreeMap::new();
             // is there a simple way to dedupe common data going to many peers?
             // is any overhead reduction worth the increased complexity?
             while let Some((data_addresses, peer)) = data_replication_receiver.recv().await {
@@ -155,6 +189,9 @@ impl FlowCtrl {
                     if data_batch.len() == data_batch_size || iteration == data_addresses.len() {
                         trace!("Sending out data batch on i:{iteration:?} to {peer:?}");
                         let msg = NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateData(data_batch));
+
+                        let node_context = node_arc.read().await.context();
+
                         let cmd = Cmd::send_msg(msg, Peers::Single(peer), node_context.clone());
                         if let Err(error) =
                             cmd_channel_for_data_replication.send((cmd, vec![])).await
@@ -166,25 +203,6 @@ impl FlowCtrl {
                 }
             }
         });
-
-        // start a new thread to convert msgs to Cmds
-        let _ = tokio::task::spawn(async move {
-            while let Some(peer_msg) = incoming_msg_events.recv().await {
-                let cmd = match Self::handle_new_msg_event(peer_msg).await {
-                    Ok(cmd) => cmd,
-                    Err(error) => {
-                        error!("Could not handle incoming msg event: {error:?}");
-                        continue;
-                    }
-                };
-
-                if let Err(error) = cmd_channel_for_msgs.send((cmd.clone(), vec![])).await {
-                    error!("Error sending msg onto cmd channel {error:?}");
-                }
-            }
-        });
-
-        (cmd_sender_channel, rejoin_network_rx)
     }
 
     /// This is a never ending loop as long as the node is live.
