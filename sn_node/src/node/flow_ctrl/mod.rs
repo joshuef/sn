@@ -165,7 +165,7 @@ impl FlowCtrl {
                 data_addresses.sort_by(|lhs, rhs| peer.name().cmp_distance(lhs.name(), rhs.name()));
 
                 // TODO: To what extent might we want to bundle these messages?
-                let data_batch_size = 10; // at most bundle 10 pieces of data together into one message
+                let data_batch_size = 50; // at most bundle 50 pieces of data together into one message
 
                 let mut data_batch = vec![];
                 debug!(
