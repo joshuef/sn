@@ -154,56 +154,62 @@ impl FlowCtrl {
         node_arc: Arc<RwLock<MyNode>>,
         node_data_storage: DataStorage,
         mut data_replication_receiver: mpsc::Receiver<(Vec<DataAddress>, Peer)>,
-        cmd_channel_for_data_replication: mpsc::Sender<(Cmd, Vec<usize>)>,
+        cmd_channel: mpsc::Sender<(Cmd, Vec<usize>)>,
     ) {
         // start a new thread to kick off data replication
         let _ = tokio::task::spawn(async move {
             // is there a simple way to dedupe common data going to many peers?
             // is any overhead reduction worth the increased complexity?
             while let Some((mut data_addresses, peer)) = data_replication_receiver.recv().await {
-                // sort the addresses so that we're batching out closest data first
-                data_addresses.sort_by(|lhs, rhs| peer.name().cmp_distance(lhs.name(), rhs.name()));
+                let send_cmd_channel = cmd_channel.clone();
+                let the_node = node_arc.clone();
+                let data_storage = node_data_storage.clone();
+                // move replication off thread so we don't block the receiver
+                let _ = tokio::task::spawn(async move {
+                    // sort the addresses so that we're batching out closest data first
+                    data_addresses
+                        .sort_by(|lhs, rhs| peer.name().cmp_distance(lhs.name(), rhs.name()));
 
-                // TODO: To what extent might we want to bundle these messages?
-                let data_batch_size = 50; // at most bundle 50 pieces of data together into one message
+                    // TODO: To what extent might we want to bundle these messages?
+                    let data_batch_size = 50; // at most bundle 50 pieces of data together into one message
 
-                let mut data_batch = vec![];
-                debug!(
-                    "{:?} Data {:?} to: {:?}",
-                    LogMarker::SendingMissingReplicatedData,
-                    data_addresses,
-                    peer,
-                );
+                    let mut data_batch = vec![];
+                    debug!(
+                        "{:?} Data {:?} to: {:?}",
+                        LogMarker::SendingMissingReplicatedData,
+                        data_addresses,
+                        peer,
+                    );
 
-                for (i, address) in data_addresses.iter().enumerate() {
-                    // enumerate is 0 indexed, let's correct for that for counting
-                    // and then comparing to data_addresses
-                    let iteration = i + 1;
-                    match node_data_storage.get_from_local_store(address).await {
-                        Ok(data) => {
-                            data_batch.push(data);
-                        }
-                        Err(error) => {
-                            error!("Error getting {address:?} from local storage during data replication flow: {error:?}");
-                        }
-                    };
+                    for (i, address) in data_addresses.iter().enumerate() {
+                        // enumerate is 0 indexed, let's correct for that for counting
+                        // and then comparing to data_addresses
+                        let iteration = i + 1;
+                        match data_storage.get_from_local_store(address).await {
+                            Ok(data) => {
+                                data_batch.push(data);
+                            }
+                            Err(error) => {
+                                error!("Error getting {address:?} from local storage during data replication flow: {error:?}");
+                            }
+                        };
 
-                    // if we hit a multiple of the batch limit or we're at the last data to send...
-                    if data_batch.len() == data_batch_size || iteration == data_addresses.len() {
-                        trace!("Sending out data batch on i:{iteration:?} to {peer:?}");
-                        let msg = NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateData(data_batch));
-
-                        let node_context = node_arc.read().await.context();
-
-                        let cmd = Cmd::send_msg(msg, Peers::Single(peer), node_context.clone());
-                        if let Err(error) =
-                            cmd_channel_for_data_replication.send((cmd, vec![])).await
+                        // if we hit a multiple of the batch limit or we're at the last data to send...
+                        if data_batch.len() == data_batch_size || iteration == data_addresses.len()
                         {
-                            error!("Failed to enqueue send msg command for replication of data batch to {peer:?}: {error:?}");
+                            trace!("Sending out data batch on i:{iteration:?} to {peer:?}");
+                            let msg = NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateData(data_batch));
+
+                            let node_context = the_node.read().await.context();
+
+                            let cmd = Cmd::send_msg(msg, Peers::Single(peer), node_context.clone());
+                            if let Err(error) = send_cmd_channel.send((cmd, vec![])).await {
+                                error!("Failed to enqueue send msg command for replication of data batch to {peer:?}: {error:?}");
+                            }
+                            data_batch = vec![];
                         }
-                        data_batch = vec![];
                     }
-                }
+                });
             }
         });
     }
