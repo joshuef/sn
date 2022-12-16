@@ -63,7 +63,7 @@ features = [
 ]
 
 [features]
-default = [ "self-update" ]
+default = [ "self-update", "limit-client-upload-size" ]
 check-replicas = [ "sn_api/check-replicas" ]
 limit-client-upload-size = ["sn_api/limit-client-upload-size"]
 self-update = []
