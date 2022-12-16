@@ -209,7 +209,21 @@ impl MyNode {
 
         // Do not disable node joins in first section.
         let our_prefix = self.network_knowledge.prefix();
-        if !our_prefix.is_empty() {
+
+        let allow_startup_joins = {
+            const TEMP_SECTION_LIMIT: usize = 20;
+
+            let is_first_section = our_prefix.is_empty();
+            let members_count = self.network_knowledge.members().len();
+
+            if cfg!(feature = "limit-network-size") {
+                is_first_section && members_count <= TEMP_SECTION_LIMIT
+            } else {
+                is_first_section
+            }
+        };
+
+        if !allow_startup_joins {
             // ..otherwise, switch off joins_allowed on a node joining.
             // TODO: fix racing issues here? https://github.com/maidsafe/safe_network/issues/890
             self.joins_allowed = false;
