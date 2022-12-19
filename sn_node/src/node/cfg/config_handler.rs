@@ -23,7 +23,7 @@ use tracing::{debug, error, warn, Level};
 const CONFIG_FILE: &str = "node.config";
 const DEFAULT_ROOT_DIR_NAME: &str = "root_dir";
 #[cfg(not(target_arch = "arm"))]
-const DEFAULT_MAX_CAPACITY: usize = 50 * 1024 * 1024 * 1024; // 50GB
+const DEFAULT_MAX_CAPACITY: usize = 10 * 1024 * 1024 * 1024; // 10GB
 #[cfg(any(target_arch = "arm", target_arch = "armv7"))]
 const DEFAULT_MAX_CAPACITY: usize = usize::MAX; // This will be 2^32 on these architectures.
 
