@@ -13,7 +13,7 @@ use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 
 // The number of separate copies of a chunk which should be maintained.
-pub(crate) const MIN_LEVEL_WHEN_FULL: u8 = 3; // considered full when >= 30 %.
+pub(crate) const MIN_LEVEL_WHEN_FULL: u8 = 4; // considered full when >= 40 %.
 
 /// A util for sharing the info on data capacity among the
 /// chunk storing nodes in the section.
