@@ -63,7 +63,15 @@ impl MyNode {
             )));
         }
 
-        if !context.joins_allowed {
+        // check if we're limiting section size using the feature flag
+        let we_should_reject_joins = if cfg!(feature = "limit-network-size") {
+            const TEMP_SECTION_LIMIT: usize = 25;
+            context.network_knowledge.members().len() >= TEMP_SECTION_LIMIT
+        } else {
+            !context.joins_allowed
+        };
+
+        if we_should_reject_joins {
             debug!("Rejecting JoinRequest from {peer} - joins currently not allowed.");
             let msg =
                 NodeMsg::JoinResponse(JoinResponse::Rejected(JoinRejectionReason::JoinsDisallowed));
