@@ -165,52 +165,50 @@ impl FlowCtrl {
                 let the_node = node_arc.clone();
                 let data_storage = node_data_storage.clone();
                 // move replication off thread so we don't block the receiver
-                let _ = tokio::task::spawn(async move {
-                    // sort the addresses so that we're batching out closest data first
-                    data_addresses
-                        .sort_by(|lhs, rhs| peer.name().cmp_distance(lhs.name(), rhs.name()));
+                // let _ = tokio::task::spawn(async move {
+                // sort the addresses so that we're batching out closest data first
+                data_addresses.sort_by(|lhs, rhs| peer.name().cmp_distance(lhs.name(), rhs.name()));
 
-                    // The messages shall be bundled by size AND numbers.
-                    // That is: a bundle get sent out whichever the total size and total numbers
-                    //          reached the upper limit first.
-                    let mut data_bundle = DataBundle::default();
+                // The messages shall be bundled by size AND numbers.
+                // That is: a bundle get sent out whichever the total size and total numbers
+                //          reached the upper limit first.
+                let mut data_bundle = DataBundle::default();
 
-                    debug!(
-                        "{:?} Data {:?} to: {:?}",
-                        LogMarker::SendingMissingReplicatedData,
-                        data_addresses,
-                        peer,
-                    );
+                debug!(
+                    "{:?} Data {:?} to: {:?}",
+                    LogMarker::SendingMissingReplicatedData,
+                    data_addresses,
+                    peer,
+                );
 
-                    for (i, address) in data_addresses.iter().enumerate() {
-                        // enumerate is 0 indexed, let's correct for that for counting
-                        // and then comparing to data_addresses
-                        let iteration = i + 1;
-                        match data_storage.get_from_local_store(address).await {
-                            Ok(data) => {
-                                data_bundle.push(data);
-                            }
-                            Err(error) => {
-                                error!("Error getting {address:?} from local storage during data replication flow: {error:?}");
-                            }
-                        };
+                for (i, address) in data_addresses.iter().enumerate() {
+                    // enumerate is 0 indexed, let's correct for that for counting
+                    // and then comparing to data_addresses
+                    let iteration = i + 1;
+                    match data_storage.get_from_local_store(address).await {
+                        Ok(data) => {
+                            data_bundle.push(data);
+                        }
+                        Err(error) => {
+                            error!("Error getting {address:?} from local storage during data replication flow: {error:?}");
+                        }
+                    };
 
-                        // if we hit a multiple of the batch limit or we're at the last data to send...
-                        if data_bundle.shall_flush() || iteration == data_addresses.len() {
-                            trace!("Sending out data batch on i:{iteration:?} to {peer:?}");
-                            let msg = NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateData(
-                                data_bundle.take(),
-                            ));
+                    // if we hit a multiple of the batch limit or we're at the last data to send...
+                    if data_bundle.shall_flush() || iteration == data_addresses.len() {
+                        trace!("Sending out data batch on i:{iteration:?} to {peer:?}");
+                        let msg =
+                            NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateData(data_bundle.take()));
 
-                            let node_context = the_node.read().await.context();
+                        let node_context = the_node.read().await.context();
 
-                            let cmd = Cmd::send_msg(msg, Peers::Single(peer), node_context.clone());
-                            if let Err(error) = send_cmd_channel.send((cmd, vec![])).await {
-                                error!("Failed to enqueue send msg command for replication of data batch to {peer:?}: {error:?}");
-                            }
+                        let cmd = Cmd::send_msg(msg, Peers::Single(peer), node_context.clone());
+                        if let Err(error) = send_cmd_channel.send((cmd, vec![])).await {
+                            error!("Failed to enqueue send msg command for replication of data batch to {peer:?}: {error:?}");
                         }
                     }
-                });
+                }
+                // });
             }
         });
     }

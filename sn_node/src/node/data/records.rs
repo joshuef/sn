@@ -86,7 +86,6 @@ impl MyNode {
         let (kind, payload) = MyNode::serialize_node_msg(snapshot.name, msg)?;
         let section_key = snapshot.network_knowledge.section_key();
 
-        debug!("replication read locks got");
         // drop the read lock before we do anything async
 
         for target in targets {

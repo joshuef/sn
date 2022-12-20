@@ -54,12 +54,6 @@ impl MyNode {
                 .collect();
 
             if holder_adult_list.contains(&sender.name()) {
-                debug!(
-                    "{:?} batch data {:?} to: {:?} ",
-                    LogMarker::QueuingMissingReplicatedData,
-                    data,
-                    sender
-                );
                 data_for_sender.push(data);
             }
         }
@@ -68,6 +62,13 @@ impl MyNode {
             trace!("We have no data worth sending");
             return None;
         }
+
+        debug!(
+            "{:?} batching data of len {:?} to: {:?} ",
+            LogMarker::QueuingMissingReplicatedData,
+            data_for_sender.len(),
+            sender
+        );
 
         Some(Cmd::EnqueueDataForReplication {
             recipient: sender,
