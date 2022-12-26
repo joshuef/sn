@@ -402,8 +402,7 @@ impl MyNode {
                 let targets = MyNode::target_data_holders(&context, data.name());
 
                 // TODO: handle responses where replication failed...
-                let _results =
-                    MyNode::replicate_data_to_nodes(&context, data, msg_id, targets).await?;
+                let _results = MyNode::store_data_at_nodes(&context, data, msg_id, targets).await?;
 
                 Ok(vec![])
             }
@@ -436,13 +435,13 @@ impl MyNode {
                 auth,
                 operation_id,
             }) => {
-                // A request from EndUser - via elders - for locally stored data
+                // A request from EndUser - via Elders - for locally stored data
                 debug!(
                     "Handle NodeQuery with msg_id {:?}, operation_id {}",
                     msg_id, operation_id
                 );
 
-                MyNode::handle_data_query_at_adult(
+                MyNode::handle_data_query_where_stored(
                     &context,
                     operation_id,
                     &query,

@@ -33,7 +33,7 @@ pub enum Error {
     FailedToWriteFile,
     /// Insufficient Adults found to store data
     #[error("Failed to store data. Insufficient replication count at section {prefix:?}. Expected {expected}, found {found}.")]
-    InsufficientAdults {
+    InsufficientNodeCount {
         /// The prefix of the section.
         prefix: Prefix,
         /// Expected number of Adults for minimum replication.

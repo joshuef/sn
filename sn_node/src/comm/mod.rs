@@ -596,7 +596,7 @@ mod tests {
 
         let query = DataQueryVariant::GetChunk(ChunkAddress(xor_name::rand::random()));
         let query = DataQuery {
-            adult_index: 0,
+            node_index: 0,
             variant: query,
         };
         let query = ClientMsg::Query(query);

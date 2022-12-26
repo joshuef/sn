@@ -319,7 +319,7 @@ mod tests {
         let msg_id = MsgId::new();
 
         let client_msg = ClientMsg::Query(DataQuery {
-            adult_index: 0,
+            node_index: 0,
             variant: DataQueryVariant::GetChunk(ChunkAddress(xor_name::rand::random())),
         });
 

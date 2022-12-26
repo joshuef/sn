@@ -33,9 +33,9 @@ struct Args {
     #[clap(short, long)]
     upload: bool,
 
-    /// Query up to nth adult
+    /// Query up to nth node
     #[clap(long, default_value_t = data_copy_count() - 1)]
-    up_to_adult: usize,
+    up_to_node: usize,
 }
 
 #[tokio::main]
@@ -68,24 +68,24 @@ async fn main() -> Result<()> {
         assert_eq!(data_map_xor, xor);
     }
 
-    // Query adults for chunks
+    // Query nodes for chunks
 
     let mut error_occurred = false;
     for chunk in chunks {
         println!(
-            "Querying adult 0-{} for Chunk({})",
-            args.up_to_adult,
+            "Querying node 0-{} for Chunk({})",
+            args.up_to_node,
             chunk.address().0
         );
 
-        for i in 0..=args.up_to_adult {
+        for i in 0..=args.up_to_node {
             let query_fut = query_chunk(&client, i, chunk.address().0);
             let res = match timeout(Duration::from_secs(10), query_fut).await {
                 Ok(res) => res,
                 Err(_) => {
                     error_occurred = true;
                     eprintln!(
-                        "Error for Chunk({}) at adult `{i}`: timed out!",
+                        "Error for Chunk({}) at node `{i}`: timed out!",
                         chunk.address().0
                     );
                     continue;
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
             if let Err(e) = res {
                 error_occurred = true;
                 eprintln!(
-                    "Error for Chunk({}) at adult `{i}`: {e:?}",
+                    "Error for Chunk({}) at node `{i}`: {e:?}",
                     chunk.address().0
                 );
             }
@@ -103,16 +103,18 @@ async fn main() -> Result<()> {
     }
 
     if error_occurred {
-        return Err(eyre!("A chunk was not succesfully returned from an adult"));
+        return Err(eyre!(
+            "A chunk was not succesfully returned from a holder node"
+        ));
     }
 
     Ok(())
 }
 
-async fn query_chunk(client: &Client, adult_index: usize, address: XorName) -> Result<Chunk> {
+async fn query_chunk(client: &Client, node_index: usize, address: XorName) -> Result<Chunk> {
     let variant = DataQueryVariant::GetChunk(ChunkAddress(address));
     let query = DataQuery {
-        adult_index,
+        node_index,
         variant: variant.clone(),
     };
     let query_response = send_query(client, query).await?;

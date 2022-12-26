@@ -13,6 +13,8 @@ use crate::node::{
 use crate::storage::Error as StorageError;
 
 use sn_dysfunction::IssueType;
+use sn_interface::messaging::data::QueryResponse;
+use sn_interface::types::register::User;
 use sn_interface::{
     data_copy_count,
     messaging::{
@@ -38,36 +40,36 @@ use tracing::info;
 use xor_name::XorName;
 
 /// Environment variable to set timeout value (in seconds) for data queries
-/// forwarded to Adults. Default value (`ADULT_RESPONSE_DEFAULT_TIMEOUT`) is otherwise used.
-const ENV_ADULT_RESPONSE_TIMEOUT: &str = "SN_ADULT_RESPONSE_TIMEOUT";
+/// forwarded to Adults. Default value (`NODE_RESPONSE_DEFAULT_TIMEOUT`) is otherwise used.
+const ENV_NODE_RESPONSE_TIMEOUT: &str = "SN_NODE_RESPONSE_TIMEOUT";
 
 // Default timeout period set for data queries forwarded to Adult.
 // TODO: how to determine this time properly?
-const ADULT_RESPONSE_DEFAULT_TIMEOUT: Duration = Duration::from_secs(70);
+const NODE_RESPONSE_DEFAULT_TIMEOUT: Duration = Duration::from_secs(70);
 
 lazy_static! {
-    static ref ADULT_RESPONSE_TIMEOUT: Duration = match var(ENV_ADULT_RESPONSE_TIMEOUT)
+    static ref NODE_RESPONSE_TIMEOUT: Duration = match var(ENV_NODE_RESPONSE_TIMEOUT)
         .map(|v| u64::from_str(&v))
     {
         Ok(Ok(secs)) => {
             let timeout = Duration::from_secs(secs);
-            info!("{ENV_ADULT_RESPONSE_TIMEOUT} env var set, Adult query response timeout set to {timeout:?}");
+            info!("{ENV_NODE_RESPONSE_TIMEOUT} env var set, Node data query response timeout set to {timeout:?}");
             timeout
         }
         Ok(Err(err)) => {
             warn!(
-                "Failed to parse {ENV_ADULT_RESPONSE_TIMEOUT} value, using \
-                default value ({ADULT_RESPONSE_DEFAULT_TIMEOUT:?}): {err:?}"
+                "Failed to parse {ENV_NODE_RESPONSE_TIMEOUT} value, using \
+                default value ({NODE_RESPONSE_DEFAULT_TIMEOUT:?}): {err:?}"
             );
-            ADULT_RESPONSE_DEFAULT_TIMEOUT
+            NODE_RESPONSE_DEFAULT_TIMEOUT
         }
-        Err(_) => ADULT_RESPONSE_DEFAULT_TIMEOUT,
+        Err(_) => NODE_RESPONSE_DEFAULT_TIMEOUT,
     };
 }
 
 impl MyNode {
     // Locate ideal holders for this data, instruct them to store the data
-    pub(crate) async fn replicate_data_to_nodes(
+    pub(crate) async fn store_data_at_nodes(
         context: &NodeContext,
         data: ReplicatedData,
         msg_id: MsgId,
@@ -96,7 +98,7 @@ impl MyNode {
 
         for target in targets {
             dst.name = target.name();
-            let bytes_to_adult = wire_msg.serialize_with_new_dst(&dst)?;
+            let bytes_to_node = wire_msg.serialize_with_new_dst(&dst)?;
 
             let comm = context.comm.clone();
             info!("About to send {msg_id:?} to holder: {target:?}");
@@ -108,7 +110,7 @@ impl MyNode {
                         comm.send_out_bytes_to_peer_and_return_response(
                             target,
                             msg_id,
-                            bytes_to_adult.clone(),
+                            bytes_to_node.clone(),
                         )
                         .await,
                     )
@@ -121,7 +123,7 @@ impl MyNode {
     }
 
     // Locate ideal holders for this data, instruct them to store the data
-    pub(crate) async fn replicate_data_to_nodes_and_ack_to_client(
+    pub(crate) async fn store_data_at_nodes_and_ack_to_client(
         context: &NodeContext,
         cmd: DataCmd,
         data: ReplicatedData,
@@ -131,7 +133,7 @@ impl MyNode {
     ) -> Result<()> {
         let targets_len = targets.len();
 
-        let responses = MyNode::replicate_data_to_nodes(context, data, msg_id, targets).await?;
+        let responses = MyNode::store_data_at_nodes(context, data, msg_id, targets).await?;
         let mut success_count = 0;
         let mut ack_response = None;
         let mut last_error = None;
@@ -222,8 +224,8 @@ impl MyNode {
         }
     }
 
-    /// Find target adult, sends a bidi msg, awaiting response, and then sends this on to the client
-    pub(crate) async fn read_data_from_adult_and_respond_to_client(
+    /// Find target node, sends a bidi msg, awaiting response, and then sends this on to the client
+    pub(crate) async fn read_data_and_respond_to_client(
         context: NodeContext,
         query: DataQuery,
         msg_id: MsgId,
@@ -231,27 +233,59 @@ impl MyNode {
         source_client: Peer,
         client_response_stream: Arc<Mutex<SendStream>>,
     ) -> Result<Vec<Cmd>> {
-        // We generate the operation id to track the response from the Adult
+        let response = context
+            .data_storage
+            .query(&query.variant, User::Key(auth.public_key))
+            .await;
+
+        trace!("{msg_id:?} data query response at Elder is: {:?}", response);
+        if let QueryResponse::GetChunk(Ok(chunk)) = response {
+            let client_msg = ClientDataResponse::QueryResponse {
+                response: QueryResponse::GetChunk(Ok(chunk)),
+                correlation_id: msg_id,
+            };
+
+            let (kind, payload) = MyNode::serialize_client_msg_response(context.name, client_msg)?;
+
+            MyNode::send_msg_on_stream(
+                context.network_knowledge.section_key(),
+                payload,
+                kind,
+                client_response_stream,
+                Some(source_client),
+                msg_id,
+            )
+            .await?;
+            trace!("{msg_id:?} data query returned data from elder directly");
+            return Ok(vec![]);
+        }
+
+        // We generate the operation id to track the response from the node
         // by using the query msg id, which shall be unique per query.
         let operation_id = OperationId::from(&Bytes::copy_from_slice(msg_id.as_ref()));
         let address = query.variant.address();
         trace!(
-            "{:?} preparing to query adults for data at {:?} with op_id: {:?}",
+            "{:?} preparing to query other nodes for data at {:?} with op_id: {:?}",
             LogMarker::DataQueryReceviedAtElder,
             address,
             operation_id
         );
 
-        let targets = MyNode::target_data_holders(&context, *address.name());
+        let mut targets = MyNode::target_data_holders(&context, *address.name());
+        // since we already checked our local storage above, we do not need to retain ourselves in the list of targets
+        targets.retain(|peer| peer.name() != context.info.name());
 
-        // Query only the nth adult
-        let target = if let Some(peer) = targets.iter().nth(query.adult_index) {
+        // We accept the chance that we will be querying an Elder that the client already queried directly.
+        // The extra load is not that big. But we can optimize this later if necessary.
+
+        // Query only the nth node
+        let target = if let Some(peer) = targets.iter().nth(query.node_index) {
             *peer
         } else {
             debug!("No targets found for {msg_id:?}");
-            let error = Error::InsufficientAdults {
+            let error = Error::InsufficientNodeCount {
                 prefix: context.network_knowledge.prefix(),
-                expected: query.adult_index as u8 + 1,
+                expected: query.node_index as u8 + 1,
                 found: targets.len() as u8,
             };
 
@@ -268,7 +302,7 @@ impl MyNode {
             return Ok(vec![]);
         };
 
-        // Form a msg to our adult
+        // Form a msg to the node
         let msg = NodeMsg::NodeDataQuery(NodeDataQuery {
             query: query.variant,
             auth: auth.into_inner(),
@@ -279,7 +313,7 @@ impl MyNode {
 
         let comm = context.comm.clone();
 
-        let bytes_to_adult = MyNode::form_usr_msg_bytes_to_node(
+        let bytes_to_node = MyNode::form_usr_msg_bytes_to_node(
             context.network_knowledge.section_key(),
             payload,
             kind,
@@ -287,9 +321,9 @@ impl MyNode {
             msg_id,
         )?;
 
-        debug!("Sending out {msg_id:?} to Adult {target:?}");
-        let response = match timeout(*ADULT_RESPONSE_TIMEOUT, async {
-            comm.send_out_bytes_to_peer_and_return_response(target, msg_id, bytes_to_adult)
+        debug!("Sending out {msg_id:?} to node {target:?}");
+        let response = match timeout(*NODE_RESPONSE_TIMEOUT, async {
+            comm.send_out_bytes_to_peer_and_return_response(target, msg_id, bytes_to_node)
                 .await
         })
         .await
@@ -298,8 +332,8 @@ impl MyNode {
             Err(_elapsed) => {
                 error!(
                     "{msg_id:?}: No response from {target:?} after {:?} timeout. \
-                    Marking adult as dysfunctional",
-                    *ADULT_RESPONSE_TIMEOUT
+                    Marking node as dysfunctional",
+                    *NODE_RESPONSE_TIMEOUT
                 );
                 return Ok(vec![Cmd::TrackNodeIssueInDysfunction {
                     name: target.name(),

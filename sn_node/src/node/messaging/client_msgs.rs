@@ -95,7 +95,7 @@ impl MyNode {
 
     /// Handle data query
     #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn handle_data_query_at_adult(
+    pub(crate) async fn handle_data_query_where_stored(
         context: &NodeContext,
         operation_id: OperationId,
         query: &DataQueryVariant,
@@ -109,7 +109,7 @@ impl MyNode {
             .query(query, User::Key(auth.public_key))
             .await;
 
-        trace!("{msg_id:?} data query response at adult is: {:?}", response);
+        trace!("{msg_id:?} data query response at node is: {:?}", response);
         let msg = NodeDataResponse::QueryResponse {
             response,
             operation_id,
@@ -148,6 +148,9 @@ impl MyNode {
     }
 
     /// Handle incoming client msgs.
+    /// If this is a store request, and we are an Elder and one of
+    /// the `data_copy_count()` nodes, then we will send a wiremsg
+    /// to ourselves, among the msgs sent to the other holders.
     pub(crate) async fn handle_valid_client_msg(
         context: NodeContext,
         msg_id: MsgId,
@@ -163,7 +166,7 @@ impl MyNode {
         let cmd = match msg {
             ClientMsg::Cmd(cmd) => cmd,
             ClientMsg::Query(query) => {
-                return MyNode::read_data_from_adult_and_respond_to_client(
+                return MyNode::read_data_and_respond_to_client(
                     context,
                     query,
                     msg_id,
@@ -241,8 +244,8 @@ impl MyNode {
 
         // make sure the expected replication factor is achieved
         if data_copy_count() > targets.len() {
-            error!("InsufficientAdults for storing data reliably");
-            let error = Error::InsufficientAdults {
+            error!("InsufficientNodeCount for storing data reliably");
+            let error = Error::InsufficientNodeCount {
                 prefix: context.network_knowledge.prefix(),
                 expected: data_copy_count() as u8,
                 found: targets.len() as u8,
@@ -256,10 +259,10 @@ impl MyNode {
             return Ok(vec![]);
         }
 
-        // the replication msg sent to nodes
+        // the store msg sent to nodes
         // cmds here may be dysfunction tracking.
         // CmdAcks are sent over the send stream herein
-        MyNode::replicate_data_to_nodes_and_ack_to_client(
+        MyNode::store_data_at_nodes_and_ack_to_client(
             &context,
             cmd,
             data,
@@ -270,7 +273,6 @@ impl MyNode {
         .await?;
 
         // TODO: handle failed responses
-        // cmds.extend();
 
         Ok(cmds)
     }

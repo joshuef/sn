@@ -127,7 +127,7 @@ pub enum NodeMsg {
         /// BLS signature share of an Elder if Proposal::NewSectionsAgreement
         optional_sig_share: Option<SectionSigShare>,
     },
-    /// Node events are Adult to Elder events about something that happened on an Adult.
+    /// Node events are Node to Elder events about something that happened on a Node.
     NodeEvent(NodeEvent),
     /// Data cmds are orders to perform some data operation, only sent internally in the network.
     NodeDataCmd(NodeDataCmd),
