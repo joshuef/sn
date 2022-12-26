@@ -14,30 +14,30 @@ use std::collections::{BTreeMap, BTreeSet};
 /// chunk storing nodes in the section.
 #[derive(Default)]
 pub(crate) struct Capacity {
-    full_adults: BTreeMap<XorName, StorageThreshold>,
+    full_nodes: BTreeMap<XorName, StorageThreshold>,
 }
 
 impl Capacity {
     /// Full chunk storing nodes in the section (considered full when at >= `MIN_LEVEL_WHEN_FULL`).
-    pub(crate) fn full_adults(&self) -> BTreeSet<XorName> {
-        self.full_adults.iter().map(|(name, _)| *name).collect()
+    pub(crate) fn full_nodes(&self) -> BTreeSet<XorName> {
+        self.full_nodes.iter().map(|(name, _)| *name).collect()
     }
 
-    /// Returns whether the adult was set.
-    pub(crate) fn set_adult_full(&mut self, adult: XorName) -> bool {
-        self.full_adults
-            .insert(adult, StorageThreshold::new())
+    /// Returns whether the node was set.
+    pub(crate) fn set_node_full(&mut self, node: XorName) -> bool {
+        self.full_nodes
+            .insert(node, StorageThreshold::new())
             .is_none()
     }
 
-    // Clears list of reportedly full adults
-    pub(crate) fn clear_full_adults(&mut self) {
-        self.full_adults.clear()
+    // Clears list of reportedly full nodes
+    pub(crate) fn clear_full_nodes(&mut self) {
+        self.full_nodes.clear()
     }
 
     /// Registered holders not present in provided list of members
-    /// will be removed from `full_adults` and no longer tracked.
+    /// will be removed from `full_nodes` and no longer tracked.
     pub(crate) fn retain_members_only(&mut self, members: &BTreeSet<XorName>) {
-        self.full_adults.retain(|name, _| members.contains(name))
+        self.full_nodes.retain(|name, _| members.contains(name))
     }
 }

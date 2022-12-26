@@ -67,7 +67,7 @@ lazy_static! {
 
 impl MyNode {
     // Locate ideal holders for this data, instruct them to store the data
-    pub(crate) async fn replicate_data_to_adults(
+    pub(crate) async fn replicate_data_to_nodes(
         context: &NodeContext,
         data: ReplicatedData,
         msg_id: MsgId,
@@ -121,7 +121,7 @@ impl MyNode {
     }
 
     // Locate ideal holders for this data, instruct them to store the data
-    pub(crate) async fn replicate_data_to_adults_and_ack_to_client(
+    pub(crate) async fn replicate_data_to_nodes_and_ack_to_client(
         context: &NodeContext,
         cmd: DataCmd,
         data: ReplicatedData,
@@ -131,7 +131,7 @@ impl MyNode {
     ) -> Result<()> {
         let targets_len = targets.len();
 
-        let responses = MyNode::replicate_data_to_adults(context, data, msg_id, targets).await?;
+        let responses = MyNode::replicate_data_to_nodes(context, data, msg_id, targets).await?;
         let mut success_count = 0;
         let mut ack_response = None;
         let mut last_error = None;
@@ -407,8 +407,8 @@ impl MyNode {
     }
 
     // Called on split
-    pub(crate) fn clear_full_adults(&mut self) {
-        self.capacity.clear_full_adults()
+    pub(crate) fn clear_full_nodes(&mut self) {
+        self.capacity.clear_full_nodes()
     }
 
     /// Registered holders not present in provided list of members
@@ -439,18 +439,18 @@ impl MyNode {
 
     /// Set storage level of a given node.
     /// Returns whether the level changed or not.
-    pub(crate) fn set_adult_full(&mut self, node_id: &PublicKey, level: StorageThreshold) -> bool {
+    pub(crate) fn set_node_full(&mut self, node_id: &PublicKey, level: StorageThreshold) -> bool {
         if level.value() >= StorageThreshold::THRESHOLD {
-            info!("Setting adult full..");
-            let changed = self.capacity.set_adult_full(XorName::from(*node_id));
-            info!("Adult full already set? {}", !changed);
+            info!("Setting node full..");
+            let changed = self.capacity.set_node_full(XorName::from(*node_id));
+            info!("Node full already set? {}", !changed);
             return changed;
         }
-        let adult_len = self.network_knowledge.adults().len();
-        if adult_len > 0 {
-            let full_len = self.capacity.full_adults().len();
-            let full_percent = 100.0 * full_len as f64 / adult_len as f64;
-            info!("Full adults {full_percent:.2} % ({full_len} of {adult_len})");
+        let nodes_len = self.network_knowledge.members().len();
+        if nodes_len > 0 {
+            let full_len = self.capacity.full_nodes().len();
+            let full_percent = 100.0 * full_len as f64 / nodes_len as f64;
+            info!("Full nodes {full_percent:.2} % ({full_len} of {nodes_len})");
         }
 
         false
@@ -458,10 +458,10 @@ impl MyNode {
 
     /// We say generally, that we assume that amongst a majority of adults at least one is honest.
     /// So if > 50 % have reported full, then we consider all full (when using fixed size storage!).
-    pub(crate) fn are_majority_of_adults_full(&self) -> bool {
-        let adults_len = self.network_knowledge.adults().len();
-        let full_adults_len = self.capacity.full_adults().len();
-        full_adults_len > adults_len / 2
+    pub(crate) fn are_majority_of_nodes_full(&self) -> bool {
+        let nodes_len = self.network_knowledge.members().len();
+        let full_nodes_len = self.capacity.full_nodes().len();
+        full_nodes_len > nodes_len / 2
     }
 
     /// Used to fetch the list of holders for given name of data.

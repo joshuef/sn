@@ -256,10 +256,10 @@ impl MyNode {
             return Ok(vec![]);
         }
 
-        // the replication msg sent to adults
+        // the replication msg sent to nodes
         // cmds here may be dysfunction tracking.
         // CmdAcks are sent over the send stream herein
-        MyNode::replicate_data_to_adults_and_ack_to_client(
+        MyNode::replicate_data_to_nodes_and_ack_to_client(
             &context,
             cmd,
             data,

@@ -642,7 +642,7 @@ mod core {
 
             // when we split, the range of data of adults are responsible for is halved, i.e. their threshold is no longer reached.
             if section_split && old.is_elder {
-                self.clear_full_adults();
+                self.clear_full_nodes();
                 self.joins_allowed_until_split = false;
             }
             if section_split && self.data_storage.is_threshold_reached() {
