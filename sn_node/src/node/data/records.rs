@@ -13,8 +13,6 @@ use crate::node::{
 use crate::storage::Error as StorageError;
 
 use sn_dysfunction::IssueType;
-use sn_interface::messaging::data::QueryResponse;
-use sn_interface::types::register::User;
 use sn_interface::{
     data_copy_count,
     messaging::{
@@ -233,32 +231,8 @@ impl MyNode {
         source_client: Peer,
         client_response_stream: Arc<Mutex<SendStream>>,
     ) -> Result<Vec<Cmd>> {
-        let response = context
-            .data_storage
-            .query(&query.variant, User::Key(auth.public_key))
-            .await;
-
-        trace!("{msg_id:?} data query response at Elder is: {:?}", response);
-        if let QueryResponse::GetChunk(Ok(chunk)) = response {
-            let client_msg = ClientDataResponse::QueryResponse {
-                response: QueryResponse::GetChunk(Ok(chunk)),
-                correlation_id: msg_id,
-            };
-
-            let (kind, payload) = MyNode::serialize_client_msg_response(context.name, client_msg)?;
-
-            MyNode::send_msg_on_stream(
-                context.network_knowledge.section_key(),
-                payload,
-                kind,
-                client_response_stream,
-                Some(source_client),
-                msg_id,
-            )
-            .await?;
-            trace!("{msg_id:?} data query returned data from elder directly");
-            return Ok(vec![]);
-        }
+        // We accept that we might be sending a WireMsg to ourselves.
+        // The extra load is not that big. But we can optimize this later if necessary.
 
         // We generate the operation id to track the response from the node
         // by using the query msg id, which shall be unique per query.
@@ -271,9 +245,7 @@ impl MyNode {
             operation_id
         );
 
-        let mut targets = MyNode::target_data_holders(&context, *address.name());
-        // since we already checked our local storage above, we do not need to retain ourselves in the list of targets
-        targets.retain(|peer| peer.name() != context.info.name());
+        let targets = MyNode::target_data_holders(&context, *address.name());
 
         // We accept the chance that we will be querying an Elder that the client already queried directly.
         // The extra load is not that big. But we can optimize this later if necessary.
