@@ -156,11 +156,11 @@ pub enum Error {
     #[error("Network data error:: {0}")]
     NetworkData(#[from] sn_interface::types::Error),
     /// Error Sending Cmd in to node for processing
-    #[error("Error Sending Cmd in to node for processing.")]
-    CmdSendError,
+    #[error("Error sending Cmd on node channel for processing.")]
+    CmdChannelSendError,
     /// Error Sending Cmd in to node for processing
-    #[error("Error Sending Cmd to adult {0:?} for processing.")]
-    AdultCmdSendError(Peer),
+    #[error("Error sending Cmd to node {0:?} for processing.")]
+    CmdSendError(Peer),
     /// Network Knowledge error.
     #[error("Network knowledge error:: {0}")]
     NetworkKnowledge(#[from] sn_interface::network_knowledge::Error),

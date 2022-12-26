@@ -143,8 +143,8 @@ impl MyNode {
                     ack_response = Some(response);
                 }
                 Err(error) => {
-                    error!("{msg_id:?} Error when replicating to adult {peer:?}: {error:?}");
-                    if let Error::AdultCmdSendError(peer) = error {
+                    error!("{msg_id:?} Error when replicating to node {peer:?}: {error:?}");
+                    if let Error::CmdSendError(peer) = error {
                         context.log_node_issue(peer.name(), IssueType::Communication);
                     }
                     last_error = Some(error);
@@ -413,7 +413,7 @@ impl MyNode {
     }
 
     /// Registered holders not present in provided list of members
-    /// will be removed from full nodes (if present) and no longer tracked for liveness.
+    /// will no longer be tracked for liveness.
     pub(crate) async fn liveness_retain_only(&mut self, members: BTreeSet<XorName>) {
         // stop tracking liveness of absent holders
         if let Err(error) = self
@@ -470,7 +470,7 @@ impl MyNode {
         let node_keypair = Keypair::Ed25519(context.keypair.clone());
 
         let mut is_full = false;
-        let data_batch_is_empty = !data_batch.is_empty();
+        let data_batch_is_empty = data_batch.is_empty();
 
         for data in data_batch {
             // grab the write lock each time in the loop to not hold it over large data sets
@@ -508,7 +508,7 @@ impl MyNode {
         // to continue the replication process (like pageing).
         // This means there that there will be a number of repeated `give-me-data -> here_you_go` msg
         // exchanges, until there is no more data missing on this node.
-        if !is_full && data_batch_is_empty {
+        if !is_full && !data_batch_is_empty {
             let data_i_have = context.data_storage.data_addrs().await;
             let msg = NodeMsg::NodeDataCmd(NodeDataCmd::SendAnyMissingRelevantData(data_i_have));
             let cmd = MyNode::send_system_msg(msg, Peers::Single(sender), context.clone());

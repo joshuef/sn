@@ -58,7 +58,7 @@ impl DataStorage {
         })
     }
 
-    /// Returns whether the storage threshold has been reached or not.
+    /// Returns whether the storage max capacity has been reached or not.
     pub(crate) fn has_reached_limit(&self) -> bool {
         self.used_space.has_reached_limit()
     }

@@ -180,7 +180,6 @@ impl MyNode {
 
         // extract the data from the request
         let data_result = match cmd.clone() {
-            // These reads/writes are for adult nodes...
             DataCmd::StoreChunk(chunk) => Ok(ReplicatedData::Chunk(chunk)),
             DataCmd::Register(cmd) => Ok(ReplicatedData::RegisterWrite(cmd)),
             DataCmd::Spentbook(cmd) => {

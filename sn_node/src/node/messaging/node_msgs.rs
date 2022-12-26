@@ -54,8 +54,7 @@ impl MyNode {
 
         trace!("About to store data from {original_msg_id:?}: {data_addr:?}");
 
-        // We are an adult here, so just store away!
-        // This may return a NotEnoughSpace error... but we should have reported storage increase
+        // This may return a DatabaseFull error... but we should have reported StorageError::NotEnoughSpace
         // well before this
         let response = match context
             .data_storage
@@ -396,7 +395,8 @@ impl MyNode {
                     cmds.push(Cmd::SetJoinsAllowed(true));
                     // NB: we do not also set allowed until split, since we
                     // do not expect another node to run out of space before we ourselves
-                    // have reached the storage limit (which is a little bit lower than actual space).
+                    // have reached the storage limit (i.e. the `max_capacity` variable, which
+                    // should be set by the node operator to be a little bit lower than the actual space).
                 }
 
                 let targets = MyNode::target_data_holders(&context, data.name());

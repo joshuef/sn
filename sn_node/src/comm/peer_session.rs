@@ -90,7 +90,7 @@ impl PeerSession {
                     "Failed sending {msg_id:?} to {:?} {err:?}",
                     self.link.peer()
                 );
-                Error::AdultCmdSendError(*self.link.peer())
+                Error::CmdSendError(*self.link.peer())
             })
     }
 

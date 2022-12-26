@@ -638,9 +638,10 @@ mod core {
                 );
             }
 
-            // when we split, the range of data on nodes are responsible for is halved, i.e. their threshold is no longer reached..
+            // when we split, the range of data that nodes are responsible for is halved,
+            // i.e. their max capacity is no longer reached, so..
             if section_split && old.is_elder {
-                // .. so, we do not need to allow new nodes in to bring down used space.
+                // .. we do not need to allow new nodes in to bring down used space.
                 self.joins_allowed_until_split = false;
             }
 
