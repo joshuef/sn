@@ -13,7 +13,7 @@ use sn_consensus::Decision;
 use sn_dysfunction::IssueType;
 use sn_interface::{
     messaging::{
-        data::{ClientMsg, StorageThreshold},
+        data::ClientMsg,
         system::{NodeMsg, SectionSig, SectionSigned},
         AuthorityProof, ClientAuth, MsgId, WireMsg,
     },
@@ -58,8 +58,10 @@ pub(crate) enum Cmd {
         wire_msg: WireMsg,
         send_stream: Option<Arc<Mutex<SendStream>>>,
     },
-    /// Marks us as having reached storage threshold level.
-    SetStorageThresholdReached(StorageThreshold),
+    /// Allows joining of new nodes.
+    SetJoinsAllowed(bool),
+    /// Allows joining of new nodes until the section splits.
+    SetJoinsAllowedUntilSplit(bool),
     /// Log a Node's Punishment
     TrackNodeIssueInDysfunction { name: XorName, issue: IssueType },
     UpdateNetworkAndHandleValidClientMsg {
@@ -175,7 +177,6 @@ impl Cmd {
         match self {
             Cmd::SendMsg { .. } => State::Comms,
             Cmd::SendLockingJoinMsg { .. } => State::Comms,
-            Cmd::SetStorageThresholdReached { .. } => State::Node,
             Cmd::HandleFailedSendToNode { .. } => State::Comms,
             Cmd::HandleMsg { .. } => State::HandleMsg,
             Cmd::UpdateNetworkAndHandleValidClientMsg { .. } => State::ClientMsg,
@@ -187,6 +188,8 @@ impl Cmd {
             Cmd::HandleNewSectionsAgreement { .. } => State::Handover,
             Cmd::HandleDkgOutcome { .. } => State::Dkg,
             Cmd::EnqueueDataForReplication { .. } => State::Replication,
+            Cmd::SetJoinsAllowed { .. } => State::Data,
+            Cmd::SetJoinsAllowedUntilSplit { .. } => State::Data,
         }
     }
 }
@@ -194,10 +197,6 @@ impl Cmd {
 impl fmt::Display for Cmd {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(not(feature = "test-utils"))]
-            Cmd::SetStorageThresholdReached(level) => {
-                write!(f, "SetStorageThresholdReached {:?}", level)
-            }
             Cmd::HandleMsg { wire_msg, .. } => {
                 write!(f, "HandleMsg {:?}", wire_msg.msg_id())
             }
@@ -219,6 +218,8 @@ impl fmt::Display for Cmd {
                 write!(f, "TrackNodeIssueInDysfunction {:?}, {:?}", name, issue)
             }
             Cmd::ProposeVoteNodesOffline(_) => write!(f, "ProposeOffline"),
+            Cmd::SetJoinsAllowed { .. } => write!(f, "SetJoinsAllowed"),
+            Cmd::SetJoinsAllowedUntilSplit { .. } => write!(f, "SetJoinsAllowedUntilSplit"),
         }
     }
 }

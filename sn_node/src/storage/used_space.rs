@@ -42,6 +42,13 @@ impl UsedSpace {
         current_used_space + size <= self.max_capacity
     }
 
+    /// Checks if we've reached the limit of our storage.
+    pub(crate) fn has_reached_limit(&self) -> bool {
+        let current_used_space = self.used_space.load(Ordering::Relaxed);
+        current_used_space >= self.max_capacity
+    }
+
+    #[allow(unused)]
     pub(crate) fn ratio(&self) -> f64 {
         let used = self.used_space.load(Ordering::Relaxed);
         let max_capacity = self.max_capacity;

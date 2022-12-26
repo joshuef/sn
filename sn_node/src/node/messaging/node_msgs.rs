@@ -14,7 +14,7 @@ use qp2p::SendStream;
 use sn_dysfunction::IssueType;
 use sn_interface::{
     messaging::{
-        data::{CmdResponse, StorageThreshold},
+        data::CmdResponse,
         system::{JoinResponse, NodeDataCmd, NodeDataQuery, NodeDataResponse, NodeEvent, NodeMsg},
         MsgId,
     },
@@ -23,7 +23,6 @@ use sn_interface::{
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use xor_name::XorName;
 
 impl MyNode {
     /// Send a (`NodeMsg`) message to all Elders in our section
@@ -40,7 +39,7 @@ impl MyNode {
         Cmd::send_msg(msg, recipients, context)
     }
 
-    pub(crate) async fn store_data_as_adult_and_respond(
+    pub(crate) async fn store_data_and_respond(
         context: &NodeContext,
         data: ReplicatedData,
         response_stream: Option<Arc<Mutex<SendStream>>>,
@@ -63,10 +62,12 @@ impl MyNode {
             .store(&data, section_pk, node_keypair.clone())
             .await
         {
-            Ok(level_report) => {
+            Ok(()) => {
                 trace!("Data has been stored: {data_addr:?}");
-                info!("Storage level report: {:?}", level_report);
-                cmds.extend(MyNode::record_storage_level_if_any(context, level_report)?);
+                if context.data_storage.has_reached_limit() && !context.joins_allowed_until_split {
+                    // we accept new nodes until split, since we have reached the max capacity (i.e. storage limit)
+                    cmds.push(Cmd::SetJoinsAllowedUntilSplit(true));
+                }
                 CmdResponse::ok(data)?
             }
             Err(StorageError::NotEnoughSpace) => {
@@ -77,6 +78,11 @@ impl MyNode {
                     data: data.clone(),
                     full: true,
                 });
+
+                if context.is_elder && !context.joins_allowed {
+                    // we accept new nodes until split, since we ran out of space
+                    cmds.push(Cmd::SetJoinsAllowedUntilSplit(true));
+                }
 
                 cmds.push(MyNode::send_msg_to_our_elders(context, msg));
                 CmdResponse::err(data, StorageError::NotEnoughSpace.into())?
@@ -363,20 +369,6 @@ impl MyNode {
                 trace!("Handling msg: DkgAE s{} from {}", session_id.sh(), sender);
                 node.handle_dkg_anti_entropy(session_id, sender)
             }
-            NodeMsg::NodeEvent(NodeEvent::StorageThresholdReached { node_id, level, .. }) => {
-                let mut node = node.write().await;
-                debug!("[NODE WRITE]: StorageThresholdReached write gottt...");
-                let changed = node.set_node_full(&node_id, level);
-                if changed {
-                    // ..then we accept a new node in place of the full node
-                    node.joins_allowed = true;
-                    if node.are_majority_of_nodes_full() {
-                        // ..then we accept new nodes until we split
-                        node.joins_allowed_until_split = true;
-                    }
-                }
-                Ok(vec![])
-            }
             NodeMsg::NodeEvent(NodeEvent::CouldNotStoreData {
                 node_id,
                 data,
@@ -392,18 +384,19 @@ impl MyNode {
                     return Ok(vec![]);
                 }
 
-                if full && !context.joins_allowed {
-                    let mut node = node.write().await;
+                let mut cmds = vec![];
+                if full {
                     debug!("[NODE WRITE]: CouldNotStore write gottt...");
-                    let changed = node.set_node_full(&node_id, StorageThreshold::new());
-                    if changed {
-                        // ..then we accept a new node in place of the full node
-                        node.joins_allowed = true;
-                        if node.are_majority_of_nodes_full() {
-                            // ..then we accept new nodes until we split
-                            node.joins_allowed_until_split = true;
-                        }
-                    }
+                    // Kick out node!
+                    let nodes = BTreeSet::from([node_id.into()]);
+                    cmds.push(Cmd::ProposeVoteNodesOffline(nodes));
+                }
+
+                if !context.joins_allowed {
+                    cmds.push(Cmd::SetJoinsAllowed(true));
+                    // NB: we do not also set allowed until split, since we
+                    // do not expect another node to run out of space before we ourselves
+                    // have reached the storage limit (which is a little bit lower than actual space).
                 }
 
                 let targets = MyNode::target_data_holders(&context, data.name());
@@ -427,8 +420,7 @@ impl MyNode {
                 );
 
                 // store data and respond w/ack on the response stream
-                MyNode::store_data_as_adult_and_respond(&context, data, send_stream, sender, msg_id)
-                    .await
+                MyNode::store_data_and_respond(&context, data, send_stream, sender, msg_id).await
             }
             NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateDataBatch(data_collection)) => {
                 info!("ReplicateData collection MsgId: {:?}", msg_id);
@@ -472,35 +464,5 @@ impl MyNode {
                 Ok(vec![])
             }
         }
-    }
-
-    /// Sets Cmd to locally record the storage level and send msgs to Elders
-    /// Advising the same
-    pub(crate) fn record_storage_level_if_any(
-        context: &NodeContext,
-        level: Option<StorageThreshold>,
-    ) -> Result<Vec<Cmd>> {
-        let mut cmds = vec![];
-        if let Some(level) = level {
-            info!("Storage has now reached {} % used.", level.value());
-
-            // Run a SetStorageThresholdReached Cmd to actually update the DataStorage instance
-            cmds.push(Cmd::SetStorageThresholdReached(level));
-            let node_id = PublicKey::from(context.keypair.public);
-            let node_xorname = XorName::from(node_id);
-
-            // we ask the section to record the new level reached
-            let msg = NodeMsg::NodeEvent(NodeEvent::StorageThresholdReached {
-                section: node_xorname,
-                node_id,
-                level,
-            });
-
-            let dst = Peers::Multiple(context.network_knowledge.elders());
-
-            cmds.push(Cmd::send_msg(msg, dst, context.clone()));
-        }
-
-        Ok(cmds)
     }
 }

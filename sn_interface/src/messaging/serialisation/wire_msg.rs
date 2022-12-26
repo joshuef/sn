@@ -262,8 +262,8 @@ mod tests {
     use super::*;
     use crate::{
         messaging::{
-            data::{ClientMsg, DataQuery, DataQueryVariant, StorageThreshold},
-            system::{NodeEvent, NodeMsg},
+            data::{ClientMsg, DataQuery, DataQueryVariant},
+            system::NodeMsg,
             AuthorityProof, ClientAuth, MsgId,
         },
         types::{ChunkAddress, Keypair},
@@ -279,13 +279,8 @@ mod tests {
         };
 
         let msg_id = MsgId::new();
-        let pk = crate::types::PublicKey::Bls(dst.section_key);
 
-        let msg = NodeMsg::NodeEvent(NodeEvent::StorageThresholdReached {
-            node_id: pk,
-            section: pk.into(),
-            level: StorageThreshold::new(),
-        });
+        let msg = NodeMsg::HandoverAE(100);
 
         let payload = WireMsg::serialize_msg_payload(&msg)?;
         let kind = MsgKind::Node(Default::default());

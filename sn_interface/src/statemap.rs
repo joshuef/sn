@@ -48,7 +48,6 @@ pub enum State {
     HandleMsg,
     Comms,
     Dysfunction,
-    BackPressure,
     ClientMsg,
     Dkg,
     Agreement,
@@ -60,6 +59,7 @@ pub enum State {
     Join,
     Propose,
     Node,
+    Data,
 }
 
 impl State {
@@ -70,7 +70,7 @@ impl State {
             "HandleMsg": { "value": Self::HandleMsg as usize, "color": "#7f0000" },
             "Comms": { "value": Self::Comms as usize, "color": "#808000" },
             "Dysfunction": { "value": Self::Dysfunction as usize, "color": "#000080" },
-            "BackPressure": { "value": Self::BackPressure as usize, "color": "#ff0000" },
+            "Data": { "value": Self::Data as usize, "color": "#ff0000" },
             "ClientMsg": { "value": Self::ClientMsg as usize, "color": "#00ced1" },
             "Dkg": { "value": Self::Dkg as usize, "color": "#ffa500" },
             "Agreement": { "value": Self::Agreement as usize, "color": "#7fff00" },

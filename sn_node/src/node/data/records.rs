@@ -16,7 +16,7 @@ use sn_dysfunction::IssueType;
 use sn_interface::{
     data_copy_count,
     messaging::{
-        data::{ClientDataResponse, DataCmd, DataQuery, StorageThreshold},
+        data::{ClientDataResponse, DataCmd, DataQuery},
         system::{NodeDataCmd, NodeDataQuery, NodeDataResponse, NodeEvent, NodeMsg, OperationId},
         AuthorityProof, ClientAuth, Dst, MsgId, MsgKind, MsgType, WireMsg,
     },
@@ -406,15 +406,9 @@ impl MyNode {
         wire_msg.serialize().map_err(|_| Error::InvalidMessage)
     }
 
-    // Called on split
-    pub(crate) fn clear_full_nodes(&mut self) {
-        self.capacity.clear_full_nodes()
-    }
-
     /// Registered holders not present in provided list of members
     /// will be removed from full nodes (if present) and no longer tracked for liveness.
     pub(crate) async fn liveness_retain_only(&mut self, members: BTreeSet<XorName>) {
-        self.capacity.retain_members_only(&members);
         // stop tracking liveness of absent holders
         if let Err(error) = self
             .dysfunction_cmds_sender
@@ -435,33 +429,6 @@ impl MyNode {
         {
             warn!("Could not send AddNode through dysfunctional_cmds_tx: {error}");
         };
-    }
-
-    /// Set storage level of a given node.
-    /// Returns whether the level changed or not.
-    pub(crate) fn set_node_full(&mut self, node_id: &PublicKey, level: StorageThreshold) -> bool {
-        if level.value() >= StorageThreshold::THRESHOLD {
-            info!("Setting node full..");
-            let changed = self.capacity.set_node_full(XorName::from(*node_id));
-            info!("Node full already set? {}", !changed);
-            return changed;
-        }
-        let nodes_len = self.network_knowledge.members().len();
-        if nodes_len > 0 {
-            let full_len = self.capacity.full_nodes().len();
-            let full_percent = 100.0 * full_len as f64 / nodes_len as f64;
-            info!("Full nodes {full_percent:.2} % ({full_len} of {nodes_len})");
-        }
-
-        false
-    }
-
-    /// We say generally, that we assume that amongst a majority of adults at least one is honest.
-    /// So if > 50 % have reported full, then we consider all full (when using fixed size storage!).
-    pub(crate) fn are_majority_of_nodes_full(&self) -> bool {
-        let nodes_len = self.network_knowledge.members().len();
-        let full_nodes_len = self.capacity.full_nodes().len();
-        full_nodes_len > nodes_len / 2
     }
 
     /// Used to fetch the list of holders for given name of data.
@@ -501,8 +468,6 @@ impl MyNode {
         let section_pk = PublicKey::Bls(context.network_knowledge.section_key());
         let node_keypair = Keypair::Ed25519(context.keypair.clone());
 
-        // To avoid duplication, only record storage level once.
-        let mut record_storage_level = None;
         let mut is_full = false;
         let has_replicated_data_in = !data_collection.is_empty();
 
@@ -513,15 +478,10 @@ impl MyNode {
                 .store(&data, section_pk, node_keypair.clone())
                 .await;
 
-            // We are an adult here, so just store away!
-            // This may return a DatabaseFull error... but we should have reported storage increase
+            // This may return a DatabaseFull error... but we should have reported StorageError::NotEnoughSpace
             // well before this
             match store_result {
-                Ok(level_report) => {
-                    info!("Storage level report: {:?}", level_report);
-                    record_storage_level = Some(level_report);
-                    info!("End of message flow.");
-                }
+                Ok(()) => info!("End of message flow."),
                 Err(StorageError::NotEnoughSpace) => {
                     // storage full
                     error!("Not enough space to store more data");
@@ -541,10 +501,6 @@ impl MyNode {
                     error!("Problem storing data, but it was ignored: {error}");
                 }
             }
-        }
-
-        if let Some(level_report) = record_storage_level {
-            cmds.extend(MyNode::record_storage_level_if_any(context, level_report)?);
         }
 
         // Whenever there is a replicated data in, we send back a query again

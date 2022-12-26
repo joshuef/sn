@@ -8,20 +8,21 @@
 
 use crate::node::core::NodeContext;
 use crate::node::{flow_ctrl::cmds::Cmd, messaging::Peers, Error, MyNode, Result};
-use bls::PublicKey as BlsPublicKey;
-use itertools::Itertools;
-use qp2p::{SendStream, UsrMsgBytes};
+
 use sn_dysfunction::IssueType;
-use sn_interface::messaging::data::StorageThreshold;
 use sn_interface::{
     messaging::{
         data::ClientDataResponse,
-        system::{AntiEntropyKind, NodeEvent, NodeMsg},
+        system::{AntiEntropyKind, NodeMsg},
         Dst, MsgId, MsgType, WireMsg,
     },
     network_knowledge::SectionTreeUpdate,
     types::{log_markers::LogMarker, Peer, PublicKey},
 };
+
+use bls::PublicKey as BlsPublicKey;
+use itertools::Itertools;
+use qp2p::{SendStream, UsrMsgBytes};
 use std::{collections::BTreeSet, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use xor_name::XorName;
@@ -186,22 +187,6 @@ impl MyNode {
         };
 
         MyNode::send_system_msg(ae_msg, Peers::Multiple(recipients), context.clone())
-    }
-
-    /// Send `StorageThresholdReached` event to the specified nodes
-    pub(crate) fn report_us_as_full(&self, recipients: BTreeSet<Peer>) -> Cmd {
-        let context = self.context();
-        let node_id = PublicKey::from(context.keypair.public);
-        let our_name = XorName::from(node_id);
-
-        // we report to the recipients that our storage threshold has been reached
-        let msg = NodeMsg::NodeEvent(NodeEvent::StorageThresholdReached {
-            section: our_name,
-            node_id,
-            level: StorageThreshold::new(),
-        });
-
-        MyNode::send_system_msg(msg, Peers::Multiple(recipients), context)
     }
 
     #[instrument(skip_all)]

@@ -55,7 +55,6 @@ mod core {
         comm::Comm,
         node::{
             bootstrap::JoiningAsRelocated,
-            data::Capacity,
             dkg::DkgVoter,
             flow_ctrl::{cmds::Cmd, dysfunction::DysCmds},
             handover::Handover,
@@ -122,8 +121,6 @@ mod core {
         pub(crate) handover_voting: Option<Handover>,
         pub(crate) joins_allowed: bool,
         pub(crate) joins_allowed_until_split: bool,
-        // Trackers
-        pub(crate) capacity: Capacity,
         pub(crate) dysfunction_cmds_sender: mpsc::Sender<DysCmds>,
     }
 
@@ -140,6 +137,7 @@ mod core {
         #[debug(skip)]
         pub(crate) comm: Comm,
         pub(crate) joins_allowed: bool,
+        pub(crate) joins_allowed_until_split: bool,
         #[debug(skip)]
         pub(crate) dysfunction_cmds_sender: mpsc::Sender<DysCmds>,
     }
@@ -186,6 +184,7 @@ mod core {
                 section_keys_provider: self.section_keys_provider.clone(),
                 comm: self.comm.clone(),
                 joins_allowed: self.joins_allowed || self.joins_allowed_until_split,
+                joins_allowed_until_split: self.joins_allowed_until_split,
                 data_storage: self.data_storage.clone(),
                 dysfunction_cmds_sender: self.dysfunction_cmds_sender.clone(),
             }
@@ -256,7 +255,6 @@ mod core {
                 joins_allowed: true,
                 joins_allowed_until_split: false,
                 data_storage,
-                capacity: Capacity::default(),
                 dysfunction_cmds_sender,
                 membership,
             };
@@ -640,29 +638,11 @@ mod core {
                 );
             }
 
-            // when we split, the range of data of adults are responsible for is halved, i.e. their threshold is no longer reached.
+            // when we split, the range of data on nodes are responsible for is halved, i.e. their threshold is no longer reached..
             if section_split && old.is_elder {
-                self.clear_full_nodes();
+                // .. so, we do not need to allow new nodes in to bring down used space.
                 self.joins_allowed_until_split = false;
             }
-            if section_split && self.data_storage.is_threshold_reached() {
-                // would only be set if we were an adult..
-                self.data_storage.clear_threshold_reached();
-            }
-
-            // update new elders if we were an adult and our storage threshold has been reached
-            if new_elders && !old.is_elder && self.data_storage.is_threshold_reached() {
-                cmds.push(
-                    self.report_us_as_full(
-                        self.network_knowledge
-                            .section_auth()
-                            .elders()
-                            .filter(|peer| added_elders.contains(&peer.name()))
-                            .cloned()
-                            .collect(),
-                    ),
-                );
-            };
 
             Ok(cmds)
         }

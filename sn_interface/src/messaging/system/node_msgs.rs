@@ -8,13 +8,12 @@
 
 use super::OperationId;
 use crate::messaging::{
-    data::{DataQueryVariant, QueryResponse, StorageThreshold},
+    data::{DataQueryVariant, QueryResponse},
     ClientAuth,
 };
 use crate::types::{DataAddress, PublicKey, ReplicatedData};
 
 use serde::{Deserialize, Serialize};
-use xor_name::XorName;
 
 /// cmd message sent among nodes
 #[allow(clippy::large_enum_variant)]
@@ -32,24 +31,14 @@ pub enum NodeDataCmd {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum NodeEvent {
-    /// Sent by a full Adult, and tells the Elders to store a chunk at some other Adult in the section
+    /// Sent by a full Node, and tells the Elders to store a chunk at some other Node in the section
     CouldNotStoreData {
         /// Node Id
         node_id: PublicKey,
-        /// The data that the Adult couldn't store
+        /// The data that the Node couldn't store
         data: ReplicatedData,
         /// Whether store failed due to full
         full: bool,
-    },
-    #[cfg(any(feature = "chunks", feature = "registers"))]
-    /// Notify Elders on nearing max capacity
-    StorageThresholdReached {
-        /// Node Id
-        node_id: PublicKey,
-        /// Section to which the message needs to be sent to. (NB: this is the section of the node id).
-        section: XorName,
-        /// The storage level reported by the node.
-        level: StorageThreshold,
     },
 }
 

@@ -13,7 +13,6 @@ mod errors;
 mod query;
 mod register;
 mod spentbook;
-mod storage_threshold;
 
 pub use self::{
     cmd::DataCmd,
@@ -24,7 +23,6 @@ pub use self::{
         SignedRegisterEdit,
     },
     spentbook::{SpentbookCmd, SpentbookQuery},
-    storage_threshold::StorageThreshold,
 };
 
 use crate::network_knowledge::SectionTreeUpdate;
