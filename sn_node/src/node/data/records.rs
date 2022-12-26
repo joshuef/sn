@@ -81,7 +81,7 @@ impl MyNode {
         // TODO: general ReplicateData flow could go bidi?
         // Right now we've a new msg for just one datum.
         // Atm that's perhaps more bother than its worth..
-        let msg = NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateOneData(data));
+        let msg = NodeMsg::NodeDataCmd(NodeDataCmd::StoreData(data));
         let mut send_tasks = vec![];
 
         let (kind, payload) = MyNode::serialize_node_msg(context.name, msg)?;

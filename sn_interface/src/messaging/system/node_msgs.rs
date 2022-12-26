@@ -20,11 +20,11 @@ use xor_name::XorName;
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum NodeDataCmd {
-    /// Tells an Adult to store a data
-    ReplicateOneData(ReplicatedData),
-    /// Tells an Adult to store a replica of some data set
+    /// Tells a Node to store some data.
+    StoreData(ReplicatedData),
+    /// Tells a Node to store a replica of some data set.
     ReplicateDataBatch(Vec<ReplicatedData>),
-    /// Tells an Adult to fetch and replicate data from the sender
+    /// Tells a Node to fetch and replicate data from the sender.
     SendAnyMissingRelevantData(Vec<DataAddress>),
 }
 

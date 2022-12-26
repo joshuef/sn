@@ -414,7 +414,7 @@ impl MyNode {
 
                 Ok(vec![])
             }
-            NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateOneData(data)) => {
+            NodeMsg::NodeDataCmd(NodeDataCmd::StoreData(data)) => {
                 debug!("Replicate one data");
 
                 if context.is_elder {
