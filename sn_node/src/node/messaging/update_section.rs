@@ -19,7 +19,7 @@ use std::collections::BTreeSet;
 
 // This data will all be replicated into one message, as such we want to keep size
 // low to ensure that serialisation sin't too heavy
-static MAX_MISSED_DATA_TO_REPLICATE: usize = 25;
+static MAX_REPLICATION_BATCH_SIZE: usize = 25;
 
 impl MyNode {
     /// Given what data the peer has, we shall calculate what data the peer is missing that
@@ -31,8 +31,6 @@ impl MyNode {
         data_sender_has: Vec<DataAddress>,
     ) -> Option<Cmd> {
         trace!("Getting missing data for node");
-        // Collection of data addresses that we do not have
-
         // TODO: can cache this data stored per churn event?
         let mut data_i_have = context.data_storage.data_addrs().await;
         trace!("Our data got");
@@ -42,11 +40,11 @@ impl MyNode {
             return None;
         }
         // To make each data storage node reply with different copies, so that the
-        // overall queries can be reduceds, the data names are scrambled.
+        // overall queries can be reduced, the data names are scrambled.
         data_i_have.shuffle(&mut OsRng);
 
-        let adults = context.network_knowledge.adults();
-        let adults_names = adults.iter().map(|p2p_node| p2p_node.name());
+        let members = context.network_knowledge.members();
+        let members_names = members.iter().map(|p2p_node| p2p_node.name());
 
         let mut data_for_sender = vec![];
         for data in data_i_have {
@@ -54,13 +52,13 @@ impl MyNode {
                 continue;
             }
 
-            let holder_adult_list: BTreeSet<_> = adults_names
+            let holder_list: BTreeSet<_> = members_names
                 .clone()
                 .sorted_by(|lhs, rhs| data.name().cmp_distance(lhs, rhs))
                 .take(data_copy_count())
                 .collect();
 
-            if holder_adult_list.contains(&sender.name()) {
+            if holder_list.contains(&sender.name()) {
                 debug!(
                     "{:?} batch data {:?} to: {:?} ",
                     LogMarker::QueuingMissingReplicatedData,
@@ -69,8 +67,8 @@ impl MyNode {
                 );
                 data_for_sender.push(data);
                 // To avoid bundle too many data into one response,
-                // Only reply with MAX_MISSED_DATA_TO_REPLICATE data for each query round,
-                if data_for_sender.len() == MAX_MISSED_DATA_TO_REPLICATE {
+                // Only reply with MAX_REPLICATION_BATCH_SIZE data for each query round,
+                if data_for_sender.len() == MAX_REPLICATION_BATCH_SIZE {
                     break;
                 }
             }
@@ -100,11 +98,10 @@ impl MyNode {
         let data_i_have = context.data_storage.data_addrs().await;
 
         let my_name = context.name;
-        let adults = context.network_knowledge.adults();
-        let elders = context.network_knowledge.elders();
+        let members = context.network_knowledge.members();
 
         // find data targets that are not us.
-        let mut target_members = adults
+        let target_members = members
             .into_iter()
             .sorted_by(|lhs, rhs| my_name.cmp_distance(&lhs.name(), &rhs.name()))
             .filter(|peer| peer.name() != my_name)
@@ -116,11 +113,6 @@ impl MyNode {
             target_members.len(),
             target_members
         );
-
-        // also send to our elders in case they are holding but were just promoted
-        for elder in elders {
-            let _existed = target_members.insert(elder);
-        }
 
         if target_members.is_empty() {
             warn!("We have no peers to ask for data!");

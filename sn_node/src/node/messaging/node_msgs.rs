@@ -408,22 +408,13 @@ impl MyNode {
                 Ok(vec![])
             }
             NodeMsg::NodeDataCmd(NodeDataCmd::StoreData(data)) => {
-                debug!("Replicate one data");
-
-                if context.is_elder {
-                    error!("Received unexpected message while Elder");
-                    return Ok(vec![]);
-                }
-                debug!(
-                    "Attempting to store data locally as adult: {:?}",
-                    data.address()
-                );
+                debug!("Attempting to store data locally: {:?}", data.address());
 
                 // store data and respond w/ack on the response stream
                 MyNode::store_data_and_respond(&context, data, send_stream, sender, msg_id).await
             }
             NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateDataBatch(data_collection)) => {
-                info!("ReplicateData collection MsgId: {:?}", msg_id);
+                info!("ReplicateDataBatch MsgId: {:?}", msg_id);
                 MyNode::replicate_data_batch(&context, sender, data_collection).await
             }
             NodeMsg::NodeDataCmd(NodeDataCmd::SendAnyMissingRelevantData(known_data_addresses)) => {

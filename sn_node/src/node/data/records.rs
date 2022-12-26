@@ -432,14 +432,14 @@ impl MyNode {
     }
 
     /// Used to fetch the list of holders for given name of data.
-    /// Sorts adults by closeness to data address, returns data_copy_count of them
+    /// Sorts members by closeness to data address, returns data_copy_count of them
     pub(crate) fn target_data_holders(context: &NodeContext, target: XorName) -> BTreeSet<Peer> {
-        // TODO: reuse our_adults_sorted_by_distance_to API when core is merged into upper layer
-        let adults = context.network_knowledge.adults();
+        // TODO: reuse our_members_sorted_by_distance_to API when core is merged into upper layer
+        let members = context.network_knowledge.members();
 
-        trace!("Total adults known about: {:?}", adults.len());
+        trace!("Total members known about: {:?}", members.len());
 
-        let candidates = adults
+        let candidates = members
             .into_iter()
             .sorted_by(|lhs, rhs| target.cmp_distance(&lhs.name(), &rhs.name()))
             .take(data_copy_count())
@@ -456,22 +456,17 @@ impl MyNode {
     pub(crate) async fn replicate_data_batch(
         context: &NodeContext,
         sender: Peer,
-        data_collection: Vec<ReplicatedData>,
+        data_batch: Vec<ReplicatedData>,
     ) -> Result<Vec<Cmd>> {
-        if context.is_elder {
-            error!("Received unexpected message while Elder");
-            return Ok(vec![]);
-        }
-
         let mut cmds = vec![];
 
         let section_pk = PublicKey::Bls(context.network_knowledge.section_key());
         let node_keypair = Keypair::Ed25519(context.keypair.clone());
 
         let mut is_full = false;
-        let has_replicated_data_in = !data_collection.is_empty();
+        let data_batch_is_empty = !data_batch.is_empty();
 
-        for data in data_collection {
+        for data in data_batch {
             // grab the write lock each time in the loop to not hold it over large data sets
             let store_result = context
                 .data_storage
@@ -481,7 +476,7 @@ impl MyNode {
             // This may return a DatabaseFull error... but we should have reported StorageError::NotEnoughSpace
             // well before this
             match store_result {
-                Ok(()) => info!("End of message flow."),
+                Ok(()) => debug!("Data item replicated."),
                 Err(StorageError::NotEnoughSpace) => {
                     // storage full
                     error!("Not enough space to store more data");
@@ -503,8 +498,11 @@ impl MyNode {
             }
         }
 
-        // Whenever there is a replicated data in, we send back a query again
-        if !is_full && has_replicated_data_in {
+        // As long as the data batch is not empty, we send back a query again
+        // to continue the replication process (like pageing).
+        // This means there that there will be a number of repeated `give-me-data -> here_you_go` msg
+        // exchanges, until there is no more data missing on this node.
+        if !is_full && data_batch_is_empty {
             let data_i_have = context.data_storage.data_addrs().await;
             let msg = NodeMsg::NodeDataCmd(NodeDataCmd::SendAnyMissingRelevantData(data_i_have));
             let cmd = MyNode::send_system_msg(msg, Peers::Single(sender), context.clone());

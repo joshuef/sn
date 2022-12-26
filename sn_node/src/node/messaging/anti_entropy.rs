@@ -307,9 +307,7 @@ impl MyNode {
         let latest_context = node.read().await.context();
         debug!("[NODE READ] Latest context got.");
         // Only trigger reorganize data when there is a membership change happens.
-        if updated && !latest_context.is_elder {
-            // only done if adult, since as an elder we dont want to get any more
-            // data for our name (elders will eventually be caching data in general)
+        if updated {
             cmds.push(MyNode::ask_for_any_new_data(&latest_context, None).await);
         }
 

@@ -191,7 +191,6 @@ impl Dispatcher {
                 let node = self.node.read().await;
                 debug!("[NODE READ]: HandleFailedSendToNode agreements read got...");
                 node.handle_failed_send(&peer.addr());
-
                 Ok(vec![])
             }
             Cmd::HandleDkgOutcome {
@@ -204,7 +203,6 @@ impl Dispatcher {
                 node.handle_dkg_outcome(section_auth, outcome).await
             }
             Cmd::EnqueueDataForReplication {
-                // throttle_duration,
                 recipient,
                 data_batch,
             } => {
