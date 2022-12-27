@@ -13,8 +13,11 @@ use qp2p::{Connection, Endpoint, UsrMsgBytes};
 use sn_interface::messaging::MsgId;
 use sn_interface::types::{log_markers::LogMarker, Peer};
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
 type ConnId = String;
 
+const CONN_RETRY_WAIT: Duration = Duration::from_millis(100);
 /// A link to a peer in our network.
 ///
 /// The upper layers will add incoming connections to the link,
@@ -152,8 +155,15 @@ impl Link {
                     // remove that broken conn
                     let _conn = self.connections.remove(&conn_id);
                     match is_last_attempt {
-                        true => break Err(SendToOneError::Connection(err)),
-                        false => continue,
+                        true => {
+                            error!("Last attempt reached for {msg_id:?}, erroring out...");
+                            break Err(SendToOneError::Connection(err));
+                        }
+                        false => {
+                            // tiny wait for comms/dashmap to cope with removal
+                            sleep(CONN_RETRY_WAIT).await;
+                            continue;
+                        }
                     }
                 }
             };
@@ -167,7 +177,11 @@ impl Link {
                 let _conn = self.connections.remove(&conn_id);
                 match is_last_attempt {
                     true => break Err(SendToOneError::Send(err)),
-                    false => continue,
+                    false => {
+                        // tiny wait for comms/dashmap to cope with removal
+                        sleep(CONN_RETRY_WAIT).await;
+                        continue;
+                    }
                 }
             }
 
@@ -189,9 +203,12 @@ impl Link {
                         "Stream closed by peer when awaiting response to {msg_id:?} from {peer:?} over {stream_id}."
                     );
                     let _conn = self.connections.remove(&conn_id);
+
                     if is_last_attempt {
                         break Err(SendToOneError::RecvClosed(peer));
                     }
+                    // tiny wait for comms/dashmap to cope with removal
+                    sleep(CONN_RETRY_WAIT).await;
                 }
                 Err(err) => {
                     error!("Error receiving response to {msg_id:?} from {peer:?} over {stream_id}: {err:?}");
@@ -199,6 +216,9 @@ impl Link {
                     if is_last_attempt {
                         break Err(SendToOneError::Recv(err));
                     }
+
+                    // tiny wait for comms/dashmap to cope with removal
+                    sleep(CONN_RETRY_WAIT).await;
                 }
             }
         }
