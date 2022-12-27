@@ -97,30 +97,23 @@ impl MyNode {
         debug!("Querying section for any new data");
         let data_i_have = context.data_storage.data_addrs().await;
 
-        let my_name = context.name;
+        // ask the entire section.
+        // they will only send over relevant things they have, in small + randomized batches
         let members = context.network_knowledge.members();
 
-        // find data targets that are not us.
-        let target_members = members
-            .into_iter()
-            .sorted_by(|lhs, rhs| my_name.cmp_distance(&lhs.name(), &rhs.name()))
-            .filter(|peer| peer.name() != my_name)
-            .take(data_copy_count())
-            .collect::<BTreeSet<_>>();
-
         trace!(
-            "nearest neighbours for data req: {}: {:?}",
-            target_members.len(),
-            target_members
+            "section neighbours for data req: {}: {:?}",
+            members.len(),
+            members
         );
 
-        if target_members.is_empty() {
+        if members.is_empty() {
             warn!("We have no peers to ask for data!");
         } else {
-            trace!("Sending our data list to: {:?}", target_members);
+            trace!("Sending our data list to: {:?}", members);
         }
 
         let msg = NodeMsg::NodeDataCmd(NodeDataCmd::SendAnyMissingRelevantData(data_i_have));
-        MyNode::send_system_msg(msg, Peers::Multiple(target_members), context.clone())
+        MyNode::send_system_msg(msg, Peers::Multiple(members), context.clone())
     }
 }
