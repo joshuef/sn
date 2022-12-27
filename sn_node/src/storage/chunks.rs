@@ -173,7 +173,7 @@ mod tests {
 
     fn init_file_store() -> ChunkStorage {
         let root = tempdir().expect("Failed to create temporary directory for chunk disk store");
-        ChunkStorage::new(root.path(), UsedSpace::new(usize::MAX))
+        ChunkStorage::new(root.path(), UsedSpace::new(usize::MAX, usize::MAX))
             .expect("Failed to create chunk disk store")
     }
 

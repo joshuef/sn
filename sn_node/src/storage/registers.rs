@@ -816,7 +816,7 @@ mod test {
     fn new_store() -> Result<RegisterStorage> {
         let tmp_dir = tempdir()?;
         let path = tmp_dir.path();
-        let used_space = UsedSpace::new(usize::MAX);
+        let used_space = UsedSpace::new(usize::MAX, usize::MAX);
         let store = RegisterStorage::new(path, used_space)?;
         Ok(store)
     }

@@ -58,10 +58,11 @@ impl DataStorage {
         })
     }
 
-    /// Returns whether the storage max capacity has been reached or not.
-    pub(crate) fn has_reached_limit(&self) -> bool {
-        self.used_space.has_reached_limit()
+    /// Returns whether the storage min capacity has been reached or not.
+    pub(crate) fn exceeds_network_minimum_storage_limit(&self) -> bool {
+        self.used_space.exceeds_network_minimum_limit()
     }
+
     /// Store data in the local store
     #[instrument(skip(self))]
     pub async fn store(
@@ -269,7 +270,7 @@ mod tests {
         // Cleaned up automatically after test completes
         let tmp_dir = tempdir()?;
         let path = tmp_dir.path();
-        let used_space = UsedSpace::new(usize::MAX);
+        let used_space = UsedSpace::new(usize::MAX, usize::MAX);
 
         // Create instance
         let mut storage = DataStorage::new(path, used_space)?;
@@ -321,7 +322,7 @@ mod tests {
         // Cleaned up automatically after test completes
         let tmp_dir = tempdir()?;
         let path = tmp_dir.path();
-        let used_space = UsedSpace::new(usize::MAX);
+        let used_space = UsedSpace::new(usize::MAX, usize::MAX);
 
         // Create instance
         let storage = DataStorage::new(path, used_space)?;
@@ -360,7 +361,7 @@ mod tests {
         // Cleaned up automatically after test completes
         let tmp_dir = tempdir()?;
         let path = tmp_dir.path();
-        let used_space = UsedSpace::new(usize::MAX);
+        let used_space = UsedSpace::new(usize::MAX, usize::MAX);
 
         // Create instance
         let storage = DataStorage::new(path, used_space)?;
@@ -457,7 +458,7 @@ mod tests {
         let mut model: BTreeMap<XorName, ReplicatedData> = BTreeMap::new();
         let temp_dir = tempdir()?;
         let path = temp_dir.path();
-        let used_space = UsedSpace::new(usize::MAX);
+        let used_space = UsedSpace::new(usize::MAX, usize::MAX);
         let runtime = Runtime::new()?;
         let mut storage = DataStorage::new(path, used_space)?;
         let owner_pk = PublicKey::Bls(bls::SecretKey::random().public_key());

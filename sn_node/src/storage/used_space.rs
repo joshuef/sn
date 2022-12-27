@@ -17,14 +17,19 @@ use tracing::info;
 pub struct UsedSpace {
     /// the maximum (inclusive) allocated space for storage
     max_capacity: usize,
+    /// the minimum size a node can be on the network
+    /// failure to store this much data will lead to
+    /// a node being punished
+    min_capacity: usize,
     used_space: Arc<AtomicUsize>,
 }
 
 impl UsedSpace {
     /// Create new `UsedSpace` tracker
-    pub fn new(max_capacity: usize) -> Self {
+    pub fn new(max_capacity: usize, min_capacity: usize) -> Self {
         Self {
             max_capacity,
+            min_capacity,
             used_space: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -42,10 +47,11 @@ impl UsedSpace {
         current_used_space + size <= self.max_capacity
     }
 
-    /// Checks if we've reached the limit of our storage.
-    pub(crate) fn has_reached_limit(&self) -> bool {
+    /// Checks if we've exceeded the minimum level of storage.
+    /// Above this level elder nodes start to vote to split a section
+    pub(crate) fn exceeds_network_minimum_limit(&self) -> bool {
         let current_used_space = self.used_space.load(Ordering::Relaxed);
-        current_used_space >= self.max_capacity
+        current_used_space >= self.min_capacity
     }
 
     #[allow(unused)]

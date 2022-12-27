@@ -820,7 +820,7 @@ impl TestNetwork {
             info.keypair.clone(),
             network_knowledge.clone(),
             sk_share.clone(),
-            UsedSpace::new(max_capacity),
+            UsedSpace::new(max_capacity, max_capacity),
             root_storage_dir,
             mpsc::channel(10).0,
         ))

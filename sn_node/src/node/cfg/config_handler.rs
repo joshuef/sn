@@ -23,7 +23,8 @@ use tracing::{debug, error, warn, Level};
 
 const CONFIG_FILE: &str = "node.config";
 const DEFAULT_ROOT_DIR_NAME: &str = "root_dir";
-const DEFAULT_MAX_CAPACITY: usize = 1024 * 1024 * 1024; // 1gb
+const DEFAULT_MIN_CAPACITY: usize = 1024 * 1024 * 1024; // 1gb
+const DEFAULT_MAX_CAPACITY: usize = 2 * DEFAULT_MIN_CAPACITY;
 
 /// Node configuration
 #[derive(Default, Clone, Debug, Serialize, Deserialize, clap::StructOpt)]
@@ -269,8 +270,16 @@ impl Config {
     }
 
     /// Upper limit in bytes for allowed network storage on this node.
+    /// We probably don't need to exceed `min_capacity` by a lot,
+    /// though some buffer may be desirable
     pub fn max_capacity(&self) -> usize {
         DEFAULT_MAX_CAPACITY
+    }
+
+    /// Lower limit in bytes for allowed network storage on this node.
+    /// Failure to store this many bytes leads to node punishment
+    pub fn min_capacity(&self) -> usize {
+        DEFAULT_MIN_CAPACITY
     }
 
     /// Root directory for dbs and cached state. If not set, it defaults to

@@ -367,8 +367,9 @@ fn get_new_data_store() -> Result<DataStorage> {
 
     let config = Config::default();
     let max_capacity = config.max_capacity();
+    let min_capacity = config.min_capacity();
 
-    let used_space = UsedSpace::new(max_capacity);
+    let used_space = UsedSpace::new(max_capacity, min_capacity);
     let store = DataStorage::new(&storage_dir, used_space)?;
 
     Ok(store)
