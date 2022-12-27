@@ -74,7 +74,7 @@ impl MyNode {
                 error!("Not enough space to store data {data_addr:?}");
                 let msg = NodeMsg::NodeEvent(NodeEvent::CouldNotStoreData {
                     node_id: PublicKey::from(context.keypair.public),
-                    data: data.clone(),
+                    data_address: data.address(),
                     full: true,
                 });
 
@@ -370,11 +370,11 @@ impl MyNode {
             }
             NodeMsg::NodeEvent(NodeEvent::CouldNotStoreData {
                 node_id,
-                data,
+                data_address,
                 full,
             }) => {
                 info!(
-                    "Processing CouldNotStoreData event with MsgId: {:?}",
+                    "Processing CouldNotStoreData event with MsgId: {:?} at : {data_address:?}",
                     msg_id
                 );
 
@@ -385,8 +385,9 @@ impl MyNode {
 
                 let mut cmds = vec![];
                 if full {
-                    debug!("[NODE WRITE]: CouldNotStore write gottt...");
                     // Kick out node!
+                    // TODO: Ideally we should only boot it when it's been failing to fulfill
+                    // data... this gives more nodes a chance to step in (once we have preloading)
                     let nodes = BTreeSet::from([node_id.into()]);
                     cmds.push(Cmd::ProposeVoteNodesOffline(nodes));
                 }
@@ -398,12 +399,6 @@ impl MyNode {
                     // have reached the storage limit (i.e. the `max_capacity` variable, which
                     // should be set by the node operator to be a little bit lower than the actual space).
                 }
-
-                let targets = MyNode::target_data_holders(&context, data.name());
-
-                // TODO: handle responses where replication failed...
-                let _results = MyNode::store_data_at_nodes(&context, data, msg_id, targets).await?;
-
                 Ok(vec![])
             }
             NodeMsg::NodeDataCmd(NodeDataCmd::StoreData(data)) => {

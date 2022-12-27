@@ -263,8 +263,9 @@ impl PeerSessionWorker {
                     job.connection_retries += 1;
                 }
 
-                job.reporter
-                    .send(SendStatus::TransientError(format!("{error:?}")));
+                job.reporter.send(SendStatus::TransientError(format!(
+                    "Issue getting connection from Link: {error:?}"
+                )));
 
                 // we await here in case the connection is fresh and has not yet been added
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;

@@ -490,7 +490,7 @@ impl MyNode {
                     let node_id = PublicKey::from(context.keypair.public);
                     let msg = NodeMsg::NodeEvent(NodeEvent::CouldNotStoreData {
                         node_id,
-                        data,
+                        data_address: data.address(),
                         full: true,
                     });
                     is_full = true;

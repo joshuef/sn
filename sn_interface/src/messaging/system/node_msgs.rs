@@ -36,7 +36,7 @@ pub enum NodeEvent {
         /// Node Id
         node_id: PublicKey,
         /// The data that the Node couldn't store
-        data: ReplicatedData,
+        data_address: DataAddress,
         /// Whether store failed due to full
         full: bool,
     },
