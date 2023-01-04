@@ -301,7 +301,9 @@ impl SectionsDAG {
     /// other
     pub fn merge(&mut self, mut other: Self) -> Result<()> {
         if !other.self_verify() {
-            return Err(Error::InvalidSignature);
+            return Err(Error::UntrustedProofChain(format!(
+                "Proof chain failed self verification: {other:?}",
+            )));
         }
         // find which DAG is the parent
         if !self.has_key(other.genesis_key()) {

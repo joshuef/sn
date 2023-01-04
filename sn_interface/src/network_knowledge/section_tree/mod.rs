@@ -217,47 +217,47 @@ impl SectionTree {
         let signed_sap = section_tree_update.signed_sap;
         let proof_chain = section_tree_update.proof_chain;
 
-        let incoming_prefix = &signed_sap.prefix();
-        match self.get_signed(incoming_prefix) {
-            Some(sap) if sap == &signed_sap => {
-                // It's the same SAP we are already aware of
-                info!("Dropping SectionTree update since the incoming SAP for prefix '{incoming_prefix}' is not new");
-                return Ok(false);
-            }
-            Some(sap) => {
-                let current_sap_elder_count = sap.elder_count();
-                let proposed_sap_elder_count = signed_sap.elder_count();
-                if proposed_sap_elder_count < current_sap_elder_count {
-                    warn!("Proposed SAP elder count is LESS than current...\
-                    proposed: {proposed_sap_elder_count:?}, current: {current_sap_elder_count:?} (proposed is: {signed_sap:?})");
-                }
+        if self.sections_dag.has_key(&signed_sap.value.section_key()) {
+            info!(
+                "Dropping SectionTree update as already have the incoming SAP {:?}",
+                signed_sap.value
+            );
+            return Ok(false);
+        }
 
-                // Verify the new SAP with the SAP we know and the proof chain provided.
-                if !proof_chain.has_key(&sap.section_key()) {
-                    // This case may happen when both the sender and receiver is about to using
-                    // a new SAP. The AE-Update was sent before sender switching to use new SAP,
-                    // hence it only contains proof_chain covering the old SAP.
-                    // When the update arrives after the receiver got switched to use new SAP,
-                    // this error will be complained.
-                    // As an outdated node will got updated via AE triggered by other messages,
-                    // there is no need to bounce back here (assuming the sender is outdated) to
-                    // avoid potential looping.
-                    return Err(Error::SAPKeyNotCoveredByProofChain(format!(
-                        "{proof_chain:?}, {:?}",
-                        sap.value
-                    )));
-                }
+        let incoming_prefix = &signed_sap.prefix();
+        if let Some(sap) = self.get_signed(incoming_prefix) {
+            let current_sap_elder_count = sap.elder_count();
+            let proposed_sap_elder_count = signed_sap.elder_count();
+            if proposed_sap_elder_count < current_sap_elder_count {
+                warn!("Proposed SAP elder count is LESS than current...\
+                proposed: {proposed_sap_elder_count:?}, current: {current_sap_elder_count:?} (proposed is: {signed_sap:?})");
             }
-            None => {
-                warn!("Could not find related section to {incoming_prefix:?} in order to validate SAP's section is not shrinking");
-                // We are not aware of the prefix, let's then verify it can be
-                // trusted based on our own sections_dag and the provided proof chain.
-                if !proof_chain.check_trust(self.sections_dag.keys()) {
-                    return Err(Error::UntrustedProofChain(format!(
-                        "None of the keys were found on our section chain: {:?}",
-                        signed_sap.value
-                    )));
-                }
+
+            // Verify the new SAP with the SAP we know and the proof chain provided.
+            if !proof_chain.has_key(&sap.section_key()) {
+                // This case may happen when both the sender and receiver is about to using
+                // a new SAP. The AE-Update was sent before sender switching to use new SAP,
+                // hence it only contains proof_chain covering the old SAP.
+                // When the update arrives after the receiver got switched to use new SAP,
+                // this error will be complained.
+                // As an outdated node will got updated via AE triggered by other messages,
+                // there is no need to bounce back here (assuming the sender is outdated) to
+                // avoid potential looping.
+                return Err(Error::SAPKeyNotCoveredByProofChain(format!(
+                    "{proof_chain:?}, {:?}",
+                    sap.value
+                )));
+            }
+        } else {
+            warn!("Could not find related section to {incoming_prefix:?} in order to validate SAP's section is not shrinking");
+            // We are not aware of the prefix, let's then verify it can be
+            // trusted based on our own sections_dag and the provided proof chain.
+            if !proof_chain.check_trust(self.sections_dag.keys()) {
+                return Err(Error::UntrustedProofChain(format!(
+                    "None of the keys were found on our section chain: {:?}",
+                    signed_sap.value
+                )));
             }
         }
 
@@ -273,13 +273,6 @@ impl SectionTree {
             return Err(Error::UntrustedSectionAuthProvider(format!(
                 "Section key does not match signature's key: {:?}",
                 signed_sap.value
-            )));
-        }
-        // Make sure the proof chain can be trusted,
-        // i.e. check each key is signed by its parent/predecessor key.
-        if !proof_chain.self_verify() {
-            return Err(Error::UntrustedProofChain(format!(
-                "Proof chain failed self verification: {proof_chain:?}",
             )));
         }
         // SAP's key should be the last key of the proof chain
@@ -839,7 +832,7 @@ mod tests {
     }
 
     #[test]
-    fn outdated_sap_for_the_same_prefix_should_result_in_error_during_update() -> Result<()> {
+    fn outdated_sap_result_in_no_update() -> Result<()> {
         let (mut tree, genesis_sk) = TestSectionTree::random_tree();
 
         // node updated with sap0
@@ -858,7 +851,7 @@ mod tests {
         // node receives an outdated AE update for sap0
         assert!(matches!(
             tree.update_the_section_tree(tree_update_outdated),
-            Err(Error::SAPKeyNotCoveredByProofChain(_))
+            Ok(false)
         ));
 
         Ok(())
