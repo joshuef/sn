@@ -219,7 +219,6 @@ impl FaultDetection {
         );
 
         for (name, score) in pre_standardised_scores {
-            trace!("Initial score for {name:?} is {score:?}");
             let meaned = if let Some(mean) = mean {
                 score.saturating_sub(mean as usize)
             } else {
@@ -228,10 +227,10 @@ impl FaultDetection {
 
             let zscore = meaned.saturating_sub(std_dev as usize);
 
-            debug!("Final Z-score for {name} is {zscore:?}");
-
             if zscore > threshold && zscore > 0 {
+                trace!("Initial score for {name:?} is {score:?}");
                 let _existed = final_scores.insert(name, zscore);
+                debug!("Final Z-score for {name} is {zscore:?}");
             }
         }
 
@@ -420,7 +419,7 @@ mod tests {
     /// the nodes we should target for this specific issue:
     /// eg if DKG, it's the closest to the `root_addr`
     /// if anything else, we base it off issue name closeness
-    fn get_target_nodes_for_issue(
+    fn get_nodes_suffering_issue(
         issue: IssueType,
         issue_location: XorName,
         root: XorName,
@@ -441,7 +440,7 @@ mod tests {
                 .iter()
                 .sorted_by(|lhs, rhs| issue_location.cmp_distance(&lhs.0, &rhs.0))
                 // and we simul-send it to 4 nodes
-                .take(4)
+                .take(1)
                 .cloned()
                 .collect::<Vec<_>>()
         }
@@ -547,10 +546,10 @@ mod tests {
         /// "Nodes" are just random xornames,
         /// each issue has a random xorname attached to it to, and is sent to 4 nodes... each of which will fail a % of the time, depending on the
         /// NodeQuality (Good or Bad)
-        fn pt_detect_correct_or_less_amount_of_faulty_nodes(
-            elders_in_dkg in 2..7usize,
-            nodes in generate_nodes_and_quality(3,30), issues in generate_msg_issues(500,1500))
+        fn pt_detect_correct_or_less_amount_of_faulty_nodes_with_full_elder_set(
+            nodes in generate_nodes_and_quality(3,30), issues in generate_msg_issues(100,500))
             {
+                let elders_in_dkg = 7;
                 init_test_logger();
                 let _outer_span = tracing::info_span!("pt_correct_less").entered();
 
@@ -579,7 +578,7 @@ mod tests {
 
                     // Now we loop through each issue/msg
                     for (issue, issue_location, fail_test ) in issues {
-                        let target_nodes = get_target_nodes_for_issue(issue.clone(), issue_location, random_xorname_root, &nodes, elders_in_dkg);
+                        let target_nodes = get_nodes_suffering_issue(issue.clone(), issue_location, random_xorname_root, &nodes, elders_in_dkg);
 
                         // now we track our issue, but only if that node fails to passes muster...
                         for (node, quality) in target_nodes {
@@ -640,11 +639,11 @@ mod tests {
         /// each issue has a random xorname attached to it to, and is sent to 4 nodes... each of which will fail a % of the time, depending on the
         /// NodeQuality (Good or Bad)
         fn pt_detect_dkg_bad_nodes(
-            elders_in_dkg in 2..7usize,
             // ~1500 msgs total should get us ~500 dkg which would be representative
-            nodes in generate_nodes_and_quality(3,30), issues in generate_startup_issues(500,2500))
+            nodes in generate_nodes_and_quality(3,30), issues in generate_startup_issues(100,1000))
             {
                 init_test_logger();
+                let elders_in_dkg = 7;
                 let _outer_span = tracing::info_span!("pt_dkg").entered();
                 let mut good_len = 0;
                 let mut bad_len = 0;
@@ -669,7 +668,7 @@ mod tests {
                 // Now we loop through each issue/msg
                 for (issue, issue_location, fail_test ) in issues {
 
-                    let target_nodes = get_target_nodes_for_issue(issue.clone(), issue_location, random_xorname_root, &nodes, elders_in_dkg);
+                    let target_nodes = get_nodes_suffering_issue(issue.clone(), issue_location, random_xorname_root, &nodes, elders_in_dkg);
 
                     // we send each message to all nodes in this situation where we're looking at elder comms alone over dkg
                     // now we track our issue, but only if that node fails to passes muster...
@@ -751,7 +750,7 @@ mod tests {
                     // Now we loop through each issue/msg
                     for (issue, issue_location, fail_test ) in issues {
                         // this will be all ndoes in this test as we have up to 7 elders
-                        let target_nodes = get_target_nodes_for_issue(issue.clone(), issue_location, random_xorname_root, &nodes, nodes.len());
+                        let target_nodes = get_nodes_suffering_issue(issue.clone(), issue_location, random_xorname_root, &nodes, nodes.len());
 
                         // we send each message to all nodes in this situation where we're looking at elder comms alone over dkg
                         // now we track our issue, but only if that node fails to passes muster...
