@@ -8,20 +8,24 @@
 
 use crate::{get_mean_of, std_deviation, FaultDetection};
 
-use std::collections::{BTreeMap, BTreeSet};
+use itertools::Itertools;
+use std::collections::BTreeMap;
 use xor_name::XorName;
 
 use std::time::Duration;
 static RECENT_ISSUE_DURATION: Duration = Duration::from_secs(60 * 10); // 10 minutes
 
+/// Highest score we have, we can use this to derive some tolerance of that score
+static HIGH_SCORE: usize = 100;
+
+/// How many standard devs before we consider a node faulty
+// static STD_DEVS_AWAY: usize = 2;
+
 static CONN_WEIGHTING: f32 = 20.0;
 static OP_WEIGHTING: f32 = 1.0;
 static KNOWLEDGE_WEIGHTING: f32 = 30.0;
 static DKG_WEIGHTING: f32 = 10.0; // there are quite a lot of DKG msgs that go out atm, so can't weight this too heavily
-static AE_PROBE_WEIGHTING: f32 = 150.0;
-
-/// Weighted score value relative to std_deviation, above which we're calling a node faulty
-static FAULT_SCORE_THRESHOLD: usize = 500;
+static AE_PROBE_WEIGHTING: f32 = HIGH_SCORE as f32;
 
 #[derive(Clone, Debug)]
 /// Represents the different type of issues that can be recorded by the Fault Detection
@@ -216,7 +220,9 @@ impl FaultDetection {
 
             debug!("Final Z-score for {name} is {zscore:?}");
 
-            let _existed = final_scores.insert(name, zscore);
+            if zscore > 0 {
+                let _existed = final_scores.insert(name, zscore);
+            }
         }
 
         final_scores
@@ -240,24 +246,23 @@ impl FaultDetection {
         }
     }
 
-    /// Get a list of nodes whose score is  FAULT_SCORE_THRESHOLD
-    /// TODO: order these to act upon _most_ faulty first
+    /// Get a list of nodes that are faulty
     /// (the nodes must all `ProposeOffline` over a faulty node and then _immediately_ vote it off. So any other membershipn changes in flight could block this.
     /// thus, we need to be callling this function often until nodes are removed.)
-    pub fn get_faulty_nodes(&mut self) -> BTreeSet<XorName> {
+    pub fn get_faulty_nodes(&mut self) -> Vec<XorName> {
         self.cleanup_time_sensistive_checks();
-
-        let mut faulty_nodes = BTreeSet::new();
 
         let final_scores = self.get_weighted_scores();
 
-        for (name, node_score) in final_scores {
-            // if our weighted score is higher than this, then we're having a bad time
-            if node_score > FAULT_SCORE_THRESHOLD {
+        // sort into vec of highest scores first
+        let faulty_nodes = final_scores
+            .iter()
+            .sorted_by(|a, b| Ord::cmp(&b.1, &a.1))
+            .map(|(name, _score)| {
                 info!("FaultDetection: Adding {name} as faulty node");
-                let _existed = faulty_nodes.insert(name);
-            }
-        }
+                *name
+            })
+            .collect_vec();
 
         faulty_nodes
     }

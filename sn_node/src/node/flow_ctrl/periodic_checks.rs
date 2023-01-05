@@ -15,7 +15,7 @@ use crate::node::{
 
 use sn_interface::{messaging::system::NodeMsg, types::log_markers::LogMarker};
 
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time::Instant};
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(300);
@@ -322,7 +322,11 @@ impl FlowCtrl {
 
         if !faulty_nodes.is_empty() {
             debug!("{:?} : {faulty_nodes:?}", LogMarker::ProposeOffline);
-            cmds.push(Cmd::ProposeVoteNodesOffline(faulty_nodes))
+            let mut fault_set = BTreeSet::new();
+            for node in faulty_nodes {
+                let _prev = fault_set.insert(node);
+            }
+            cmds.push(Cmd::ProposeVoteNodesOffline(fault_set))
         }
 
         cmds

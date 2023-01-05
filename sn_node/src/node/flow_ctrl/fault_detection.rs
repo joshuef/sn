@@ -15,7 +15,7 @@ use xor_name::XorName;
 
 pub(crate) struct FaultChannels {
     pub(crate) cmds_sender: Sender<FaultsCmd>,
-    pub(crate) faulty_nodes_receiver: Receiver<BTreeSet<XorName>>,
+    pub(crate) faulty_nodes_receiver: Receiver<Vec<XorName>>,
 }
 
 /// Set of cmds to interact with the `FaultDetection` module
@@ -32,7 +32,7 @@ impl FlowCtrl {
     pub(crate) fn start_fault_detection(
         mut tracker: FaultDetection,
         mut fault_cmds_from_node: Receiver<FaultsCmd>,
-    ) -> Receiver<BTreeSet<XorName>> {
+    ) -> Receiver<Vec<XorName>> {
         let (fault_nodes_sender, faulty_nodes_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let _ = tokio::task::spawn(async move {
@@ -66,7 +66,7 @@ impl FlowCtrl {
     }
 
     /// returns names that are relatively faulty
-    pub(crate) async fn get_faulty_node_names(&mut self) -> BTreeSet<XorName> {
+    pub(crate) async fn get_faulty_node_names(&mut self) -> Vec<XorName> {
         // send a FaultCmd asking for the faulty nodes
         if let Err(error) = self
             .fault_channels
@@ -75,14 +75,14 @@ impl FlowCtrl {
             .await
         {
             warn!("Could not send FaultsCmd through fault_cmds_tx: {error}");
-            BTreeSet::new()
+            vec![]
         } else {
             // read the rx channel to get the faulty nodes
             if let Some(faulty_nodes) = self.fault_channels.faulty_nodes_receiver.recv().await {
                 faulty_nodes
             } else {
                 warn!("faulty_nodes_rx channel closed?");
-                BTreeSet::new()
+                vec![]
             }
         }
     }
