@@ -8,8 +8,8 @@
 
 use super::Prefix;
 
+use crate::comm::SendToOneError;
 use crate::node::handover::Error as HandoverError;
-
 use sn_dbc::Error as DbcError;
 use sn_interface::{
     dbcs::Error as GenesisError,
@@ -44,6 +44,9 @@ pub enum Error {
     /// This peer has no connections, and none will be created
     #[error("Peer link has no connections ")]
     NoConnectionsForPeer,
+    /// The tokio channel errored out here.
+    #[error("Failed to send connection through the filter.")]
+    CouldNotSendToConnectionFilter,
     /// This should not be possible as the channel is stored in node, and used to process child commands
     #[error("No more Cmds will be received or processed. CmdChannel senders have been dropped. ")]
     CmdCtrlChannelDropped,
@@ -188,6 +191,9 @@ pub enum Error {
     /// Failed to get parent SAP in chain when checking a Handover vote's SAP
     #[error("FailedToGetSAPforPrefix {0:?}")]
     FailedToGetSAPforPrefix(Prefix),
+    /// Could not get Connection for PeerSession
+    #[error("Failed getting PeerSession connection {0:?}")]
+    FailedToGetPeerSessionConnection(#[from] SendToOneError),
     /// Invalid Elder Candidates in Handover vote's SAP
     #[error("InvalidElderCandidates")]
     InvalidElderCandidates,

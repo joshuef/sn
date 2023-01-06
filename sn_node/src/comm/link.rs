@@ -14,7 +14,9 @@ use sn_interface::messaging::MsgId;
 use sn_interface::types::{log_markers::LogMarker, Peer};
 use std::sync::Arc;
 use std::time::Duration;
+use thiserror::Error;
 use tokio::time::sleep;
+
 type ConnId = String;
 
 const CONN_RETRY_WAIT: Duration = Duration::from_millis(100);
@@ -288,14 +290,18 @@ impl Link {
 }
 
 /// Errors that can be returned from `Comm::send_to_one`.
-#[derive(Debug)]
-pub(crate) enum SendToOneError {
+#[derive(Error, Debug)]
+pub enum SendToOneError {
+    #[error("Connection Error: {0}")]
     ///
-    Connection(qp2p::ConnectionError),
+    Connection(#[from] qp2p::ConnectionError),
+    #[error("Send Error: {0}")]
     ///
     Send(qp2p::SendError),
+    #[error("Recv Error: {0}")]
     ///
     Recv(qp2p::RecvError),
+    #[error("Remote peer closed connection. Peer was: {0}")]
     /// Remote peer closed the bi-stream we expected a msg on
     RecvClosed(Peer),
 }

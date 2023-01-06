@@ -144,8 +144,9 @@ impl<R: RngCore> TestNetworkBuilder<R> {
 
             let (tx, rx) = mpsc::channel(TEST_EVENT_CHANNEL_SIZE);
             let socket_addr: SocketAddr = (Ipv4Addr::LOCALHOST, 0).into();
-            let comm = futures::executor::block_on(Comm::new(socket_addr, Default::default(), tx))
-                .expect("failed to create comm");
+            let (comm, _) =
+                futures::executor::block_on(Comm::new(socket_addr, Default::default(), tx))
+                    .expect("failed to create comm");
             let mut node = node.clone();
             node.addr = comm.socket_addr();
 
@@ -788,7 +789,7 @@ impl TestNetwork {
         let _ = handle.enter();
         let (tx, rx) = mpsc::channel(TEST_EVENT_CHANNEL_SIZE);
         let socket_addr: SocketAddr = (Ipv4Addr::LOCALHOST, 0).into();
-        let comm = futures::executor::block_on(Comm::new(socket_addr, Default::default(), tx))
+        let (comm, _) = futures::executor::block_on(Comm::new(socket_addr, Default::default(), tx))
             .expect("failed  to create comm");
         let info = MyNodeInfo::new(
             gen_keypair(&prefix.unwrap_or_default().range_inclusive(), age),

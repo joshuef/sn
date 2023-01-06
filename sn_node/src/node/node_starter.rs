@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::comm::{Comm, MsgFromPeer};
+use crate::comm::{Comm, ConnectionEvent, MsgFromPeer};
 use crate::node::{
     cfg::keypair_storage::{get_reward_pk, store_network_keypair, store_new_reward_keypair},
     flow_ctrl::{
@@ -144,12 +144,14 @@ async fn bootstrap_node(
     let (fault_cmds_sender, fault_cmds_receiver) =
         mpsc::channel::<FaultsCmd>(STANDARD_CHANNEL_SIZE);
 
-    let comm = Comm::new(
+    let (comm, mut unfiltered_connection_receiver) = Comm::new(
         config.local_addr(),
         config.network_config(),
         incoming_msg_pipe,
     )
     .await?;
+
+    let conn_filter_comm = comm.clone();
 
     let node = if config.is_first() {
         bootstrap_genesis_node(
@@ -182,6 +184,31 @@ async fn bootstrap_node(
         (fault_cmds_sender, fault_cmds_receiver),
     )
     .await;
+
+    let filter_node = node.clone();
+    // Spawn a task to filter incoming connections and ensure that we only cache our section's connections
+    tokio::task::spawn(async move {
+        while let Some(event) = unfiltered_connection_receiver.recv().await {
+            match event {
+                ConnectionEvent::Connected { peer, connection } => {
+                    // TODO: some spam control here...
+                    let members = filter_node.read().await.network_knowledge.members();
+                    if members.contains(&peer) {
+                        if let Err(error) = conn_filter_comm
+                            .filtered_connection_sender
+                            .send(ConnectionEvent::Connected { peer, connection })
+                            .await
+                        {
+                            error!("Could not send filtered connection into comms for caching. {error:?}");
+                        }
+                    }
+                }
+                _ => {
+                    // do nothing
+                }
+            }
+        }
+    });
 
     Ok((node, cmd_channel, rejoin_network_rx))
 }

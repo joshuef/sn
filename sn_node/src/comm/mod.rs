@@ -12,7 +12,7 @@ mod peer_session;
 
 use self::{
     link::Link,
-    listener::{ConnectionEvent, MsgListener},
+    listener::MsgListener,
     peer_session::{PeerSession, SendStatus, SendWatcher},
 };
 
@@ -32,27 +32,38 @@ use tokio::{
     task,
 };
 
+pub(crate) use link::SendToOneError;
+pub(crate) use listener::ConnectionEvent;
+
 // Communication component of the node to interact with other nodes.
 #[derive(Clone)]
 pub(crate) struct Comm {
     pub(crate) our_endpoint: Endpoint,
     msg_listener: MsgListener,
     sessions: Arc<DashMap<Peer, PeerSession>>,
+    /// Pipe to check that we want to store filters (allows us to check node knowledge eg)
+    connection_filter: Sender<ConnectionEvent>,
+    /// Sender for filtered and valid connections to cache
+    pub(crate) filtered_connection_sender: Sender<ConnectionEvent>,
 }
 
 impl Comm {
+    /// Creates a comm instance, and returns the unfiltered connection receiver
     #[tracing::instrument(skip_all)]
     pub(crate) async fn new(
         local_addr: SocketAddr,
         config: qp2p::Config,
         incoming_msg_pipe: Sender<MsgFromPeer>,
-    ) -> Result<Self> {
+    ) -> Result<(Self, Receiver<ConnectionEvent>)> {
         // Doesn't bootstrap, just creates an endpoint to listen to
         // the incoming messages from other nodes.
         let (our_endpoint, incoming_connections, _) =
             Endpoint::new_peer(local_addr, Default::default(), config).await?;
 
         let (add_connection, conn_events_recv) = mpsc::channel(STANDARD_CHANNEL_SIZE);
+        let (connection_filter, unfiltered_connection_recv) = mpsc::channel(STANDARD_CHANNEL_SIZE);
+        let (filtered_connection_sender, filtered_connection_recv) =
+            mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let msg_listener = MsgListener::new(add_connection, incoming_msg_pipe);
 
@@ -60,13 +71,19 @@ impl Comm {
             our_endpoint,
             msg_listener: msg_listener.clone(),
             sessions: Arc::new(DashMap::new()),
+            connection_filter,
+            filtered_connection_sender,
         };
 
         let _ = task::spawn(receive_conns(comm.clone(), conn_events_recv));
+        let _ = task::spawn(receive_filtered_conns(
+            comm.clone(),
+            filtered_connection_recv,
+        ));
 
         listen_for_incoming_msgs(msg_listener, incoming_connections);
 
-        Ok(comm)
+        Ok((comm, unfiltered_connection_recv))
     }
 
     pub(crate) fn socket_addr(&self) -> SocketAddr {
@@ -219,7 +236,7 @@ impl Comm {
         bytes: UsrMsgBytes,
     ) -> Result<WireMsg> {
         debug!("trying to get {peer:?} session in order to send: {msg_id:?}");
-        if let Some(mut peer) = self.get_or_create(&peer) {
+        if let Some(mut peer) = self.get_or_create(&peer, msg_id).await? {
             debug!("Session of {peer:?} retrieved for {msg_id:?}");
             let adult_response_bytes = peer.send_with_bi_return_response(bytes, msg_id).await?;
             debug!("Peer response from {peer:?} is in for {msg_id:?}");
@@ -284,30 +301,68 @@ impl Comm {
 
     /// Get a PeerSession if it already exists, otherwise create and insert
     #[instrument(skip(self))]
-    fn get_or_create(&self, peer: &Peer) -> Option<PeerSession> {
-        debug!("getting or Creating peer session to: {peer:?}");
+    async fn get_or_create(&self, peer: &Peer, msg_id: MsgId) -> Result<Option<PeerSession>> {
+        debug!("{msg_id:?} getting or Creating peer session to: {peer:?}");
         if let Some(entry) = self.sessions.get(peer) {
             debug!(" session to: {peer:?} exists");
-            return Some(entry.value().clone());
+            return Ok(Some(entry.value().clone()));
         }
 
-        debug!("session to: {peer:?} does not exists");
-        let link = Link::new(*peer, self.our_endpoint.clone(), self.msg_listener.clone());
-        let session = PeerSession::new(link);
-        debug!("about to insert session {peer:?}");
-        let prev_peer = self.sessions.insert(*peer, session.clone());
         debug!(
-            "inserted session {peer:?}, prev peer was discarded? {:?}",
-            prev_peer.is_some()
+            "{msg_id:?} session to: {peer:?} does not exists, sending through connection filter"
         );
-        Some(session)
+
+        let link = Link::new(*peer, self.our_endpoint.clone(), self.msg_listener.clone());
+        let mut session = PeerSession::new(link);
+
+        let connection = session.get_connection(msg_id).await?;
+
+        debug!("{msg_id:?} Filtering connection to {peer:?} before caching");
+        self.connection_filter
+            .send(ConnectionEvent::Connected {
+                peer: *peer,
+                connection,
+            })
+            .await
+            .map_err(|_| Error::CouldNotSendToConnectionFilter)?;
+
+        Ok(Some(session))
+    }
+
+    /// Check if a session exists to add connection to
+    /// or passes connection even on to be filtered for relevance before
+    /// we cache
+    async fn filter_conn(&self, peer: &Peer, connection: Arc<Connection>) -> Result<()> {
+        debug!(
+            "Attempting to add incoming conn to {peer:?} w/ conn_id : {:?}",
+            connection.id()
+        );
+        if let Some(entry) = self.sessions.get(peer) {
+            // peer already exists
+            let peer_session = entry.value();
+            // add to it
+            peer_session.add(connection).await;
+        } else {
+            debug!("Filtering connection to {peer:?} before caching");
+
+            self.connection_filter
+                .send(ConnectionEvent::Connected {
+                    peer: *peer,
+                    connection,
+                })
+                .await
+                .map_err(|_| Error::CouldNotSendToConnectionFilter)?;
+        }
+
+        Ok(())
     }
 
     /// Any number of incoming qp2p:Connections can be added.
     /// We will eventually converge to the same one in our comms with the peer.
-    async fn add_incoming(&self, peer: &Peer, conn: Arc<Connection>) {
+    /// Connections should only be added if they have been filtered for relevance.
+    async fn add_conn(&self, peer: &Peer, conn: Arc<Connection>) {
         debug!(
-            "Adding incoming conn to {peer:?} w/ conn_id : {:?}",
+            "Attempting to add incoming conn to {peer:?} w/ conn_id : {:?}",
             conn.id()
         );
         if let Some(entry) = self.sessions.get(peer) {
@@ -316,6 +371,8 @@ impl Comm {
             // add to it
             peer_session.add(conn).await;
         } else {
+            debug!("Adding new filtered connection to {peer:?} to the PeerSessions cache");
+
             let link = Link::new_with(
                 *peer,
                 self.our_endpoint.clone(),
@@ -371,7 +428,7 @@ impl Comm {
             recipient
         );
 
-        if let Some(peer) = self.get_or_create(&recipient) {
+        if let Some(peer) = self.get_or_create(&recipient, msg_id).await? {
             debug!("Peer session retrieved");
             Ok(Some(
                 peer.send_using_session_or_stream(msg_id, bytes, send_stream)
@@ -385,11 +442,31 @@ impl Comm {
 }
 
 #[tracing::instrument(skip_all)]
+/// Receive conns and send new ones on to be filtered
 async fn receive_conns(comm: Comm, mut conn_events_recv: Receiver<ConnectionEvent>) {
     while let Some(event) = conn_events_recv.recv().await {
         match event {
             ConnectionEvent::Connected { peer, connection } => {
-                comm.add_incoming(&peer, connection).await
+                if let Err(error) = comm.filter_conn(&peer, connection).await {
+                    error!(
+                        "{:?} {error:?}",
+                        crate::node::Error::CouldNotSendToConnectionFilter
+                    );
+                }
+            }
+            ConnectionEvent::ConnectionClosed { peer, connection } => {
+                comm.remove_conn(&peer, connection).await;
+            }
+        }
+    }
+}
+#[tracing::instrument(skip_all)]
+/// Receive filtered connections to add to cached sessions
+async fn receive_filtered_conns(comm: Comm, mut conn_events_recv: Receiver<ConnectionEvent>) {
+    while let Some(event) = conn_events_recv.recv().await {
+        match event {
+            ConnectionEvent::Connected { peer, connection } => {
+                comm.add_conn(&peer, connection).await
             }
             ConnectionEvent::ConnectionClosed { peer, connection } => {
                 comm.remove_conn(&peer, connection).await;
@@ -448,7 +525,7 @@ mod tests {
     #[tokio::test]
     async fn successful_send() -> Result<()> {
         let (tx, _rx) = mpsc::channel(1);
-        let comm = Comm::new(local_addr(), Config::default(), tx).await?;
+        let (comm, _) = Comm::new(local_addr(), Config::default(), tx).await?;
 
         let (peer0, mut rx0) = new_peer().await?;
         let (peer1, mut rx1) = new_peer().await?;
@@ -476,7 +553,7 @@ mod tests {
     #[ignore = "Re-enable this when we've feedback from sends off thread"]
     async fn failed_send() -> Result<()> {
         let (tx, _rx) = mpsc::channel(1);
-        let comm = Comm::new(
+        let (comm, _) = Comm::new(
             local_addr(),
             Config {
                 // This makes this test faster.
@@ -502,7 +579,7 @@ mod tests {
     #[tokio::test]
     async fn send_after_reconnect() -> Result<()> {
         let (tx, _rx) = mpsc::channel(1);
-        let send_comm = Comm::new(local_addr(), Config::default(), tx).await?;
+        let (send_comm, _) = Comm::new(local_addr(), Config::default(), tx).await?;
 
         let (recv_endpoint, mut incoming_connections, _) =
             Endpoint::new_peer(local_addr(), &[], Config::default()).await?;
@@ -551,10 +628,10 @@ mod tests {
     #[tokio::test]
     async fn incoming_connection_lost() -> Result<()> {
         let (tx, mut rx0) = mpsc::channel(1);
-        let comm0 = Comm::new(local_addr(), Config::default(), tx.clone()).await?;
+        let (comm0, _) = Comm::new(local_addr(), Config::default(), tx.clone()).await?;
         let addr0 = comm0.socket_addr();
 
-        let comm1 = Comm::new(local_addr(), Config::default(), tx).await?;
+        let (comm1, _) = Comm::new(local_addr(), Config::default(), tx).await?;
 
         let peer = Peer::new(xor_name::rand::random(), addr0);
         let msg = new_test_msg(dst(peer))?;

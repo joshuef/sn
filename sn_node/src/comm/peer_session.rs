@@ -10,7 +10,7 @@ use super::Link;
 
 use crate::node::{Error, Result, STANDARD_CHANNEL_SIZE};
 
-use qp2p::{SendStream, UsrMsgBytes};
+use qp2p::{Connection, SendStream, UsrMsgBytes};
 use sn_interface::messaging::MsgId;
 
 use custom_debug::Debug;
@@ -31,8 +31,8 @@ const MAX_SENDJOB_RETRIES: usize = 3;
 #[derive(Debug)]
 enum SessionCmd {
     Send(SendJob),
-    AddConnection(Arc<qp2p::Connection>),
-    RemoveConnection(Arc<qp2p::Connection>),
+    AddConnection(Arc<Connection>),
+    RemoveConnection(Arc<Connection>),
     Terminate,
 }
 
@@ -60,9 +60,14 @@ impl PeerSession {
         self.link.has_connections()
     }
 
+    /// Returns the next underlying connection
+    pub(crate) async fn get_connection(&mut self, msg_id: MsgId) -> Result<Arc<Connection>> {
+        self.link.get_or_connect(msg_id).await.map_err(Error::from)
+    }
+
     // this must be restricted somehow, we can't allow an unbounded inflow
     // of connections from a peer...
-    pub(crate) async fn add(&self, conn: Arc<qp2p::Connection>) {
+    pub(crate) async fn add(&self, conn: Arc<Connection>) {
         let cmd = SessionCmd::AddConnection(conn);
         if let Err(e) = self.channel.send(cmd).await {
             error!("Error while sending AddConnection {e:?}");
@@ -70,7 +75,7 @@ impl PeerSession {
     }
 
     // Remove a connection from a peer
-    pub(crate) async fn remove(&self, conn: Arc<qp2p::Connection>) {
+    pub(crate) async fn remove(&self, conn: Arc<Connection>) {
         let cmd = SessionCmd::RemoveConnection(conn);
         if let Err(e) = self.channel.send(cmd).await {
             error!("Error while sending RemoveConnection {e:?}");
