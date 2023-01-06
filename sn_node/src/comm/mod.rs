@@ -26,7 +26,7 @@ use sn_interface::{
 
 use dashmap::DashMap;
 use qp2p::{Endpoint, IncomingConnections};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
     task,
@@ -38,6 +38,7 @@ pub(crate) struct Comm {
     pub(crate) our_endpoint: Endpoint,
     msg_listener: MsgListener,
     sessions: Arc<DashMap<Peer, PeerSession>>,
+    members: BTreeSet<Peer>,
 }
 
 impl Comm {
@@ -60,6 +61,7 @@ impl Comm {
             our_endpoint,
             msg_listener: msg_listener.clone(),
             sessions: Arc::new(DashMap::new()),
+            members: BTreeSet::new(),
         };
 
         let _ = task::spawn(receive_conns(comm.clone(), conn_events_recv));
@@ -101,6 +103,12 @@ impl Comm {
             });
         connectivity_endpoint.close();
         result
+    }
+
+    /// Updates cached connections for passed members set only.
+    pub(crate) fn update(&mut self, members: BTreeSet<Peer>) {
+        self.members = members;
+        self.sessions.retain(|p, _| self.members.contains(p));
     }
 
     #[tracing::instrument(skip(self, bytes))]
@@ -316,15 +324,18 @@ impl Comm {
             // add to it
             peer_session.add(conn).await;
         } else {
-            let link = Link::new_with(
-                *peer,
-                self.our_endpoint.clone(),
-                self.msg_listener.clone(),
-                conn,
-            )
-            .await;
-            let session = PeerSession::new(link);
-            let _ = self.sessions.insert(*peer, session);
+            // we do not cache connections that are not from our members
+            if self.members.contains(peer) {
+                let link = Link::new_with(
+                    *peer,
+                    self.our_endpoint.clone(),
+                    self.msg_listener.clone(),
+                    conn,
+                )
+                .await;
+                let session = PeerSession::new(link);
+                let _ = self.sessions.insert(*peer, session);
+            }
         }
     }
 
