@@ -26,7 +26,7 @@ use sn_interface::{
 
 use dashmap::DashMap;
 use qp2p::{Endpoint, IncomingConnections};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
     task,
@@ -88,6 +88,11 @@ impl Comm {
 
     pub(crate) fn socket_addr(&self) -> SocketAddr {
         self.our_endpoint.public_addr()
+    }
+
+    /// Retain only cached connections for passed members set
+    pub(crate) fn retain_only_peers(&mut self, members: BTreeSet<Peer>) {
+        self.sessions.retain(|p, _| members.contains(p));
     }
 
     /// Fake function used as replacement for testing only.

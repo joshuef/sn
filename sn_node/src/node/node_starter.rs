@@ -186,25 +186,23 @@ async fn bootstrap_node(
     .await;
 
     let filter_node = node.clone();
+
     // Spawn a task to filter incoming connections and ensure that we only cache our section's connections
-    tokio::task::spawn(async move {
+    let _handle = tokio::task::spawn(async move {
         while let Some(event) = unfiltered_connection_receiver.recv().await {
-            match event {
-                ConnectionEvent::Connected { peer, connection } => {
-                    // TODO: some spam control here...
-                    let members = filter_node.read().await.network_knowledge.members();
-                    if members.contains(&peer) {
-                        if let Err(error) = conn_filter_comm
-                            .filtered_connection_sender
-                            .send(ConnectionEvent::Connected { peer, connection })
-                            .await
-                        {
-                            error!("Could not send filtered connection into comms for caching. {error:?}");
-                        }
+            if let ConnectionEvent::Connected { peer, connection } = event {
+                // TODO: some spam control here...
+                let members = filter_node.read().await.network_knowledge.members();
+                if members.contains(&peer) {
+                    if let Err(error) = conn_filter_comm
+                        .filtered_connection_sender
+                        .send(ConnectionEvent::Connected { peer, connection })
+                        .await
+                    {
+                        error!(
+                            "Could not send filtered connection into comms for caching. {error:?}"
+                        );
                     }
-                }
-                _ => {
-                    // do nothing
                 }
             }
         }

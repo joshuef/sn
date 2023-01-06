@@ -138,6 +138,9 @@ impl MyNode {
                 self.joins_allowed = joins_allowed;
             }
         }
+
+        let current_members = self.network_knowledge.members();
+        self.comm.retain_only_peers(current_members);
         Ok(cmds)
     }
 

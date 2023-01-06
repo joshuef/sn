@@ -198,6 +198,9 @@ impl MyNode {
             info!("Updated our network knowledge for {:?}", their_prefix);
             info!("Writing updated knowledge to disk");
             MyNode::write_section_tree(&context);
+
+            let current_members = self.network_knowledge.members();
+            self.comm.retain_only_peers(current_members);
         }
         Ok(cmds)
     }
@@ -242,7 +245,11 @@ impl MyNode {
                 self.network_knowledge.section_tree()
             );
 
-            self.update_on_elder_change(&context).await
+            let cmds = self.update_on_elder_change(&context).await;
+            let current_members = self.network_knowledge.members();
+            self.comm.retain_only_peers(current_members);
+
+            cmds
         } else {
             Ok(vec![])
         }

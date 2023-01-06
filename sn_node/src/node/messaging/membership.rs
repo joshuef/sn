@@ -225,14 +225,12 @@ impl MyNode {
         cmds.extend(self.trigger_dkg()?);
         cmds.extend(self.send_ae_update_to_our_section()?);
 
-        self.liveness_retain_only(
-            self.network_knowledge
-                .adults()
-                .iter()
-                .map(|peer| peer.name())
-                .collect(),
-        )
-        .await;
+        let current_members = self.network_knowledge.members();
+
+        self.liveness_retain_only(current_members.iter().map(|peer| peer.name()).collect())
+            .await;
+
+        self.comm.retain_only_peers(current_members);
 
         if !leaving_nodes.is_empty() {
             self.joins_allowed = true;
