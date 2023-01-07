@@ -198,6 +198,11 @@ impl MyNode {
             info!("Updated our network knowledge for {:?}", their_prefix);
             info!("Writing updated knowledge to disk");
             MyNode::write_section_tree(&context);
+
+            // updates comm with new members and removes connections that are not from our members
+            self.comm
+                .update_members(self.network_knowledge.members())
+                .await;
         }
         Ok(cmds)
     }

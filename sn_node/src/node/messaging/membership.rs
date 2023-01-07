@@ -262,6 +262,11 @@ impl MyNode {
         self.log_section_stats();
         self.log_network_stats();
 
+        // updates comm with new members and removes connections that are not from our members
+        self.comm
+            .update_members(self.network_knowledge.members())
+            .await;
+
         Ok(cmds)
     }
 
