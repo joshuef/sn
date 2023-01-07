@@ -29,6 +29,7 @@ use qp2p::{Endpoint, IncomingConnections};
 use std::{collections::BTreeSet, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
+    sync::RwLock,
     task,
 };
 
@@ -38,7 +39,7 @@ pub(crate) struct Comm {
     pub(crate) our_endpoint: Endpoint,
     msg_listener: MsgListener,
     sessions: Arc<DashMap<Peer, PeerSession>>,
-    members: BTreeSet<Peer>,
+    members: Arc<RwLock<BTreeSet<Peer>>>,
 }
 
 impl Comm {
@@ -61,7 +62,7 @@ impl Comm {
             our_endpoint,
             msg_listener: msg_listener.clone(),
             sessions: Arc::new(DashMap::new()),
-            members: BTreeSet::new(),
+            members: Arc::new(RwLock::new(BTreeSet::new())),
         };
 
         let _ = task::spawn(receive_conns(comm.clone(), conn_events_recv));
@@ -106,9 +107,10 @@ impl Comm {
     }
 
     /// Updates cached connections for passed members set only.
-    pub(crate) fn update(&mut self, members: BTreeSet<Peer>) {
-        self.members = members;
-        self.sessions.retain(|p, _| self.members.contains(p));
+    pub(crate) async fn update_members(&mut self, members: BTreeSet<Peer>) {
+        let new_members = members.clone();
+        *self.members.write().await = members;
+        self.sessions.retain(|p, _| new_members.contains(p));
     }
 
     #[tracing::instrument(skip(self, bytes))]
@@ -227,7 +229,7 @@ impl Comm {
         bytes: UsrMsgBytes,
     ) -> Result<WireMsg> {
         debug!("trying to get {peer:?} session in order to send: {msg_id:?}");
-        if let Some(mut peer) = self.get_or_create(&peer) {
+        if let Some(mut peer) = self.get_or_create(&peer).await {
             debug!("Session of {peer:?} retrieved for {msg_id:?}");
             let adult_response_bytes = peer.send_with_bi_return_response(bytes, msg_id).await?;
             debug!("Peer response from {peer:?} is in for {msg_id:?}");
@@ -292,7 +294,7 @@ impl Comm {
 
     /// Get a PeerSession if it already exists, otherwise create and insert
     #[instrument(skip(self))]
-    fn get_or_create(&self, peer: &Peer) -> Option<PeerSession> {
+    async fn get_or_create(&self, peer: &Peer) -> Option<PeerSession> {
         debug!("getting or Creating peer session to: {peer:?}");
         if let Some(entry) = self.sessions.get(peer) {
             debug!(" session to: {peer:?} exists");
@@ -302,12 +304,15 @@ impl Comm {
         debug!("session to: {peer:?} does not exists");
         let link = Link::new(*peer, self.our_endpoint.clone(), self.msg_listener.clone());
         let session = PeerSession::new(link);
-        debug!("about to insert session {peer:?}");
-        let prev_peer = self.sessions.insert(*peer, session.clone());
-        debug!(
-            "inserted session {peer:?}, prev peer was discarded? {:?}",
-            prev_peer.is_some()
-        );
+
+        if self.members.read().await.contains(peer) {
+            debug!("Peer is a section member, caching session {peer:?}");
+            let prev_peer = self.sessions.insert(*peer, session.clone());
+            debug!(
+                "inserted session {peer:?}, prev peer was discarded? {:?}",
+                prev_peer.is_some()
+            );
+        }
         Some(session)
     }
 
@@ -325,7 +330,7 @@ impl Comm {
             peer_session.add(conn).await;
         } else {
             // we do not cache connections that are not from our members
-            if self.members.contains(peer) {
+            if self.members.read().await.contains(peer) {
                 let link = Link::new_with(
                     *peer,
                     self.our_endpoint.clone(),
@@ -382,7 +387,7 @@ impl Comm {
             recipient
         );
 
-        if let Some(peer) = self.get_or_create(&recipient) {
+        if let Some(peer) = self.get_or_create(&recipient).await {
             debug!("Peer session retrieved");
             Ok(Some(
                 peer.send_using_session_or_stream(msg_id, bytes, send_stream)

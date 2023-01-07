@@ -244,7 +244,9 @@ impl MyNode {
 
             let cmds = self.update_on_elder_change(&context).await;
             // updates comm with new members and removes connections that are not from our members
-            self.comm.update(self.network_knowledge.members());
+            self.comm
+                .update_members(self.network_knowledge.members())
+                .await;
 
             cmds
         } else {

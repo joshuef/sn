@@ -266,7 +266,7 @@ async fn bootstrap_normal_node(
     )
     .await?;
 
-    comm.update(network_knowledge.members());
+    comm.update_members(network_knowledge.members()).await;
 
     let node = MyNode::new(
         comm,
