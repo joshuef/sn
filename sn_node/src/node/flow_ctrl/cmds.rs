@@ -123,6 +123,15 @@ pub(crate) enum Cmd {
         #[debug(skip)]
         context: NodeContext,
     },
+    /// Performs serialisation and signing and sends the msg over a bidi connection
+    /// and then enqueues any response returned
+    SendMsgEnqueueAnyResponse {
+        msg: NodeMsg,
+        msg_id: MsgId,
+        recipients: BTreeSet<Peer>,
+        #[debug(skip)]
+        context: NodeContext,
+    },
     /// Performs serialisation and sends the response NodeMsg to the peer over the given stream.
     SendNodeMsgResponse {
         msg: NodeMsg,
@@ -204,6 +213,7 @@ impl Cmd {
         use sn_interface::statemap::State;
         match self {
             Cmd::SendMsg { .. }
+            | Cmd::SendMsgEnqueueAnyResponse { .. }
             | Cmd::SendNodeMsgResponse { .. }
             | Cmd::SendClientResponse { .. }
             | Cmd::SendNodeDataResponse { .. }
@@ -247,6 +257,7 @@ impl fmt::Display for Cmd {
             Cmd::HandleMembershipDecision(_) => write!(f, "HandleMembershipDecision"),
             Cmd::HandleDkgOutcome { .. } => write!(f, "HandleDkgOutcome"),
             Cmd::SendMsg { .. } => write!(f, "SendMsg"),
+            Cmd::SendMsgEnqueueAnyResponse { .. } => write!(f, "SendMsgEnqueueAnyResponse"),
             Cmd::SendNodeMsgResponse { .. } => write!(f, "SendNodeMsgResponse"),
             Cmd::SendClientResponse { .. } => write!(f, "SendClientResponse"),
             Cmd::SendNodeDataResponse { .. } => write!(f, "SendNodeDataResponse"),

@@ -137,6 +137,50 @@ impl MyNode {
         .await
     }
 
+    /// Sends a msg via comms, and listens for any response
+    /// The response is returned to be handled via the dispatcher (though a response is not necessarily expected)
+    pub(crate) async fn send_msg_enqueue_any_response(
+        msg: NodeMsg,
+        msg_id: MsgId,
+        context: NodeContext,
+        recipients: BTreeSet<Peer>,
+    ) -> Result<Vec<Cmd>> {
+        let targets_len = recipients.len();
+        debug!("Sending out {msg_id:?} to {targets_len} holder node/s {recipients:?}");
+
+        // TODO: Should we change this func to just return the futures and handlers can decide to wait on all
+        // or process as they come in
+        let results =
+            send_to_target_peers_and_await_responses(msg_id, &msg, recipients, &context).await?;
+
+        let mut output_cmds = vec![];
+        results.into_iter().for_each(|(peer, result)| match result {
+            Err(_elapsed) => {
+                error!(
+                    "{msg_id:?}: No response from {peer:?} after {:?} timeout. Marking node as faulty",
+                    *NODE_RESPONSE_TIMEOUT
+                );
+                // output_cmds.push(Cmd::TrackNodeIssue {
+                //     name: peer.name(),
+                //     issue: IssueType::Communication,
+                // });
+            }
+            Ok(Ok(wire_msg)) => {
+                debug!("Response in from {peer:?} for {msg_id:?}: {wire_msg:?}");
+
+                output_cmds.push(Cmd::HandleMsg { origin: peer, wire_msg, send_stream: None });
+            }
+            Ok(Err(comms_err)) => {
+                error!("{msg_id:?} Error when sending request to node {peer:?}, marking node as faulty: {comms_err:?}");
+                output_cmds.push(Cmd::TrackNodeIssue {
+                    name: peer.name(),
+                    issue: IssueType::Communication,
+                });
+            }
+        });
+
+        Ok(output_cmds)
+    }
     pub(crate) async fn send_msg_await_response_and_send_to_client(
         msg_id: MsgId,
         msg: NodeMsg,
@@ -147,7 +191,8 @@ impl MyNode {
     ) -> Result<Vec<Cmd>> {
         let targets_len = targets.len();
         debug!("Sending out {msg_id:?} to {targets_len} holder node/s {targets:?}");
-        let results = send_to_holders_and_await_responses(msg_id, &msg, targets, &context).await?;
+        let results =
+            send_to_target_peers_and_await_responses(msg_id, &msg, targets, &context).await?;
 
         let mut output_cmds = vec![];
         let mut success_count = 0;
@@ -305,8 +350,8 @@ fn build_and_send_response_to_client(
     }]
 }
 
-// Send a msg to each of the targeted holders, and await for the responses from all of them
-async fn send_to_holders_and_await_responses(
+// Send a msg to each of the targets, and await for the responses from all of them
+async fn send_to_target_peers_and_await_responses(
     msg_id: MsgId,
     msg: &NodeMsg,
     targets: BTreeSet<Peer>,

@@ -48,7 +48,7 @@ impl Dispatcher {
                 info!("[NODE READ]: getting lock for try_join_network");
                 let context = self.node().read().await.context();
                 info!("[NODE READ]: got lock for try_join_network");
-                Ok(MyNode::try_join_network(&context).into_iter().collect())
+                Ok(MyNode::try_join_network(context).into_iter().collect())
             }
             // Used purely for locking Join process
             Cmd::SendLockingJoinMsg {
@@ -72,6 +72,12 @@ impl Dispatcher {
                 recipients,
                 context,
             } => MyNode::send_msg(msg, msg_id, recipients, context).await,
+            Cmd::SendMsgEnqueueAnyResponse {
+                msg,
+                msg_id,
+                recipients,
+                context,
+            } => MyNode::send_msg_enqueue_any_response(msg, msg_id, context, recipients).await,
             Cmd::SendMsgAwaitResponseAndRespondToClient {
                 msg_id,
                 msg,

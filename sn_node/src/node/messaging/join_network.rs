@@ -12,11 +12,14 @@ use sn_interface::messaging::system::NodeMsg;
 
 impl MyNode {
     /// Join the network as new node.
-    pub(crate) fn try_join_network(context: &NodeContext) -> Option<Cmd> {
+    pub(crate) fn try_join_network(context: NodeContext) -> Option<Cmd> {
         if context.network_knowledge.is_section_member(&context.name) {
             None
         } else {
-            Some(MyNode::send_msg_to_our_elders(context, NodeMsg::TryJoin))
+            Some(MyNode::send_msg_to_our_elders_await_responses(
+                context,
+                NodeMsg::TryJoin,
+            ))
         }
     }
 }
