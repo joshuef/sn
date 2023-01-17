@@ -17,10 +17,8 @@ use crate::{
 use sn_comms::Comm;
 use sn_interface::{
     dbcs::gen_genesis_dbc,
-    network_knowledge::{
-        MyNodeInfo, NetworkKnowledge, SectionKeyShare, SectionsDAG, GENESIS_DBC_SK,
-    },
-    types::log_markers::LogMarker,
+    network_knowledge::{NetworkKnowledge, SectionKeyShare, SectionsDAG, GENESIS_DBC_SK},
+    types::{log_markers::LogMarker, Peer},
 };
 
 use ed25519_dalek::Keypair;
@@ -32,27 +30,23 @@ use xor_name::XorName;
 impl MyNode {
     pub(crate) async fn first_node(
         comm: Comm,
-        keypair: Arc<Keypair>,
+        keypair: Keypair,
         used_space: UsedSpace,
         root_storage_dir: PathBuf,
         genesis_sk_set: bls::SecretKeySet,
         fault_cmds_sender: mpsc::Sender<FaultsCmd>,
     ) -> Result<(Self, Dbc)> {
-        let our_addr = comm.socket_addr();
-        let info = MyNodeInfo {
-            keypair: keypair.clone(),
-            addr: our_addr,
-        };
+        let peer = Peer::from(comm.socket_addr(), keypair.public);
 
         let genesis_dbc =
             gen_genesis_dbc(&genesis_sk_set, &bls::SecretKey::from_hex(GENESIS_DBC_SK)?)?;
 
         let (network_knowledge, section_key_share) =
-            NetworkKnowledge::first_node(info.peer(), genesis_sk_set)?;
+            NetworkKnowledge::first_node(peer, genesis_sk_set)?;
 
         let node = Self::new(
             comm,
-            keypair.clone(),
+            Arc::new(keypair),
             network_knowledge,
             Some(section_key_share),
             used_space,

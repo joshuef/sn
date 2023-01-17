@@ -96,11 +96,6 @@ pub enum LogMarker {
     SendJoinRequest,
     SendJoinAsRelocatedResponse,
     SendJoinRejected,
-    SendJoinRedirected,
-    SendJoinRetryNotCorrectKey,
-    SendJoinRetryAgeIssue,
-    SendJoinRetryNotAdult,
-    SendJoinsDisallowed,
     SendNodeApproval,
     // Approved to join
     ReceivedJoinApproval,

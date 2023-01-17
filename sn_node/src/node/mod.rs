@@ -12,7 +12,6 @@
 pub mod cfg;
 
 mod api;
-mod bootstrap;
 mod connectivity;
 mod dkg;
 pub(crate) mod error;
@@ -23,18 +22,20 @@ mod membership;
 mod messaging;
 mod node_starter;
 mod node_test_api;
+mod relocated;
 mod relocation;
 
 /// Standard channel size, to allow for large swings in throughput
 pub static STANDARD_CHANNEL_SIZE: usize = 100_000;
 
-use self::{bootstrap::join_network, core::MyNode, flow_ctrl::cmds::Cmd, node_starter::CmdChannel};
 pub use self::{
     cfg::config_handler::Config,
     error::{Error, Result},
-    node_starter::{new_test_api, start_node},
+    flow_ctrl::RejoinReason,
+    node_starter::{new_test_api, start_new_node},
     node_test_api::NodeTestApi,
 };
+use self::{core::MyNode, flow_ctrl::cmds::Cmd, node_starter::CmdChannel};
 pub use crate::storage::DataStorage;
 #[cfg(test)]
 pub(crate) use relocation::{check as relocation_check, ChurnId};
@@ -51,12 +52,12 @@ pub use xor_name::{Prefix, XorName, XOR_NAME_LEN}; // TODO remove pub on API upd
 mod core {
     use crate::{
         node::{
-            bootstrap::JoiningAsRelocated,
             dkg::DkgVoter,
             flow_ctrl::{cmds::Cmd, fault_detection::FaultsCmd},
             handover::Handover,
             membership::{elder_candidates, try_split_dkg, Membership},
             messaging::Peers,
+            relocated::JoiningAsRelocated,
             DataStorage, Error, Result, XorName,
         },
         UsedSpace,
@@ -193,8 +194,8 @@ mod core {
 
         #[allow(clippy::too_many_arguments)]
         pub(crate) async fn new(
-            comm: Comm,
-            keypair: Arc<Keypair>,
+            mut comm: Comm,
+            keypair: Arc<Keypair>, //todo: Keypair, only test design blocks this
             network_knowledge: NetworkKnowledge,
             section_key_share: Option<SectionKeyShare>,
             used_space: UsedSpace,
@@ -202,6 +203,7 @@ mod core {
             fault_cmds_sender: mpsc::Sender<FaultsCmd>,
         ) -> Result<Self> {
             let addr = comm.socket_addr();
+            comm.update_members(network_knowledge.members()).await;
             let membership = if let Some(key) = section_key_share.clone() {
                 let n_elders = network_knowledge.signed_sap().elder_count();
 

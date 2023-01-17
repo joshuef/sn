@@ -4112,7 +4112,6 @@ name = "sn_node"
 version = "0.72.24"
 dependencies = [
  "assert_matches",
- "backoff",
  "base64",
  "bincode",
  "blsttc",

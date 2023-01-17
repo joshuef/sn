@@ -776,14 +776,14 @@ impl TestNetwork {
                     MIN_ADULT_AGE
                 };
                 let (node, comm, rx) = Self::gen_info(age, Some(*prefix));
-                comm_rx.extend(rx.into_iter());
+                let _ = comm_rx.insert(node.public_key(), Some(rx));
                 (node, comm)
             })
             .collect();
         let adults = (0..adult)
             .map(|_| {
                 let (node, comm, rx) = Self::gen_info(MIN_ADULT_AGE, Some(*prefix));
-                comm_rx.extend(rx.into_iter());
+                let _ = comm_rx.insert(node.public_key(), Some(rx));
                 (node, comm)
             })
             .collect();
@@ -791,7 +791,10 @@ impl TestNetwork {
     }
 
     /// Generate `MyNodeInfo` and `Comm`
-    pub(crate) fn gen_info(age: u8, prefix: Option<Prefix>) -> (MyNodeInfo, Comm, TestCommRx) {
+    pub(crate) fn gen_info(
+        age: u8,
+        prefix: Option<Prefix>,
+    ) -> (MyNodeInfo, Comm, Receiver<MsgFromPeer>) {
         let handle = Handle::current();
         let _ = handle.enter();
         let (tx, rx) = mpsc::channel(TEST_EVENT_CHANNEL_SIZE);
@@ -802,8 +805,32 @@ impl TestNetwork {
             gen_keypair(&prefix.unwrap_or_default().range_inclusive(), age),
             comm.socket_addr(),
         );
-        let comm_rx = BTreeMap::from([(info.public_key(), Some(rx))]);
-        (info, comm, comm_rx)
+        (info, comm, rx)
+    }
+
+    /// Creates a single `MyNode` instance
+    pub(crate) fn build_a_node_instance(
+        info: &MyNodeInfo,
+        comm: &Comm,
+        network_knowledge: &NetworkKnowledge,
+    ) -> MyNode {
+        // enter the current tokio runtime
+        let handle = Handle::current();
+        let _ = handle.enter();
+
+        let (min_capacity, max_capacity, root_storage_dir) =
+            create_test_capacity_and_root_storage().expect("Failed to create root storage");
+
+        futures::executor::block_on(MyNode::new(
+            comm.clone(),
+            info.keypair.clone(),
+            network_knowledge.clone(),
+            None,
+            UsedSpace::new(min_capacity, max_capacity),
+            root_storage_dir,
+            mpsc::channel(10).0,
+        ))
+        .expect("Failed to create MyNode")
     }
 
     // Creates a single `MyNode` instance

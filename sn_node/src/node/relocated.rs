@@ -6,8 +6,6 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::UsedRecipientSaps;
-
 use crate::node::{flow_ctrl::cmds::Cmd, messaging::Peers, Error, Result};
 
 use sn_interface::{
@@ -18,8 +16,10 @@ use sn_interface::{
 
 use bls::PublicKey as BlsPublicKey;
 use ed25519_dalek::{Keypair, Signature};
-use std::{collections::BTreeSet, net::SocketAddr, sync::Arc};
+use std::{collections::BTreeSet, collections::HashSet, net::SocketAddr, sync::Arc};
 use xor_name::{Prefix, XorName};
+
+type UsedRecipientSaps = HashSet<(SocketAddr, BlsPublicKey)>;
 
 /// Re-join as a relocated node.
 pub(crate) struct JoiningAsRelocated {

@@ -91,7 +91,7 @@ impl WireMsg {
             msg_payload,
             MsgKind::Node {
                 name,
-                is_join: matches!(msg, NodeMsg::JoinRequest(_)),
+                is_join: matches!(msg, NodeMsg::TryJoin),
             },
             dst,
         );

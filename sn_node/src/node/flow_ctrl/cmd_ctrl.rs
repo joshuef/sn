@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{
-    flow_ctrl::{cmds::Cmd, dispatcher::Dispatcher, RejoinNetwork},
+    flow_ctrl::{cmds::Cmd, dispatcher::Dispatcher, RejoinReason},
     Error,
 };
 
@@ -49,7 +49,7 @@ impl CmdCtrl {
         mut id: Vec<usize>,
         node_identifier: XorName,
         cmd_process_api: mpsc::Sender<(Cmd, Vec<usize>)>,
-        rejoin_network_sender: mpsc::Sender<RejoinNetwork>,
+        rejoin_network_sender: mpsc::Sender<RejoinReason>,
     ) {
         if id.is_empty() {
             id.push(self.id_counter.fetch_add(1, Ordering::SeqCst));
@@ -80,9 +80,9 @@ impl CmdCtrl {
                 }
                 Err(error) => {
                     debug!("Error when processing cmd: {:?}", error);
-                    if let Error::RemovedFromSection = error {
-                        if rejoin_network_sender.send(RejoinNetwork).await.is_err() {
-                            error!("Could not send RejoinNetwork through channel");
+                    if let Error::RejoinRequired(reason) = error {
+                        if rejoin_network_sender.send(reason).await.is_err() {
+                            error!("Could not send rejoin reason through channel.");
                         }
                     }
                 }

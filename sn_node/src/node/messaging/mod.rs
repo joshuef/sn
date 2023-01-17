@@ -11,7 +11,8 @@ mod client_msgs;
 mod data;
 mod dkg;
 mod handover;
-mod join;
+mod join_network;
+mod joining_nodes;
 mod membership;
 pub(crate) mod node_msgs;
 mod promotion;
@@ -87,8 +88,7 @@ impl MyNode {
         let context = { node.read().await.context() };
         match msg_type {
             MsgType::Node { dst, msg, .. } => {
-                // Check for entropy before we proceed further
-                MyNode::check_ae_on_node_msg(
+                MyNode::handle_node_msg_with_ae_check(
                     node,
                     context,
                     origin,

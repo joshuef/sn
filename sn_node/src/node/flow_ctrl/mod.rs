@@ -16,6 +16,9 @@ mod periodic_checks;
 pub(crate) mod tests;
 pub(crate) use cmd_ctrl::CmdCtrl;
 
+use super::DataStorage;
+use periodic_checks::PeriodicChecksTimestamps;
+
 use crate::node::{
     flow_ctrl::{
         cmds::Cmd,
@@ -24,23 +27,38 @@ use crate::node::{
     messaging::Peers,
     MyNode, Result, STANDARD_CHANNEL_SIZE,
 };
-use periodic_checks::PeriodicChecksTimestamps;
 
 use sn_comms::MsgFromPeer;
 use sn_fault_detection::FaultDetection;
 use sn_interface::{
-    messaging::system::{NodeDataCmd, NodeMsg},
+    messaging::system::{JoinRejectReason, NodeDataCmd, NodeMsg},
     types::{log_markers::LogMarker, DataAddress, Peer},
 };
 
-use super::DataStorage;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
 use xor_name::XorName;
 
-/// Sent via the rejoin_network_tx to start the bootstrap process again
+/// Sent via the rejoin_network_tx to restart the join process.
 #[derive(Debug)]
-pub struct RejoinNetwork;
+pub enum RejoinReason {
+    /// Happens when trying to join; we will wait a moment and then try again.
+    JoinsDisallowed,
+    /// Happens when already part of the network; we need to start from scratch.
+    RemovedFromSection,
+    /// Unrecoverable error, requires node operator network config.
+    NodeNotReachable(SocketAddr),
+}
+
+impl RejoinReason {
+    pub(crate) fn from_reject_reason(reason: JoinRejectReason) -> RejoinReason {
+        use JoinRejectReason::*;
+        match reason {
+            JoinsDisallowed => RejoinReason::JoinsDisallowed,
+            NodeNotReachable(add) => RejoinReason::NodeNotReachable(add),
+        }
+    }
+}
 
 /// Listens for incoming msgs and forms Cmds for each,
 /// Periodically triggers other Cmd Processes (eg health checks, fault detection etc)
@@ -61,7 +79,7 @@ impl FlowCtrl {
         fault_cmds_channels: (mpsc::Sender<FaultsCmd>, mpsc::Receiver<FaultsCmd>),
     ) -> (
         mpsc::Sender<(Cmd, Vec<usize>)>,
-        mpsc::Receiver<RejoinNetwork>,
+        mpsc::Receiver<RejoinReason>,
     ) {
         debug!("[NODE READ]: flowctrl node context lock got");
         let node_context = cmd_ctrl.node().read().await.context();

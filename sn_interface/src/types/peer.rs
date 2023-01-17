@@ -42,6 +42,13 @@ impl Peer {
     pub fn id(&self) -> (XorName, SocketAddr) {
         (self.name, self.addr)
     }
+
+    pub fn from(addr: SocketAddr, public_key: ed25519_dalek::PublicKey) -> Peer {
+        Peer {
+            addr,
+            name: XorName::from(super::PublicKey::from(public_key)),
+        }
+    }
 }
 
 impl Display for Peer {

@@ -7,7 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{
-    node::{core::NodeContext, flow_ctrl::cmds::Cmd, messaging::Peers, MyNode, Result},
+    node::{
+        core::NodeContext, flow_ctrl::cmds::Cmd, messaging::Peers, MyNode, RejoinReason, Result,
+    },
     storage::{Error as StorageError, StorageLevel},
 };
 
@@ -18,7 +20,7 @@ use sn_interface::{
         system::{JoinResponse, NodeDataCmd, NodeDataQuery, NodeDataResponse, NodeEvent, NodeMsg},
         Dst, MsgId, WireMsg,
     },
-    network_knowledge::NetworkKnowledge,
+    network_knowledge::{MembershipState, NetworkKnowledge},
     types::{log_markers::LogMarker, Keypair, Peer, PublicKey, ReplicatedData},
 };
 
@@ -172,6 +174,12 @@ impl MyNode {
         trace!("{:?}: {msg_id:?}", LogMarker::NodeMsgToBeHandled);
 
         match msg {
+            NodeMsg::TryJoin => {
+                trace!("Handling msg {:?}: TryJoin from {}", msg_id, sender);
+                MyNode::handle_join(node, &context, sender)
+                    .await
+                    .map(|c| c.into_iter().collect())
+            }
             NodeMsg::Relocate(node_state) => {
                 let mut node = node.write().await;
                 debug!("[NODE WRITE]: Relocated write gottt...");
@@ -244,29 +252,45 @@ impl MyNode {
                 ));
                 Ok(cmds)
             }
-            // The AcceptedOnlineShare for relocation will be received here.
-            // TO_FIX: This actually happenes for normal join.
-            //         And strangely became a no-effect messaging path.
+            // The approval or rejection of a join (approval both for new network joiner as well as
+            // existing node relocated to the section) will be received here.
             NodeMsg::JoinResponse(join_response) => {
-                let mut node = node.write().await;
-
                 match join_response {
-                    JoinResponse::Approved { .. } => {
-                        info!(
-                            "Relocation: Aggregating received ApprovalShare from {:?}",
-                            sender
-                        );
-                        if node.relocate_state.is_some() {
-                            node.relocate_state = None;
-                            trace!("{}", LogMarker::RelocateEnd);
-                        } else {
-                            warn!("Relocation:  node.relocate_state is not in Progress");
+                    JoinResponse::Rejected(reason) => Err(super::Error::RejoinRequired(
+                        RejoinReason::from_reject_reason(reason),
+                    )),
+                    JoinResponse::Approved(decision) => {
+                        info!("{}", LogMarker::ReceivedJoinApproval);
+                        let target_sap = context.network_knowledge.signed_sap();
+
+                        if let Err(e) = decision.validate(&target_sap.public_key_set()) {
+                            error!("Failed to validate with {target_sap:?}, dropping invalid join decision: {e:?}");
+                            return Ok(vec![]);
                         }
 
-                        Ok(vec![])
-                    }
-                    _ => {
-                        debug!("Relocation: Ignoring unexpected join response message: {join_response:?}");
+                        // Ensure this decision includes us as a joining node
+                        if decision
+                            .proposals
+                            .keys()
+                            .filter(|n| n.state() == MembershipState::Joined)
+                            .all(|n| n.name() != context.name)
+                        {
+                            trace!("MyNode named: {:?} Ignore join approval decision not for us: {decision:?}", context.name);
+                            return Ok(vec![]);
+                        }
+
+                        trace!(
+                            "=========>> This node has been approved to join the network at {:?}!",
+                            target_sap.prefix(),
+                        );
+
+                        let read_only = node.read().await;
+                        if read_only.relocate_state.is_some() {
+                            let mut node = node.write().await;
+                            node.relocate_state = None;
+                            trace!("{}", LogMarker::RelocateEnd);
+                        }
+
                         Ok(vec![])
                     }
                 }
@@ -285,13 +309,6 @@ impl MyNode {
                     .handle_handover_anti_entropy(sender, gen)
                     .into_iter()
                     .collect())
-            }
-            NodeMsg::JoinRequest(join_request) => {
-                trace!("Handling msg {:?}: JoinRequest from {}", msg_id, sender);
-
-                MyNode::handle_join_request(node, &context, sender, join_request)
-                    .await
-                    .map(|c| c.into_iter().collect())
             }
             NodeMsg::JoinAsRelocatedRequest(join_request) => {
                 trace!("Handling msg: JoinAsRelocatedRequest from {}", sender);

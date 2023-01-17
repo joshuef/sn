@@ -10,17 +10,16 @@ use crate::node::{
     cfg::keypair_storage::{get_reward_pk, store_network_keypair, store_new_reward_keypair},
     flow_ctrl::{
         cmds::Cmd, dispatcher::Dispatcher, fault_detection::FaultsCmd, CmdCtrl, FlowCtrl,
-        RejoinNetwork,
+        RejoinReason,
     },
-    join_network,
     logging::log_system_details,
     Config, Error, MyNode, Result, STANDARD_CHANNEL_SIZE,
 };
 use crate::UsedSpace;
 
-use sn_comms::{Comm, MsgFromPeer};
+use sn_comms::Comm;
 use sn_interface::{
-    network_knowledge::{MyNodeInfo, SectionTree, MIN_ADULT_AGE},
+    network_knowledge::{NetworkKnowledge, SectionTree, MIN_ADULT_AGE},
     types::{keys::ed25519, log_markers::LogMarker, PublicKey as TypesPublicKey},
 };
 
@@ -61,10 +60,10 @@ pub struct NodeRef {
 }
 
 /// Start a new node.
-pub async fn start_node(
+pub async fn start_new_node(
     config: &Config,
     join_timeout: Duration,
-) -> Result<(NodeRef, mpsc::Receiver<RejoinNetwork>)> {
+) -> Result<(NodeRef, mpsc::Receiver<RejoinReason>)> {
     let (node, cmd_channel, rejoin_network_rx) = new_node(config, join_timeout).await?;
 
     Ok((NodeRef { node, cmd_channel }, rejoin_network_rx))
@@ -77,7 +76,7 @@ async fn new_node(
 ) -> Result<(
     Arc<RwLock<MyNode>>,
     CmdChannel,
-    mpsc::Receiver<RejoinNetwork>,
+    mpsc::Receiver<RejoinReason>,
 )> {
     let root_dir_buf = config.root_dir()?;
     let root_dir = root_dir_buf.as_path();
@@ -138,9 +137,9 @@ async fn bootstrap_node(
 ) -> Result<(
     Arc<RwLock<MyNode>>,
     CmdChannel,
-    mpsc::Receiver<RejoinNetwork>,
+    mpsc::Receiver<RejoinReason>,
 )> {
-    let (incoming_msg_pipe, mut incoming_msg_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
+    let (incoming_msg_pipe, incoming_msg_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
     let (fault_cmds_sender, fault_cmds_receiver) =
         mpsc::channel::<FaultsCmd>(STANDARD_CHANNEL_SIZE);
 
@@ -152,7 +151,7 @@ async fn bootstrap_node(
     .await?;
 
     let node = if config.is_first() {
-        bootstrap_genesis_node(
+        start_genesis_node(
             comm,
             used_space,
             root_storage_dir,
@@ -160,11 +159,9 @@ async fn bootstrap_node(
         )
         .await?
     } else {
-        bootstrap_normal_node(
+        start_node(
             config,
             comm,
-            &mut incoming_msg_receiver,
-            join_timeout,
             used_space,
             root_storage_dir,
             fault_cmds_sender.clone(),
@@ -183,10 +180,35 @@ async fn bootstrap_node(
     )
     .await;
 
+    cmd_channel
+        .send((Cmd::TryJoinNetwork, vec![]))
+        .await
+        .map_err(|e| {
+            error!("Failed join: {:?}", e);
+            Error::JoinTimeout
+        })?;
+
+    tokio::time::timeout(join_timeout, await_join(node.clone()))
+        .await
+        .map_err(|e| {
+            error!("Failed join: {:?}", e);
+            Error::JoinTimeout
+        })?;
+
     Ok((node, cmd_channel, rejoin_network_rx))
 }
 
-async fn bootstrap_genesis_node(
+async fn await_join(node: Arc<RwLock<MyNode>>) {
+    let mut is_member = false;
+    while !is_member {
+        let read_only = node.read().await;
+        let our_name = read_only.name();
+        is_member = read_only.network_knowledge.is_section_member(&our_name);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn start_genesis_node(
     comm: Comm,
     used_space: UsedSpace,
     root_storage_dir: &Path,
@@ -207,7 +229,7 @@ async fn bootstrap_genesis_node(
     let genesis_sk_set = bls::SecretKeySet::random(0, &mut rand::thread_rng());
     let (node, genesis_dbc) = MyNode::first_node(
         comm,
-        Arc::new(keypair),
+        keypair,
         used_space.clone(),
         root_storage_dir.to_path_buf(),
         genesis_sk_set,
@@ -233,11 +255,9 @@ async fn bootstrap_genesis_node(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn bootstrap_normal_node(
+async fn start_node(
     config: &Config,
-    mut comm: Comm,
-    incoming_msg_receiver: &mut tokio::sync::mpsc::Receiver<MsgFromPeer>,
-    join_timeout: Duration,
+    comm: Comm,
     used_space: UsedSpace,
     root_storage_dir: &Path,
     fault_cmds_sender: mpsc::Sender<FaultsCmd>,
@@ -249,28 +269,20 @@ async fn bootstrap_normal_node(
         Error::Configuration("Could not obtain network contacts file path".to_string())
     })?;
     let section_tree = SectionTree::from_disk(&section_tree_path).await?;
+    let sap = section_tree.get_signed_by_name(&node_name)?;
+    let network_knowledge = NetworkKnowledge::new(sap.prefix(), section_tree.clone())?;
+
     info!(
-        "{} Joining as a new node (PID: {}) our socket: {}, network's genesis key: {:?}",
+        "{} Starting a new node (PID: {}) with socket: {}, network's genesis key: {:?}",
         node_name,
         std::process::id(),
         comm.socket_addr(),
         section_tree.genesis_key()
     );
-    let joining_node = MyNodeInfo::new(keypair, comm.socket_addr());
-    let (info, network_knowledge) = join_network(
-        joining_node,
-        &comm,
-        incoming_msg_receiver,
-        section_tree,
-        join_timeout,
-    )
-    .await?;
-
-    comm.update_members(network_knowledge.members()).await;
 
     let node = MyNode::new(
         comm,
-        info.keypair.clone(),
+        Arc::new(keypair),
         network_knowledge,
         None,
         used_space.clone(),
@@ -278,7 +290,8 @@ async fn bootstrap_normal_node(
         fault_cmds_sender,
     )
     .await?;
-    info!("{} Joined the network!", node.info().name());
-    info!("Our AGE: {}", node.info().age());
+
+    info!("Node {} started.", node.info().name());
+
     Ok(node)
 }

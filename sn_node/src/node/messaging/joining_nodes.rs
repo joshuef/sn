@@ -10,8 +10,7 @@ use crate::node::{core::NodeContext, flow_ctrl::cmds::Cmd, messaging::Peers, MyN
 
 use sn_interface::{
     messaging::system::{
-        JoinAsRelocatedRequest, JoinAsRelocatedResponse, JoinRejectionReason, JoinRequest,
-        JoinResponse, NodeMsg,
+        JoinAsRelocatedRequest, JoinAsRelocatedResponse, JoinRejectReason, JoinResponse, NodeMsg,
     },
     network_knowledge::{MembershipState, NodeState, SectionAuthUtils, MIN_ADULT_AGE},
     types::{log_markers::LogMarker, Peer},
@@ -22,24 +21,16 @@ use tokio::sync::RwLock;
 
 // Message handling
 impl MyNode {
-    pub(crate) async fn handle_join_request(
+    pub(crate) async fn handle_join(
         node: Arc<RwLock<MyNode>>,
         context: &NodeContext,
         peer: Peer,
-        join_request: JoinRequest,
     ) -> Result<Option<Cmd>> {
-        debug!("Handling join. Received {join_request:?} from {peer:?}");
+        debug!("Handling join from {peer:?}");
 
-        let provided_section_key = join_request.section_key();
-
-        let our_section_key = context.network_knowledge.section_key();
-        let section_key_matches = provided_section_key == our_section_key;
-
-        // Ignore `JoinRequest` if we are not elder, unless the join request
-        // is outdated in which case we'll reply with `JoinResponse::Retry`
-        // with the up-to-date info.
-        if !context.is_elder && section_key_matches {
-            warn!("Join req received to our section key, but I am not an elder...");
+        // Ignore a join request if we are not elder.
+        if !context.is_elder {
+            warn!("Join request received to our section, but I am not an elder...");
             // Note: We don't bounce this message because the current bounce-resend
             // mechanism wouldn't preserve the original SocketAddr which is needed for
             // properly handling this message.
@@ -47,54 +38,21 @@ impl MyNode {
             // joining node sends it again.
             return Ok(None);
         }
-
         let our_prefix = context.network_knowledge.prefix();
         if !our_prefix.matches(&peer.name()) {
-            // TODO: Replace Redirect with a Retry + AEProbe.
-            debug!("Redirecting JoinRequest from {peer} - name doesn't match our prefix {our_prefix:?}.");
-            let retry_sap = context.section_sap_matching_name(&peer.name())?;
-            let msg = NodeMsg::JoinResponse(JoinResponse::Redirect(retry_sap));
-            trace!("Sending {:?} to {}", msg, peer);
-            trace!("{}", LogMarker::SendJoinRedirected);
-            return Ok(Some(MyNode::send_system_msg(
-                msg,
-                Peers::Single(peer),
-                context.clone(),
-            )));
+            debug!("Unreachable path; {peer} name doesn't match our prefix. Should be covered by AE. Dropping the msg.");
+            return Ok(None);
+        }
+        if !MyNode::verify_joining_node_age(&peer) {
+            debug!("Unreachable path; {peer} age is invalid: {}. This should be a hard coded value in join logic. Dropping the msg.", peer.age());
+            return Ok(None);
         }
 
         if !context.joins_allowed {
-            debug!("Rejecting JoinRequest from {peer} - joins currently not allowed.");
+            debug!("Rejecting join request from {peer} - joins currently not allowed.");
             let msg =
-                NodeMsg::JoinResponse(JoinResponse::Rejected(JoinRejectionReason::JoinsDisallowed));
-            trace!("{}", LogMarker::SendJoinsDisallowed);
-            trace!("Sending {:?} to {}", msg, peer);
-            return Ok(Some(MyNode::send_system_msg(
-                msg,
-                Peers::Single(peer),
-                context.clone(),
-            )));
-        }
-
-        let is_age_valid = MyNode::verify_joining_node_age(&peer);
-
-        trace!("Join proceeding: our_prefix={our_prefix:?}, is_age_valid={is_age_valid:?}");
-
-        if !section_key_matches {
-            trace!("{}", LogMarker::SendJoinRetryNotCorrectKey);
-            trace!("JoinRequest from {peer} doesn't have our latest section_key {our_section_key:?}, provided {provided_section_key:?}.");
-        }
-
-        if !is_age_valid {
-            trace!("{}", LogMarker::SendJoinRetryAgeIssue);
-            trace!(
-                "JoinRequest from {peer} (with age {}) has invalid age",
-                peer.age()
-            );
-        }
-
-        if !section_key_matches || !is_age_valid {
-            let msg = NodeMsg::JoinResponse(JoinResponse::Retry);
+                NodeMsg::JoinResponse(JoinResponse::Rejected(JoinRejectReason::JoinsDisallowed));
+            trace!("{}", LogMarker::SendJoinRejected);
             trace!("Sending {msg:?} to {peer}");
             return Ok(Some(MyNode::send_system_msg(
                 msg,
@@ -103,7 +61,8 @@ impl MyNode {
             )));
         }
 
-        // It's reachable, let's then propose membership
+        // NB: No reachability check has been made here
+        // We propose membership
         let node_state = NodeState::joined(peer, None);
 
         debug!("[NODE WRITE]: join propose membership write...");

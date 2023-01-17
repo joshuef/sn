@@ -6,15 +6,17 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::Prefix;
+use super::{flow_ctrl::RejoinReason, Prefix};
 
 use crate::node::handover::Error as HandoverError;
 
 use sn_dbc::Error as DbcError;
 use sn_interface::{
     dbcs::Error as GenesisError,
-    messaging::data::{DataQuery, Error as ErrorMsg},
-    messaging::system::DkgSessionId,
+    messaging::{
+        data::{DataQuery, Error as ErrorMsg},
+        system::DkgSessionId,
+    },
     types::DataAddress,
 };
 
@@ -60,8 +62,6 @@ pub enum Error {
     ChaoticStartupCrash,
     #[error("Section authority provider cannot be trusted: {0}")]
     UntrustedSectionAuthProvider(String),
-    #[error("Could not connect to any bootstrap contact")]
-    BootstrapFailed,
     #[error("Invalid dkg participant; not part of our section.")]
     InvalidDkgParticipant,
     #[error("Content of a received message is inconsistent.")]
@@ -74,8 +74,6 @@ pub enum Error {
     Messaging(#[from] sn_interface::messaging::Error),
     #[error("Membership error: {0}")]
     Membership(#[from] crate::node::membership::Error),
-    #[error("The section is currently set to not allow taking any new node")]
-    TryJoinLater,
     #[error("No matching Section")]
     NoMatchingSection,
     #[error("Node cannot join the network since it is not externally reachable: {0}")]
@@ -83,11 +81,11 @@ pub enum Error {
     /// Timeout when trying to join the network
     #[error("Timeout when trying to join the network")]
     JoinTimeout,
-    /// Join occured during section churn and new elders missed it, need to re-join the network
-    #[error("Node was removed from the section")]
-    RemovedFromSection,
+    /// Need to re-join the network
+    #[error("Node needs to rejoin the network due to {0:?}")]
+    RejoinRequired(RejoinReason),
     /// Comms error.
-    #[error("Comms error:: {0}")]
+    #[error("Comms error: {0}")]
     Comms(#[from] sn_comms::Error),
     /// Database error.
     #[error("Database error:: {0}")]

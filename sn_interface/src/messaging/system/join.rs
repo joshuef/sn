@@ -7,10 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::NodeState;
-use crate::network_knowledge::SectionAuthorityProvider;
 use serde::{Deserialize, Serialize};
 use sn_consensus::Decision;
-use std::net::SocketAddr;
+use std::{fmt, net::SocketAddr};
 
 /// Response to a request to join a section
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -33,28 +32,24 @@ impl JoinRequest {
 /// Response to a request to join a section
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum JoinResponse {
-    /// Tell the joining node to retry
-    Retry,
-    // TODO: Replace Redirect with a Retry + AEProbe.
-    /// Response redirecting a joining peer to join a different section,
-    /// containing addresses of nodes that are closer (than the recipient) to the
-    /// requested name. The `JoinRequest` should be re-sent to these addresses.
-    Redirect(SectionAuthorityProvider),
-    /// Message sent to joining peer containing the necessary
-    /// info to become a member of the section.
-    Approved {
-        /// Current node's state
-        decision: Decision<NodeState>,
-    },
+    /// Message sent to joining peer containing the current node's
+    /// state as a member of the section.
+    Approved(Decision<NodeState>),
     /// Join was rejected
-    Rejected(JoinRejectionReason),
+    Rejected(JoinRejectReason),
 }
 
 /// Reason of a join request being rejected
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum JoinRejectionReason {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum JoinRejectReason {
     /// No new peers are currently accepted for joining
     JoinsDisallowed,
     /// The requesting node is not externally reachable
     NodeNotReachable(SocketAddr),
+}
+
+impl fmt::Display for JoinRejectReason {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }

@@ -20,7 +20,7 @@ use crate::network_knowledge::{NodeState, SapCandidate, SectionTreeUpdate};
 use crate::SectionAuthorityProvider;
 
 pub use dkg::DkgSessionId;
-pub use join::{JoinRejectionReason, JoinRequest, JoinResponse};
+pub use join::{JoinRejectReason, JoinRequest, JoinResponse};
 pub use join_as_relocated::{JoinAsRelocatedRequest, JoinAsRelocatedResponse};
 pub use node_msgs::{NodeDataCmd, NodeDataQuery, NodeEvent, NodeQueryResponse};
 pub use op_id::OperationId;
@@ -93,9 +93,9 @@ pub enum NodeMsg {
     MembershipVotes(Vec<SignedVote<NodeState>>),
     /// Membership Anti-Entropy request
     MembershipAE(Generation),
-    /// Sent from a bootstrapping peer to the section requesting to join as a new member
-    JoinRequest(JoinRequest),
-    /// Response to a `JoinRequest`
+    /// We try to join the network as a new node.
+    TryJoin,
+    /// Response to a join request.
     JoinResponse(JoinResponse),
     /// Sent from a peer to the section requesting to join as relocated from another section
     JoinAsRelocatedRequest(Box<JoinAsRelocatedRequest>),
@@ -216,7 +216,7 @@ impl NodeMsg {
             Self::Relocate(_) => State::Relocate,
             Self::MembershipAE(_) => State::Membership,
             Self::MembershipVotes(_) => State::Membership,
-            Self::JoinRequest(_) => State::Join,
+            Self::TryJoin => State::Node,
             Self::JoinResponse(_) => State::Join,
             Self::JoinAsRelocatedRequest(_) => State::Join,
             Self::JoinAsRelocatedResponse(_) => State::Join,
@@ -245,7 +245,7 @@ impl Display for NodeMsg {
             Self::Relocate { .. } => write!(f, "NodeMsg::Relocate"),
             Self::MembershipVotes { .. } => write!(f, "NodeMsg::MembershipVotes"),
             Self::MembershipAE { .. } => write!(f, "NodeMsg::MembershipAE"),
-            Self::JoinRequest { .. } => write!(f, "NodeMsg::JoinRequest"),
+            Self::TryJoin { .. } => write!(f, "NodeMsg::TryJoin"),
             Self::JoinResponse { .. } => write!(f, "NodeMsg::JoinResponse"),
             Self::JoinAsRelocatedRequest { .. } => {
                 write!(f, "NodeMsg::JoinAsRelocatedRequest")

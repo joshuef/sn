@@ -6,8 +6,12 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::core::NodeContext;
-use crate::node::{flow_ctrl::cmds::Cmd, messaging::Peers, Error, MyNode, Result};
+use crate::node::{
+    core::NodeContext,
+    flow_ctrl::{cmds::Cmd, RejoinReason},
+    messaging::Peers,
+    Error, MyNode, Result,
+};
 
 use sn_fault_detection::IssueType;
 use sn_interface::{
@@ -38,7 +42,7 @@ impl MyNode {
     /// Check if the origin needs to be updated on network structure/members.
     /// Returns an ae cmd if we need to halt msg validation and update the origin instead.
     #[instrument(skip_all)]
-    pub(crate) async fn check_ae_on_node_msg(
+    pub(crate) async fn handle_node_msg_with_ae_check(
         node: Arc<RwLock<MyNode>>,
         context: NodeContext,
         origin: Peer,
@@ -55,9 +59,7 @@ impl MyNode {
             // we just let the join request handler to deal with it later on.
             // We also skip AE check on Anti-Entropy messages
             let ae_msg = match msg {
-                NodeMsg::AntiEntropy { .. }
-                | NodeMsg::JoinRequest(_)
-                | NodeMsg::JoinAsRelocatedRequest(_) => {
+                NodeMsg::AntiEntropy { .. } | NodeMsg::JoinAsRelocatedRequest(_) => {
                     trace!("Entropy check skipped for {msg_id:?}, handling message directly");
                     None
                 }
@@ -342,8 +344,7 @@ impl MyNode {
                     .contains(&latest_context.name)
             {
                 error!("We've been removed from the section");
-
-                return Err(Error::RemovedFromSection);
+                return Err(Error::RejoinRequired(RejoinReason::RemovedFromSection));
             }
         } else {
             debug!("No update to network knowledge");
@@ -736,7 +737,7 @@ mod tests {
             payload,
             MsgKind::Node {
                 name: sender.name(),
-                is_join: matches!(payload_msg, NodeMsg::JoinRequest(_)),
+                is_join: matches!(payload_msg, NodeMsg::TryJoin),
             },
             dst,
         ))
