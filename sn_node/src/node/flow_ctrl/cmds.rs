@@ -153,7 +153,7 @@ pub(crate) enum Cmd {
     },
     /// Performs serialisation and sends the msg to the peer node over a new bi-stream,
     /// awaiting for a response which is forwarded to the client.
-    SendMsgAndAwaitResponse {
+    SendMsgAwaitResponseAndRespondToClient {
         msg_id: MsgId,
         msg: NodeMsg,
         #[debug(skip)]
@@ -207,7 +207,7 @@ impl Cmd {
             | Cmd::SendNodeMsgResponse { .. }
             | Cmd::SendClientResponse { .. }
             | Cmd::SendNodeDataResponse { .. }
-            | Cmd::SendMsgAndAwaitResponse { .. } => State::Comms,
+            | Cmd::SendMsgAwaitResponseAndRespondToClient { .. } => State::Comms,
             Cmd::SendLockingJoinMsg { .. } => State::Comms,
             Cmd::HandleFailedSendToNode { .. } => State::Comms,
             Cmd::HandleMsg { .. } => State::HandleMsg,
@@ -250,7 +250,9 @@ impl fmt::Display for Cmd {
             Cmd::SendNodeMsgResponse { .. } => write!(f, "SendNodeMsgResponse"),
             Cmd::SendClientResponse { .. } => write!(f, "SendClientResponse"),
             Cmd::SendNodeDataResponse { .. } => write!(f, "SendNodeDataResponse"),
-            Cmd::SendMsgAndAwaitResponse { .. } => write!(f, "SendMsgAndAwaitResponse"),
+            Cmd::SendMsgAwaitResponseAndRespondToClient { .. } => {
+                write!(f, "SendMsgAwaitResponseAndRespondToClient")
+            }
             Cmd::SendLockingJoinMsg { .. } => write!(f, "SendLockingJoinMsg"),
             Cmd::EnqueueDataForReplication { .. } => write!(f, "EnqueueDataForReplication"),
             Cmd::TrackNodeIssue { name, issue } => {

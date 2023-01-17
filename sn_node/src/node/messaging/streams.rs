@@ -137,7 +137,7 @@ impl MyNode {
         .await
     }
 
-    pub(crate) async fn send_msg_and_await_response(
+    pub(crate) async fn send_msg_await_response_and_send_to_client(
         msg_id: MsgId,
         msg: NodeMsg,
         context: NodeContext,
