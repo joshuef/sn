@@ -268,8 +268,6 @@ impl Link {
 
         self.insert(conn.clone());
 
-        self.listener.listen(conn.clone(), incoming_msgs);
-
         Ok(conn)
     }
 

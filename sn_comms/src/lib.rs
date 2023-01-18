@@ -119,7 +119,7 @@ impl Comm {
             members: Arc::new(RwLock::new(BTreeSet::new())),
         };
 
-        let _ = task::spawn(receive_conns(comm.clone(), conn_events_recv));
+        let _ = task::spawn(handle_connection_events(comm.clone(), conn_events_recv));
 
         listen_for_incoming_msgs(msg_listener, incoming_connections);
 
@@ -440,12 +440,9 @@ impl Comm {
 }
 
 #[tracing::instrument(skip_all)]
-async fn receive_conns(comm: Comm, mut conn_events_recv: Receiver<ConnectionEvent>) {
+async fn handle_connection_events(comm: Comm, mut conn_events_recv: Receiver<ConnectionEvent>) {
     while let Some(event) = conn_events_recv.recv().await {
         match event {
-            ConnectionEvent::Connected { peer, connection } => {
-                comm.add_incoming(&peer, connection).await
-            }
             ConnectionEvent::ConnectionClosed { peer, connection } => {
                 comm.remove_conn(&peer, connection).await;
             }
