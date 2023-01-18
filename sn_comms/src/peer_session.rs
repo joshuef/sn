@@ -29,7 +29,6 @@ const MAX_SENDJOB_RETRIES: usize = 3;
 #[derive(Debug)]
 enum SessionCmd {
     Send(SendJob),
-    AddConnection(Arc<qp2p::Connection>),
     RemoveConnection(Arc<qp2p::Connection>),
     Terminate,
 }
@@ -56,15 +55,6 @@ impl PeerSession {
     /// Returns if the underlying link has any connection at all
     pub(crate) fn has_connections(&self) -> bool {
         self.link.has_connections()
-    }
-
-    // this must be restricted somehow, we can't allow an unbounded inflow
-    // of connections from a peer...
-    pub(crate) async fn add(&self, conn: Arc<qp2p::Connection>) {
-        let cmd = SessionCmd::AddConnection(conn);
-        if let Err(e) = self.channel.send(cmd).await {
-            error!("Error while sending AddConnection {e:?}");
-        }
     }
 
     // Remove a connection from a peer
@@ -162,10 +152,6 @@ impl PeerSessionWorker {
                         continue;
                     }
                 },
-                SessionCmd::AddConnection(conn) => {
-                    self.link.add(conn);
-                    SessionStatus::Ok
-                }
                 SessionCmd::RemoveConnection(conn) => {
                     self.link.remove(conn);
                     SessionStatus::Ok

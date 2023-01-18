@@ -80,11 +80,15 @@ impl MsgListener {
                             continue;
                         }
                     };
+
+                    // let mut is_node_join_msg = false;
                     let src_name = match wire_msg.kind() {
-                        MsgKind::Client(auth) => {
-                            auth.public_key.into()
+                        MsgKind::Client(auth) => auth.public_key.into(),
+                        MsgKind::Node { name, .. } => {
+                            // is_node_join_msg = *is_join;
+                            *name
                         }
-                        MsgKind::Node { name, is_join } | MsgKind::ClientDataResponse(name) | MsgKind::NodeDataResponse(name) => {
+                        MsgKind::ClientDataResponse(name) | MsgKind::NodeDataResponse(name) => {
                             *name
                         }
                     };
@@ -130,7 +134,6 @@ impl MsgListener {
                     connection: conn,
                 })
                 .await;
-
         }
     }
 }

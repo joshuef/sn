@@ -91,8 +91,7 @@ pub struct MsgFromPeer {
 #[derive(Clone)]
 pub struct Comm {
     our_endpoint: Endpoint,
-    msg_listener: MsgListener,
-    sessions: Arc<DashMap<Peer, PeerSession>>,
+    outgoing_sessions: Arc<DashMap<Peer, PeerSession>>,
     members: Arc<RwLock<BTreeSet<Peer>>>,
 }
 
@@ -114,8 +113,7 @@ impl Comm {
 
         let comm = Comm {
             our_endpoint,
-            msg_listener: msg_listener.clone(),
-            sessions: Arc::new(DashMap::new()),
+            outgoing_sessions: Arc::new(DashMap::new()),
             members: Arc::new(RwLock::new(BTreeSet::new())),
         };
 
@@ -178,7 +176,8 @@ impl Comm {
     pub async fn update_members(&mut self, members: BTreeSet<Peer>) {
         let new_members = members.clone();
         *self.members.write().await = members;
-        self.sessions.retain(|p, _| new_members.contains(p));
+        self.outgoing_sessions
+            .retain(|p, _| new_members.contains(p));
     }
 
     /// Sends the payload on a new or existing connection,
@@ -192,7 +191,7 @@ impl Comm {
     ) -> Result<()> {
         let watcher = self.send_to_one(peer, msg_id, bytes).await;
 
-        let sessions = self.sessions.clone();
+        let sessions = self.outgoing_sessions.clone();
 
         // TODO: Is there an optimium we should actually have.
         // Assuming we dont store clients... can we test for this
@@ -253,7 +252,7 @@ impl Comm {
                     trace!("Msg {msg_id:?} sent to {peer:?}");
                 } else if should_remove {
                     // do cleanup of that peer
-                    let perhaps_session = self.sessions.remove(&peer);
+                    let perhaps_session = self.outgoing_sessions.remove(&peer);
                     if let Some((_peer, session)) = perhaps_session {
                         session.disconnect().await;
                     }
@@ -267,7 +266,7 @@ impl Comm {
                 peer.name(),
                 error,
             );
-                let _peer = self.sessions.remove(&peer);
+                let _peer = self.outgoing_sessions.remove(&peer);
             }
         }
     }
@@ -284,7 +283,7 @@ impl Comm {
         // TODO: tweak messaging to just allow passthrough
         debug!("trying to get {peer:?} session in order to send: {msg_id:?}");
 
-        let mut peer = self.get_or_create(&peer).await?;
+        let mut peer = self.get_or_create_outgoing_session(&peer).await?;
         debug!("Session of {peer:?} retrieved for {msg_id:?}");
         let adult_response_bytes = peer.send_with_bi_return_response(bytes, msg_id).await?;
         debug!("Peer response from {peer:?} is in for {msg_id:?}");
@@ -344,20 +343,20 @@ impl Comm {
 
     /// Get a PeerSession if it already exists, otherwise create and insert
     #[instrument(skip(self))]
-    async fn get_or_create(&self, peer: &Peer) -> Result<PeerSession> {
+    async fn get_or_create_outgoing_session(&self, peer: &Peer) -> Result<PeerSession> {
         if self.members.read().await.contains(peer) {
             debug!("getting or Creating peer session to member: {peer:?}");
-            if let Some(entry) = self.sessions.get(peer) {
+            if let Some(entry) = self.outgoing_sessions.get(peer) {
                 debug!(" session to: {peer:?} exists");
                 return Ok(entry.value().clone());
             }
 
             debug!("session to: {peer:?} does not exists");
-            let link = Link::new(*peer, self.our_endpoint.clone(), self.msg_listener.clone());
+            let link = Link::new(*peer, self.our_endpoint.clone());
             let session = PeerSession::new(link);
 
             debug!("Peer is a section member, caching session {peer:?}");
-            let prev_peer = self.sessions.insert(*peer, session.clone());
+            let prev_peer = self.outgoing_sessions.insert(*peer, session.clone());
             debug!(
                 "inserted session {peer:?}, prev peer was discarded? {:?}",
                 prev_peer.is_some()
@@ -365,34 +364,6 @@ impl Comm {
             Ok(session)
         } else {
             Err(Error::CreatingConnectionToUnknownNode)
-        }
-    }
-
-    /// Any number of incoming qp2p:Connections can be added.
-    /// We will eventually converge to the same one in our comms with the peer.
-    async fn add_incoming(&self, peer: &Peer, conn: Arc<Connection>) {
-        debug!(
-            "Adding incoming conn to {peer:?} w/ conn_id : {:?}",
-            conn.id()
-        );
-        if let Some(entry) = self.sessions.get(peer) {
-            // peer already exists
-            let peer_session = entry.value();
-            // add to it
-            peer_session.add(conn).await;
-        } else {
-            // we do not cache connections that are not from our members
-            if self.members.read().await.contains(peer) {
-                let link = Link::new_with(
-                    *peer,
-                    self.our_endpoint.clone(),
-                    self.msg_listener.clone(),
-                    conn,
-                )
-                .await;
-                let session = PeerSession::new(link);
-                let _ = self.sessions.insert(*peer, session);
-            }
         }
     }
 
@@ -405,7 +376,7 @@ impl Comm {
         );
 
         let mut should_cleanup_session = true;
-        if let Some(entry) = self.sessions.get(peer) {
+        if let Some(entry) = self.outgoing_sessions.get(peer) {
             let peer_session = entry.value();
             peer_session.remove(conn).await;
             if peer_session.has_connections() {
@@ -414,7 +385,7 @@ impl Comm {
         }
 
         if should_cleanup_session {
-            let _dead_peer = self.sessions.remove(peer);
+            let _dead_peer = self.outgoing_sessions.remove(peer);
         }
     }
 
@@ -433,7 +404,7 @@ impl Comm {
 
         trace!("Sending message bytes ({bytes_len} bytes) w/ {msg_id:?} to {recipient:?}");
 
-        let peer = self.get_or_create(&recipient).await?;
+        let peer = self.get_or_create_outgoing_session(&recipient).await?;
         debug!("Peer session retrieved");
         peer.send_using_session(msg_id, bytes).await
     }
