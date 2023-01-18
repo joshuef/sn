@@ -201,7 +201,7 @@ impl Comm {
         // TODO: we could cache the handles above and check them as part of loop...
         let _handle = tokio::spawn(async move {
             match watcher {
-                Ok(Some(watcher)) => {
+                Ok(watcher) => {
                     let (send_was_successful, should_remove) =
                         Self::is_sent(watcher, msg_id, peer).await?;
 
@@ -218,10 +218,6 @@ impl Comm {
                         }
                         Err(Error::FailedSend(peer))
                     }
-                }
-                Ok(None) => {
-                    Ok(())
-                    // no watcher......
                 }
                 Err(error) => {
                     // there is only one type of error returned: [`Error::InvalidState`]
@@ -248,7 +244,7 @@ impl Comm {
     pub async fn send_out_bytes_sync(&self, peer: Peer, msg_id: MsgId, bytes: UsrMsgBytes) {
         let watcher = self.send_to_one(peer, msg_id, bytes).await;
         match watcher {
-            Ok(Some(watcher)) => {
+            Ok(watcher) => {
                 let (send_was_successful, should_remove) = Self::is_sent(watcher, msg_id, peer)
                     .await
                     .expect("Error in is_sent");
@@ -263,7 +259,6 @@ impl Comm {
                     }
                 }
             }
-            Ok(None) => {}
             Err(error) => {
                 error!(
                 "Sending message (msg_id: {:?}) to {:?} (name {:?}) failed as we have disconnected from the peer. (Error is: {})",
@@ -430,7 +425,7 @@ impl Comm {
         recipient: Peer,
         msg_id: MsgId,
         bytes: UsrMsgBytes,
-    ) -> Result<Option<SendWatcher>> {
+    ) -> Result<SendWatcher> {
         let bytes_len = {
             let (h, d, p) = bytes.clone();
             h.len() + d.len() + p.len()
@@ -440,7 +435,7 @@ impl Comm {
 
         let peer = self.get_or_create(&recipient).await?;
         debug!("Peer session retrieved");
-        Ok(Some(peer.send_using_session(msg_id, bytes).await?))
+        peer.send_using_session(msg_id, bytes).await
     }
 }
 
