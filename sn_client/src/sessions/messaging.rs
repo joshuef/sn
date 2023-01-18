@@ -521,13 +521,13 @@ impl Session {
             .take(NUM_OF_ELDERS_SUBSET_FOR_QUERIES)
             .collect();
 
-        let elders_len = elders.len();
-        if elders_len < NUM_OF_ELDERS_SUBSET_FOR_QUERIES && elders_len > 1 {
-            return Err(Error::InsufficientElderConnections {
-                connections: elders_len,
-                required: NUM_OF_ELDERS_SUBSET_FOR_QUERIES,
-            });
-        }
+        // let elders_len = elders.len();
+        // if elders_len < NUM_OF_ELDERS_SUBSET_FOR_QUERIES && elders_len > 1 {
+        //     return Err(Error::InsufficientElderConnections {
+        //         connections: elders_len,
+        //         required: NUM_OF_ELDERS_SUBSET_FOR_QUERIES,
+        //     });
+        // }
 
         Ok((section_pk, elders))
     }
