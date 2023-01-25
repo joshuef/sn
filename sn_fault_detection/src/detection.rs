@@ -17,7 +17,7 @@ static RECENT_ISSUE_DURATION: Duration = Duration::from_secs(60 * 10); // 10 min
 
 /// How many standard devs before we consider a node faulty
 /// https://en.wikipedia.org/wiki/68%E2%80%9395%E2%80%9399.7_rule
-static STD_DEVS_AWAY: f32 = 3.0;
+static STD_DEVS_AWAY: usize = 3;
 
 static CONN_WEIGHTING: f32 = 2.0;
 static OP_WEIGHTING: f32 = 1.0;
@@ -221,10 +221,7 @@ impl FaultDetection {
                 + node_dkg_score
                 + node_probe_score;
             debug!(
-                "Node {name} has a final score of {final_score} |
-                ElderVoting score({node_elder_voting_score})
-                Conns score({node_conn_score}), Dkg score({node_dkg_score}), |
-                Knowledge score({node_knowledge_score}), Ops score({score}), AeProbe score ({node_probe_score})"
+                "Node {name} has a final score of {final_score} :: ElderVoting score({node_elder_voting_score}) Conns score({node_conn_score}), Dkg score({node_dkg_score}), Knowledge score({node_knowledge_score}), Ops score({score}), AeProbe score ({node_probe_score})"
             );
 
             scores_only.push(final_score);
@@ -243,22 +240,17 @@ impl FaultDetection {
 
         // threshold needs to always be at least 1, and with the std dev always at least one
         // that should be fine.
-        let threshold = (STD_DEVS_AWAY * std_dev).ceil() as usize;
+        let threshold = STD_DEVS_AWAY * std_dev.ceil() as usize + mean as usize;
         debug!(
-            "____Threshold is {STD_DEVS_AWAY:?} std devs away, which is {:?}",
+            "____Threshold is {STD_DEVS_AWAY:?} std devs away + mean, which is {:?}",
             threshold
         );
 
         for (name, score) in pre_standardised_scores {
-            trace!("Initial score for {name:?} is {score:?}");
-            let meaned = score.saturating_sub(mean as usize);
+            trace!("Score for {name:?} is {score:?}");
 
-            let zscore = meaned.saturating_sub(std_dev as usize);
-
-            trace!("Final Z-score for {name} is {zscore:?}");
-
-            if zscore >= threshold && threshold > 1 {
-                let _existed = final_scores.insert(name, zscore);
+            if score >= threshold && threshold > 1 {
+                let _existed = final_scores.insert(name, score);
             }
         }
 
@@ -584,7 +576,7 @@ mod tests {
         /// each issue has a random xorname attached to it to, and is sent to 4 nodes... each of which will fail a % of the time, depending on the
         /// NodeQuality (Good or Bad)
         fn pt_detect_correct_or_less_amount_of_faulty_nodes_with_full_elder_set(
-            nodes in generate_nodes_and_quality(3,30), issues in generate_msg_issues(500,1000))
+            nodes in generate_nodes_and_quality(3,30), issues in generate_msg_issues(2500,3000))
             {
                 let elders_count = 7;
                 init_test_logger();
@@ -672,7 +664,7 @@ mod tests {
         /// each issue has a random xorname attached to it to, and is sent to 4 nodes... each of which will fail a % of the time, depending on the
         /// NodeQuality (Good or Bad)
         fn pt_detect_dkg_bad_nodes(
-            nodes in generate_nodes_and_quality(3,30), issues in generate_msg_issues(500,1000))
+            nodes in generate_nodes_and_quality(3,30), issues in generate_msg_issues(2500,3000))
             {
                 init_test_logger();
                 info!("pt start --------------------");
@@ -754,7 +746,7 @@ mod tests {
         /// NodeQuality (Good or Bad)
         fn pt_detect_unresponsive_elders(
             // ~1500 msgs total should get us ~500 dkg which would be representative
-            nodes in generate_nodes_and_quality(2,7), issues in generate_msg_issues(500,1000))
+            nodes in generate_nodes_and_quality(2,7), issues in generate_msg_issues(2500,3000))
             {
                 init_test_logger();
                 let _outer_span = tracing::info_span!("detect unresponsive elders").entered();
@@ -890,7 +882,7 @@ mod ops_tests {
         );
 
         // adding more issues though, and we should see this node as faulty
-        for _ in 0..30 {
+        for _ in 0..90 {
             fault_detection.track_issue(nodes_vec[0], IssueType::RequestOperation);
         }
 

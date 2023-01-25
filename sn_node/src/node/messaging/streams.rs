@@ -157,7 +157,7 @@ impl MyNode {
         results.into_iter().for_each(|(peer, result)| match result {
             Err(_elapsed) => {
                 error!(
-                    "{msg_id:?}: No response from {peer:?} after {:?} timeout. Marking node as faulty",
+                    "{msg_id:?}: No response from {peer:?} after {:?} timeout.",
                     *NODE_RESPONSE_TIMEOUT
                 );
                 // output_cmds.push(Cmd::TrackNodeIssue {
