@@ -246,11 +246,10 @@ impl Dispatcher {
                         continue;
                     }
                 }
-                context
-                    .comm
-                    .send_out_bytes_sync(peer, msg_id, msg_bytes)
-                    .await;
-                info!("Sent {msg} to {}", peer.name());
+
+                if let Err(err) = context.comm.send_out_bytes(peer, msg_id, msg_bytes).await {
+                    info!("Failed to send {msg} to {}: {err:?}", peer.name());
+                }
             }
         } else {
             panic!("mock_send_msg expects Cmd::SendMsg, got {cmd:?}");

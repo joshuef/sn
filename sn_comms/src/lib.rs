@@ -142,11 +142,11 @@ impl Comm {
             .is_reachable(peer)
             .await
             .map_err(|err| {
-                info!("Peer {} is NOT externally reachable: {:?}", peer, err);
+                info!("Peer {peer} is NOT externally reachable: {err:?}");
                 err.into()
             })
             .map(|()| {
-                info!("Peer {} is externally reachable.", peer);
+                info!("Peer {peer} is externally reachable.");
             });
         connectivity_endpoint.close();
         result
@@ -175,8 +175,7 @@ impl Comm {
         });
     }
 
-    /// Sends the payload on a new or existing connection,
-    /// or on the provided send stream if any.
+    /// Sends the payload on a new or existing connection.
     #[tracing::instrument(skip(self, bytes))]
     pub async fn send_out_bytes(
         &self,
@@ -184,47 +183,31 @@ impl Comm {
         msg_id: MsgId,
         bytes: UsrMsgBytes,
     ) -> Result<()> {
-        let watcher = self.send_to_one(peer, msg_id, bytes).await?;
+        let (h, d, p) = &bytes;
+        let bytes_len = h.len() + d.len() + p.len();
+        trace!("Sending message bytes ({bytes_len} bytes) w/ {msg_id:?} to {peer:?}");
+
+        let peer_session = self.get_session(&peer).await?;
+        debug!("Peer session retrieved: {peer:?}");
 
         let sessions = self.sessions.clone();
-
         trace!("Sessions known of: {:?}", sessions.len());
 
-        // TODO: we could cache the handles above and check them as part of loop...
-        let _handle = tokio::spawn(async move {
-            let send_was_successful = Self::is_sent(watcher, msg_id, peer).await;
-            if send_was_successful {
-                trace!("Msg {msg_id:?} sent to {peer:?}");
-                Ok(())
-            } else {
-                Err(Error::FailedSend(peer))
-            }
-        });
-
-        Ok(())
-    }
-
-    /// Test helper to send out Msgs in a blocking fashion
-    #[cfg(any(test, feature = "test"))]
-    pub async fn send_out_bytes_sync(&self, peer: Peer, msg_id: MsgId, bytes: UsrMsgBytes) {
-        let watcher = self.send_to_one(peer, msg_id, bytes).await;
-        match watcher {
+        match peer_session.send(msg_id, bytes).await {
             Ok(watcher) => {
-                let send_was_successful = Self::is_sent(watcher, msg_id, peer).await;
-                if send_was_successful {
+                if Self::is_sent(watcher, msg_id, peer).await {
                     trace!("Msg {msg_id:?} sent to {peer:?}");
+                    return Ok(());
                 }
             }
             Err(error) => {
                 error!(
-                    "Sending message (msg_id: {:?}) to {:?} (name {:?}) failed as we have disconnected from the peer. (Error is: {})",
-                    msg_id,
-                    peer.addr(),
-                    peer.name(),
-                    error,
+                    "Sending message (msg_id: {msg_id:?}) to {peer:?} failed as \
+                    we have disconnected from the peer. (Error is: {error})",
                 );
             }
         }
+        Err(Error::FailedSend(peer))
     }
 
     /// Sends the payload on a new bidi-stream and returns the response.
@@ -265,10 +248,7 @@ impl Comm {
                     // that happens when the peer session dropped
                     // or the msg was sent, meaning the send didn't actually fail,
                     error!(
-                        "Sending message (msg_id: {:?}) to {:?} (name {:?}) possibly failed, as monitoring of the send job was aborted",
-                        msg_id,
-                        peer.addr(),
-                        peer.name(),
+                        "Sending message (msg_id: {msg_id:?}) to {peer:?} possibly failed, as monitoring of the send job was aborted",
                     );
                     return false;
                 }
@@ -279,15 +259,12 @@ impl Comm {
                     // do sleep a little longer here.
                     // Retries are managed by the peer session, where it will open a new
                     // connection.
-                    debug!("Transient error when sending to peer {}: {}", peer, error);
+                    debug!("Transient error when sending to peer {peer}: {error}");
                     continue; // moves on to awaiting a new change
                 }
                 SendStatus::MaxRetriesReached => {
                     error!(
-                        "Sending message (msg_id: {:?}) to {:?} (name {:?}) failed, as we've reached maximum retries",
-                        msg_id,
-                        peer.addr(),
-                        peer.name(),
+                        "Sending message (msg_id: {msg_id:?}) to {peer:?} failed, as we've reached maximum retries",
                     );
                     return false;
                 }
@@ -300,30 +277,12 @@ impl Comm {
     async fn get_session(&self, peer: &Peer) -> Result<PeerSession> {
         debug!("Attempting to get or create peer session to member: {peer:?}");
         if let Some(entry) = self.sessions.get(peer) {
-            debug!("Session to: {peer:?} exists");
+            debug!("Session to {peer:?} exists");
             Ok(entry.value().clone())
         } else {
             debug!("Did not attempt to connect to external peer: {peer:?}");
             Err(Error::CreatingConnectionToUnknownNode(*peer))
         }
-    }
-
-    // Helper to send a message to a single recipient.
-    #[instrument(skip(self, bytes))]
-    async fn send_to_one(
-        &self,
-        recipient: Peer,
-        msg_id: MsgId,
-        bytes: UsrMsgBytes,
-    ) -> Result<SendWatcher> {
-        let (h, d, p) = &bytes;
-        let bytes_len = h.len() + d.len() + p.len();
-
-        trace!("Sending message bytes ({bytes_len} bytes) w/ {msg_id:?} to {recipient:?}");
-
-        let peer = self.get_session(&recipient).await?;
-        debug!("Peer session retrieved");
-        peer.send_using_session(msg_id, bytes).await
     }
 }
 
@@ -360,6 +319,9 @@ mod tests {
         let (peer0, mut rx0) = new_peer().await?;
         let (peer1, mut rx1) = new_peer().await?;
 
+        // add peers as known members
+        comm.update_valid_comm_targets([peer0, peer1].into()).await;
+
         let peer0_msg = new_test_msg(dst(peer0))?;
         let peer1_msg = new_test_msg(dst(peer1))?;
 
@@ -380,7 +342,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Re-enable this when we've feedback from sends off thread"]
     async fn failed_send() -> Result<()> {
         let (tx, _rx) = mpsc::channel(1);
         let comm = Comm::new(
@@ -401,6 +362,15 @@ mod tests {
             .send_out_bytes(invalid_peer, msg.msg_id(), msg.serialize()?)
             .await;
 
+        // the peer is still not set as a known member thus it should have failed
+        assert_matches!(result, Err(Error::CreatingConnectionToUnknownNode(peer)) => assert_eq!(peer.addr(), invalid_addr));
+
+        // let's add the peer as a known member and check again
+        comm.update_valid_comm_targets([invalid_peer].into()).await;
+
+        let result = comm
+            .send_out_bytes(invalid_peer, msg.msg_id(), msg.serialize()?)
+            .await;
         assert_matches!(result, Err(Error::FailedSend(peer)) => assert_eq!(peer.addr(), invalid_addr));
 
         Ok(())
@@ -417,6 +387,9 @@ mod tests {
         let name = xor_name::rand::random();
         let peer = Peer::new(name, recv_addr);
         let msg0 = new_test_msg(dst(peer))?;
+
+        // add peer as a known member
+        send_comm.update_valid_comm_targets([peer].into()).await;
 
         send_comm
             .send_out_bytes(peer, msg0.msg_id(), msg0.serialize()?)
@@ -465,6 +438,10 @@ mod tests {
 
         let peer = Peer::new(xor_name::rand::random(), addr0);
         let msg = new_test_msg(dst(peer))?;
+
+        // add peer as a known member
+        comm1.update_valid_comm_targets([peer].into()).await;
+
         // Send a message to establish the connection
         comm1
             .send_out_bytes(peer, msg.msg_id(), msg.serialize()?)

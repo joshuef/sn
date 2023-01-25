@@ -121,6 +121,10 @@ jobs:
         timeout-minutes: 15
         run: cd sn_fault_detection && cargo test --release
 
+      - name: Run sn_comms tests
+        timeout-minutes: 10
+        run: cargo test --release -p sn_comms
+
       - name: Build sn_node tests before running
         run: cd sn_node && cargo test --no-run --release
         timeout-minutes: 50
