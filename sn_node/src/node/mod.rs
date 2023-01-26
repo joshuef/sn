@@ -550,16 +550,16 @@ mod core {
 
             let mut cmds = vec![];
 
-            // clean up DKG sessions 2 generations older than current
-            // `session_id.section_chain_len + 2 < current_chain_len`
+            // clean up DKG sessions 5 generations older than current
+            // `session_id.section_chain_len + 5 < current_chain_len`
             // we voluntarily keep the previous DKG rounds
             // so lagging elder candidates can still get responses to their gossip.
-            // At generation+2, they are likely not going to be elders anymore so we can safely discard it
+            // At generation+5, they are likely not going to be elders anymore so we can safely discard it
             let current_chain_len = self.network_knowledge.section_chain_len();
             let old_hashes = Vec::from_iter(
                 self.dkg_sessions_info
                     .iter()
-                    .filter(|(_, info)| info.session_id.section_chain_len + 2 < current_chain_len)
+                    .filter(|(_, info)| info.session_id.section_chain_len + 5 < current_chain_len)
                     .map(|(hash, _)| *hash),
             );
             for hash in old_hashes {
