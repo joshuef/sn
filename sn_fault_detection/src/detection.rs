@@ -19,7 +19,7 @@ static RECENT_ISSUE_DURATION: Duration = Duration::from_secs(60 * 10); // 10 min
 /// https://en.wikipedia.org/wiki/68%E2%80%9395%E2%80%9399.7_rule
 static STD_DEVS_AWAY: usize = 3;
 
-static CONN_WEIGHTING: f32 = 2.0;
+static CONN_WEIGHTING: f32 = 1.5;
 static OP_WEIGHTING: f32 = 1.0;
 static KNOWLEDGE_WEIGHTING: f32 = 2.0;
 static DKG_WEIGHTING: f32 = 2.0; // there are quite a lot of DKG msgs that go out atm, so can't weight this too heavily
@@ -240,7 +240,8 @@ impl FaultDetection {
 
         // threshold needs to always be at least 1, and with the std dev always at least one
         // that should be fine.
-        let threshold = STD_DEVS_AWAY * std_dev.ceil() as usize + mean as usize;
+        let at_least_1_as_std_dev = if std_dev < 1.0 { 1.0 } else { std_dev.ceil() };
+        let threshold = STD_DEVS_AWAY * at_least_1_as_std_dev as usize + mean as usize;
         debug!(
             "____Threshold is {STD_DEVS_AWAY:?} std devs away + mean, which is {:?}",
             threshold
@@ -354,11 +355,11 @@ mod tests {
     fn generate_network_startup_msg_issues() -> impl Strategy<Value = IssueType> {
         // higher numbers here are more frequent
         prop_oneof![
-        0 => Just(IssueType::Communication),
-        510 => Just(IssueType::Dkg),
-        592 => Just(IssueType::ElderVoting), //
+        120 => Just(IssueType::Communication),
+        300 => Just(IssueType::Dkg),
+        200 => Just(IssueType::ElderVoting), //
         0 => Just(IssueType::AeProbeMsg),
-        252 => Just(IssueType::NetworkKnowledge),
+        180 => Just(IssueType::NetworkKnowledge),
         ]
     }
 

@@ -114,12 +114,12 @@ jobs:
         run: cd sn_interface && cargo test --release
 
       - name: Build sn_fault_detection tests before running
-        run: cd sn_fault_detection && RUST_LOG=sn_fault_detection cargo test --release
+        run: cd sn_fault_detection && cargo test --no-run --release
         timeout-minutes: 50
 
       - name: Run sn_fault_detection tests
         timeout-minutes: 15
-        run: cd sn_fault_detection && cargo test --release
+        run: cd sn_fault_detection && RUST_LOG=sn_fault_detection cargo test --release
 
       - name: Run sn_comms tests
         timeout-minutes: 10
