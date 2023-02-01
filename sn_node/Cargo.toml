@@ -60,7 +60,7 @@ sn_comms = { path = "../sn_comms", version = "^0.2.1" }
 sn_dbc = { version = "8.1.2", features = ["serdes"] }
 sn_fault_detection = { path = "../sn_fault_detection", version = "^0.15.3" }
 sn_interface = { path = "../sn_interface", version = "^0.17.1" }
-sn_sdkg = "3.0.0"
+sn_sdkg = "3.1.2"
 serde = { version = "1.0.111", features = ["derive", "rc"] }
 serde_bytes = "~0.11.5"
 serde_json = "1.0.53"

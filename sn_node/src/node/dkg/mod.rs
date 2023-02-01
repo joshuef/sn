@@ -361,6 +361,24 @@ impl DkgVoter {
         }
     }
 
+    /// Force DKG termination
+    pub(crate) fn force_termination(
+        &mut self,
+        session_id: &DkgSessionId,
+    ) -> Result<Option<(NodeId, PublicKeySet, SecretKeyShare)>> {
+        match self.dkg_states.get_mut(&session_id.hash()) {
+            Some(state) => {
+                let our_id = state.id();
+                if let Some((pks, sks)) = state.force_termination()? {
+                    Ok(Some((our_id, pks, sks)))
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Err(Error::NoDkgStateForSession(session_id.clone())),
+        }
+    }
+
     /// Permanently removes a session from the DkgVoter
     /// Make sure this function is only called for outdated DKG sessions!
     pub(crate) fn remove(&mut self, sessions_hash: &Digest256) {

@@ -43,7 +43,7 @@ serde_json = "1.0.53"
 signature = "1.1.10"
 sn_consensus = "3.1"
 sn_dbc = { version = "8.1.2", features = ["serdes"] }
-sn_sdkg = "3.0.0"
+sn_sdkg = "3.1.2"
 strum = "0.24"
 strum_macros = "0.24"
 tempfile = "3.2.0"

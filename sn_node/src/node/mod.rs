@@ -520,29 +520,29 @@ mod core {
             updated
         }
 
-        /// Updates various state if elders changed.
-        pub(crate) async fn update_on_section_change(
-            &mut self,
-            old: &NodeContext,
-        ) -> Result<Vec<Cmd>> {
-            let new = self.context();
-            let new_section_key = new.network_knowledge.section_key();
-            let new_prefix = new.network_knowledge.prefix();
-            let old_prefix = old.network_knowledge.prefix();
-            let old_section_key = old.network_knowledge.section_key();
-
-            let mut cmds = vec![];
-
-            // clean up DKG sessions 5 generations older than current
-            // `session_id.section_chain_len + 5 < current_chain_len`
-            // we voluntarily keep the previous DKG rounds
-            // so lagging elder candidates can still get responses to their gossip.
-            // At generation+5, they are likely not going to be elders anymore so we can safely discard it
+        /// Updates DKG state on section change
+        /// Force terminates ongoing sessions to obtain section key
+        /// Discards past sessions
+        fn update_dkg_on_section_change(&mut self) {
             let current_chain_len = self.network_knowledge.section_chain_len();
+            let prev_chain_len = current_chain_len - 1;
+
+            // try force terminate sessions from prev generation (to-be elders in current)
+            let prev_sessions = Vec::from_iter(
+                self.dkg_sessions_info
+                    .iter()
+                    .filter(|(_, info)| info.session_id.section_chain_len == prev_chain_len)
+                    .map(|(_, info)| info.session_id.clone()),
+            );
+            for id in prev_sessions {
+                self.force_dkg_termination(&id);
+            }
+
+            // clean up old DKG sessions
             let old_hashes = Vec::from_iter(
                 self.dkg_sessions_info
                     .iter()
-                    .filter(|(_, info)| info.session_id.section_chain_len + 5 < current_chain_len)
+                    .filter(|(_, info)| info.session_id.section_chain_len < current_chain_len)
                     .map(|(hash, _)| *hash),
             );
             for hash in old_hashes {
@@ -556,6 +556,22 @@ mod core {
                 }
                 self.dkg_voter.remove(&hash);
             }
+        }
+
+        /// Updates various state if elders changed.
+        pub(crate) async fn update_on_section_change(
+            &mut self,
+            old: &NodeContext,
+        ) -> Result<Vec<Cmd>> {
+            let new = self.context();
+            let new_section_key = new.network_knowledge.section_key();
+            let new_prefix = new.network_knowledge.prefix();
+            let old_prefix = old.network_knowledge.prefix();
+            let old_section_key = old.network_knowledge.section_key();
+
+            let mut cmds = vec![];
+
+            self.update_dkg_on_section_change();
 
             if new_section_key != old_section_key {
                 // clean up pending split sections since they no longer apply to the new section
@@ -571,12 +587,6 @@ mod core {
                     sap.elders_vec(),
                 );
 
-                // It can happen that we recieve the SAP demonstrating that we've become elders
-                // before our local DKG can update the section_keys_provider with our Elder key share.
-                //
-                // Eventually our local DKG instance will complete and add our key_share to the
-                // `section_keys_provider` cache. Once that happens, this function will be called
-                // again and we can complete our Elder state transition.
                 if let Ok(key) = self.section_keys_provider.key_share(&sap.section_key()) {
                     // The section-key has changed, we are now able to function as an elder.
                     if self.initialize_elder_state(key) {
@@ -587,7 +597,10 @@ mod core {
                         ))?);
                     }
                 } else {
-                    warn!("We're an elder but are missing our section key share, delaying elder state initialization until we receive it: sap={sap:?}");
+                    error!(
+                        "We're an elder but are missing our section key share for section key:{:?}",
+                        sap.section_key()
+                    );
                 }
 
                 self.log_network_stats();
