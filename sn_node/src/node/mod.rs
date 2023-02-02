@@ -60,6 +60,7 @@ mod core {
         },
         UsedSpace,
     };
+    use bls::PublicKey;
     use sn_comms::Comm;
     use sn_consensus::Generation;
     use sn_fault_detection::IssueType;
@@ -523,7 +524,7 @@ mod core {
         /// Updates DKG state on section change
         /// Force terminates ongoing sessions to obtain section key
         /// Discards past sessions
-        fn update_dkg_on_section_change(&mut self) {
+        fn update_dkg_on_section_change(&mut self, new_section_key: &PublicKey) {
             let current_chain_len = self.network_knowledge.section_chain_len();
             let prev_chain_len = current_chain_len - 1;
 
@@ -535,7 +536,7 @@ mod core {
                     .map(|(_, info)| info.session_id.clone()),
             );
             for id in prev_sessions {
-                self.force_dkg_termination(&id);
+                self.force_dkg_termination(&id, new_section_key);
             }
 
             // clean up old DKG sessions
@@ -571,7 +572,7 @@ mod core {
 
             let mut cmds = vec![];
 
-            self.update_dkg_on_section_change();
+            self.update_dkg_on_section_change(&new_section_key);
 
             if new_section_key != old_section_key {
                 // clean up pending split sections since they no longer apply to the new section
@@ -736,7 +737,7 @@ mod core {
         }
 
         #[allow(unused)]
-        pub(crate) fn section_key_by_name(&self, name: &XorName) -> Result<bls::PublicKey> {
+        pub(crate) fn section_key_by_name(&self, name: &XorName) -> Result<PublicKey> {
             if self.network_knowledge.prefix().matches(name) {
                 Ok(self.network_knowledge.section_key())
             } else if let Ok(sap) = self.network_knowledge.section_auth_by_name(name) {
