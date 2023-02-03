@@ -125,7 +125,16 @@ pub fn init_node_logging(config: &Config) -> Result<Option<WorkerGuard>> {
     layers.fmt_layer(config);
 
     #[cfg(feature = "otlp")]
-    layers.otlp_layer()?;
+    {
+        use tracing::info;
+        match std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT") {
+            Ok(_) => layers.otlp_layer()?,
+            Err(_) => info!(
+                "The OTLP feature is enabled but the OTEL_EXPORTER_OTLP_ENDPOINT variable is not \
+                set, so traces will not be submitted."
+            ),
+        }
+    }
 
     #[cfg(feature = "tokio-console")]
     layers.layers.push(console_subscriber::spawn().boxed());
