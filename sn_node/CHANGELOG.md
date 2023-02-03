@@ -5,23 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v0.73.3 (2023-02-02)
+## v0.73.4 (2023-02-03)
 
-### Chore
+### New Features
 
- - <csr-id-e706848522d6c52d6ed5eddf638376996cc947a9/> add clippy check for unused async
-
-### Refactor
-
- - <csr-id-1540f6e00a5cd6a3803054d3e8386927a0962a1f/> unused async removal
+ - <csr-id-41fc522226945051a14b455ca45f637175b9143f/> only submit traces if environment var is set
+   We will only configure the tracing infrastructure if the `otlp` feature is enabled *and* the
+   `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable is set.
 
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
 
- - 3 commits contributed to the release.
- - 1 day passed between releases.
- - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 2 commits contributed to the release.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
 ### Commit Details
@@ -31,12 +28,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Merge #2064 ([`eb993b7`](https://github.com/maidsafe/safe_network/commit/eb993b7f5d131f4a34d94920b1e7b0733eecc139))
+    - only submit traces if environment var is set ([`41fc522`](https://github.com/maidsafe/safe_network/commit/41fc522226945051a14b455ca45f637175b9143f))
+</details>
+
+## v0.73.3 (2023-02-02)
+
+<csr-id-e706848522d6c52d6ed5eddf638376996cc947a9/>
+<csr-id-1540f6e00a5cd6a3803054d3e8386927a0962a1f/>
+
+### Chore
+
+ - <csr-id-e706848522d6c52d6ed5eddf638376996cc947a9/> add clippy check for unused async
+
+### Chore
+
+ - <csr-id-3831dae3e34623ef252298645a43cbafcc923a13/> sn_interface-0.17.1/sn_fault_detection-0.15.3/sn_comms-0.2.1/sn_client-0.78.2/sn_node-0.73.3/sn_api-0.76.1
+
+### Refactor
+
+ - <csr-id-1540f6e00a5cd6a3803054d3e8386927a0962a1f/> unused async removal
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 4 commits contributed to the release.
+ - 1 day passed between releases.
+ - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - sn_interface-0.17.1/sn_fault_detection-0.15.3/sn_comms-0.2.1/sn_client-0.78.2/sn_node-0.73.3/sn_api-0.76.1 ([`3831dae`](https://github.com/maidsafe/safe_network/commit/3831dae3e34623ef252298645a43cbafcc923a13))
     - Merge #2061 ([`bab8208`](https://github.com/maidsafe/safe_network/commit/bab82087260ac4f1f44e688db2e67ca2387a7175))
     - add clippy check for unused async ([`e706848`](https://github.com/maidsafe/safe_network/commit/e706848522d6c52d6ed5eddf638376996cc947a9))
     - unused async removal ([`1540f6e`](https://github.com/maidsafe/safe_network/commit/1540f6e00a5cd6a3803054d3e8386927a0962a1f))
 </details>
 
 ## v0.73.2 (2023-02-01)
+
+<csr-id-2f1c6edded1f40761b55add3af53dc1849ac36a5/>
 
 ### Chore
 

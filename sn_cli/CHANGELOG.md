@@ -4,11 +4,63 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## v0.69.1 (2023-02-03)
+
+### Bug Fixes
+
+ - <csr-id-1c83fd8803fdcc5e269cdbb6539ac44fba13446e/> pull the correct version of sn_node
+   We added a new crate but forgot to account for the new version in the `node install` command, so it
+   was using sn_client's version number.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 2 commits contributed to the release.
+ - 1 day passed between releases.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Merge #2064 ([`eb993b7`](https://github.com/maidsafe/safe_network/commit/eb993b7f5d131f4a34d94920b1e7b0733eecc139))
+    - pull the correct version of sn_node ([`1c83fd8`](https://github.com/maidsafe/safe_network/commit/1c83fd8803fdcc5e269cdbb6539ac44fba13446e))
+</details>
+
 ## v0.69.0 (2023-02-01)
+
+### Chore
+
+ - <csr-id-69f8ade1ea8bb3e77c169b17ae21a40370bfab58/> sn_interface-0.17.0/sn_comms-0.2.0/sn_client-0.78.0/sn_node-0.73.0/sn_api-0.76.0/sn_cli-0.69.0
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 1 commit contributed to the release.
+ - 4 days passed between releases.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - sn_interface-0.17.0/sn_comms-0.2.0/sn_client-0.78.0/sn_node-0.73.0/sn_api-0.76.0/sn_cli-0.69.0 ([`69f8ade`](https://github.com/maidsafe/safe_network/commit/69f8ade1ea8bb3e77c169b17ae21a40370bfab58))
+</details>
 
 ## v0.68.7 (2023-01-27)
 
 <csr-id-846b1080944a229000b152513c0e2ed840bc9033/>
+<csr-id-c01008dc8cd48c0170388b2cb45d10be38a8210e/>
 
 ### Chore
 
