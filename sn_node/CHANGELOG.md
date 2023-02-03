@@ -5,7 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v0.73.5 (2023-02-03)
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 2 commits contributed to the release.
+ - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Merge #2055 ([`d43f511`](https://github.com/maidsafe/safe_network/commit/d43f511a58dd34ce7ab1594f5e46beaea066aa10))
+    - Merge branch 'main' into sap_change_force_dkg_termination ([`876d78a`](https://github.com/maidsafe/safe_network/commit/876d78a911e852b8cc1c33b2130e4cf9b28dd510))
+</details>
+
 ## v0.73.4 (2023-02-03)
+
+### Chore
+
+ - <csr-id-e5f38d036ecb54f695881efd45c8c8ab8c64adbc/> sn_node-0.73.4/sn_cli-0.69.1
 
 ### New Features
 
@@ -17,8 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 2 commits contributed to the release.
- - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 3 commits contributed to the release.
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
 ### Commit Details
@@ -28,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - sn_node-0.73.4/sn_cli-0.69.1 ([`e5f38d0`](https://github.com/maidsafe/safe_network/commit/e5f38d036ecb54f695881efd45c8c8ab8c64adbc))
     - Merge #2064 ([`eb993b7`](https://github.com/maidsafe/safe_network/commit/eb993b7f5d131f4a34d94920b1e7b0733eecc139))
     - only submit traces if environment var is set ([`41fc522`](https://github.com/maidsafe/safe_network/commit/41fc522226945051a14b455ca45f637175b9143f))
 </details>
@@ -36,10 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-id-e706848522d6c52d6ed5eddf638376996cc947a9/>
 <csr-id-1540f6e00a5cd6a3803054d3e8386927a0962a1f/>
+<csr-id-3831dae3e34623ef252298645a43cbafcc923a13/>
 
 ### Chore
 
  - <csr-id-e706848522d6c52d6ed5eddf638376996cc947a9/> add clippy check for unused async
+
+### New Features
+
+ - <csr-id-076e45833b3afd6d38fe1ec11ae0b234da55e149/> discard sap updates mismatched DKG force termination keys
 
 ### Chore
 
@@ -53,9 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 4 commits contributed to the release.
+ - 6 commits contributed to the release.
  - 1 day passed between releases.
- - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 4 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
 ### Commit Details
@@ -69,6 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Merge #2061 ([`bab8208`](https://github.com/maidsafe/safe_network/commit/bab82087260ac4f1f44e688db2e67ca2387a7175))
     - add clippy check for unused async ([`e706848`](https://github.com/maidsafe/safe_network/commit/e706848522d6c52d6ed5eddf638376996cc947a9))
     - unused async removal ([`1540f6e`](https://github.com/maidsafe/safe_network/commit/1540f6e00a5cd6a3803054d3e8386927a0962a1f))
+    - Merge branch 'main' into sap_change_force_dkg_termination ([`7d3665b`](https://github.com/maidsafe/safe_network/commit/7d3665bfe05f61d170229df9f4424c5663b116d5))
+    - discard sap updates mismatched DKG force termination keys ([`076e458`](https://github.com/maidsafe/safe_network/commit/076e45833b3afd6d38fe1ec11ae0b234da55e149))
 </details>
 
 ## v0.73.2 (2023-02-01)
@@ -208,6 +241,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
  - <csr-id-50c69469b488224c7f69de4e728a66594a31380e/> log more info when membership vote failed byzatine detect
 
+### New Features
+
+ - <csr-id-131ba75ab8155fe904771537823f2912dd0a3a97/> force DKG termination upon receiving SAP update
+
 ### Chore
 
  - <csr-id-9d17c6c99c48046a361fffe30749419a594715f5/> sn_node-0.72.42
@@ -217,8 +254,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 4 commits contributed to the release over the course of 1 calendar day.
- - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 5 commits contributed to the release over the course of 1 calendar day.
+ - 4 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
 ### Commit Details
@@ -230,6 +267,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  * **Uncategorized**
     - sn_node-0.72.42 ([`9d17c6c`](https://github.com/maidsafe/safe_network/commit/9d17c6c99c48046a361fffe30749419a594715f5))
     - Merge #2049 ([`a9389c1`](https://github.com/maidsafe/safe_network/commit/a9389c11db261b8bb9a082ef93cef9d766f0f516))
+    - force DKG termination upon receiving SAP update ([`131ba75`](https://github.com/maidsafe/safe_network/commit/131ba75ab8155fe904771537823f2912dd0a3a97))
     - set default values for env variable ([`58affbd`](https://github.com/maidsafe/safe_network/commit/58affbd6b7c6cf6450492796867e47a75456d0c0))
     - log more info when membership vote failed byzatine detect ([`50c6946`](https://github.com/maidsafe/safe_network/commit/50c69469b488224c7f69de4e728a66594a31380e))
 </details>

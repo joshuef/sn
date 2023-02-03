@@ -27,4 +27,4 @@ clap = { version = "3.0.0", features = ["derive", "env"] }
 strum = "0.24"
 strum_macros = "0.24"
 walkdir = "2"
-sn_interface = { path = "../sn_interface", version = "^0.17.1" }
+sn_interface = { path = "../sn_interface", version = "^0.17.2" }
