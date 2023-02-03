@@ -15,13 +15,13 @@ name = "data_storage"
 harness = false
 
 [features]
-default = [ "statemap"]
+default = ["statemap"]
 limit-network-size = []
 chaos = []
 unstable-wiremsg-debuginfo = []
 # Needs to be built with RUSTFLAGS="--cfg tokio_unstable"
 tokio-console = ["console-subscriber"]
-otlp = [ "opentelemetry", "opentelemetry-otlp", "opentelemetry-semantic-conventions", "tracing-opentelemetry" ]
+otlp = ["opentelemetry", "opentelemetry-otlp", "opentelemetry-semantic-conventions", "tracing-opentelemetry"]
 statemap = []
 
 [dependencies]
@@ -82,6 +82,7 @@ uluru="3.0.0"
 url = "2.2.0"
 walkdir = "2"
 xor_name = "~5.0.0"
+parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
 
 [dependencies.self_update]
 version = "0.32"
@@ -90,7 +91,7 @@ features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip
 
 [dependencies.tokio]
 version = "1.17.0"
-features = ["fs", "io-util", "macros", "sync", "rt"]
+features = ["fs", "io-util", "macros", "rt", "sync", "parking_lot"]
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["async_tokio"] }
