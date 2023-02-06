@@ -14,6 +14,8 @@ use std::{
 };
 use xor_name::{XorName, XOR_NAME_LEN};
 
+const PRIMARY_NODE_AGE: u8 = 7;
+
 /// A Peer with name, derived from its `PublicKey`, and an address.
 #[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Peer {
@@ -37,6 +39,13 @@ impl Peer {
     /// Returns the age.
     pub fn age(&self) -> u8 {
         self.name[XOR_NAME_LEN - 1]
+    }
+
+    /// Returns if this node can be considered primary storage
+    /// (pruimary storage being anything beyond the low age nodes which are much more
+    /// likely to be churning, and so only perform backup operations)
+    pub fn is_primary_node(&self) -> bool {
+        self.age() >= PRIMARY_NODE_AGE
     }
 
     pub fn id(&self) -> (XorName, SocketAddr) {
