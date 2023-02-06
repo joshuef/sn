@@ -190,6 +190,7 @@ impl MyNode {
 
         let candidates = members
             .into_iter()
+            .filter(|p| p.is_primary_node())
             .sorted_by(|lhs, rhs| target.cmp_distance(&lhs.name(), &rhs.name()))
             .take(data_copy_count())
             .enumerate()
