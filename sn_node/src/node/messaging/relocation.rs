@@ -29,11 +29,6 @@ impl MyNode {
         churn_id: ChurnId,
         excluded: BTreeSet<XorName>,
     ) -> Result<Vec<Cmd>> {
-        // Do not carry out relocations in the first section
-        // TODO: consider avoiding relocations in first 16 sections instead.
-        if self.network_knowledge.prefix().is_empty() {
-            return Ok(vec![]);
-        }
         debug!("Try to find relocate peers, excluded {excluded:?}");
         // Do not carry out relocation when there is not enough elder nodes.
         if self.network_knowledge.section_auth().elder_count() < elder_count() {
