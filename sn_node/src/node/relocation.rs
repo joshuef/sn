@@ -48,11 +48,6 @@ pub(super) fn find_nodes_to_relocate(
         recommended_section_size(),
     );
 
-    // no relocation if total section size is too small
-    if section_size < recommended_section_size() {
-        return vec![];
-    }
-
     let max_reloctions = elder_count() / 2;
     let allowed_relocations = min(section_size - recommended_section_size(), max_reloctions);
 
