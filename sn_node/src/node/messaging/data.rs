@@ -55,7 +55,8 @@ impl MyNode {
             _ => None,
         };
 
-        let targets = Self::target_data_holders(&context, target_addr, query_index);
+        let (targets, _backup_nodes) =
+            Self::target_data_holders(&context, target_addr, query_index);
 
         // make sure the expected replication factor is achieved
         if query_index.is_none() && data_copy_count() > targets.len() {
@@ -160,7 +161,8 @@ impl MyNode {
         let (kind, payload) = MyNode::serialize_node_msg(context.name, &node_msg)?;
         let wire_msg = WireMsg::new_msg(msg_id, payload, kind, dst);
 
-        let targets = MyNode::target_data_holders(context, name, None);
+        let (targets, _backup_nodes) = MyNode::target_data_holders(context, name, None);
+
         debug!(
             "{msg_id:?} Forwarding on RegisterCmd for Spentbook msg to data holders: {targets:?}"
         );
@@ -178,17 +180,21 @@ impl MyNode {
 
     /// Used to fetch the list of holders for given name of data.
     /// Sorts members by closeness to data address, returns data_copy_count of them
+    /// returns (Primary Storage, Backup Storage)
+    ///
+    /// Primary storage _must_ meet the `data_copy_count` at least, otherwise an error will be thrown
     fn target_data_holders(
         context: &NodeContext,
         target: XorName,
         query_index: Option<usize>,
-    ) -> BTreeSet<Peer> {
+    ) -> (BTreeSet<Peer>, BTreeSet<Peer>) {
         // TODO: reuse our_members_sorted_by_distance_to API when core is merged into upper layer
         let members = context.network_knowledge.members();
 
         trace!("Total members known about: {:?}", members.len());
 
-        let candidates = members
+        let primary_storage = members
+            .clone()
             .into_iter()
             .filter(|p| p.is_primary_node())
             .sorted_by(|lhs, rhs| target.cmp_distance(&lhs.name(), &rhs.name()))
@@ -205,9 +211,31 @@ impl MyNode {
             .map(|(_i, p)| p)
             .collect::<BTreeSet<_>>();
 
-        trace!("Target holders of {:?} are : {:?}", target, candidates,);
+        let backup_storage = members
+            .into_iter()
+            .filter(|p| !p.is_primary_node())
+            .sorted_by(|lhs, rhs| target.cmp_distance(&lhs.name(), &rhs.name()))
+            .take(data_copy_count())
+            .enumerate()
+            .filter(|(i, _peer)| {
+                if let Some(index) = query_index {
+                    i == &index
+                } else {
+                    // always return them
+                    true
+                }
+            })
+            .map(|(_i, p)| p)
+            .collect::<BTreeSet<_>>();
 
-        candidates
+        trace!(
+            "Primary holders of {:?} are : {:?}",
+            target,
+            primary_storage,
+        );
+        trace!("Backup holders of {:?} are : {:?}", target, backup_storage,);
+
+        (primary_storage, backup_storage)
     }
 
     /// Replicate data in the batch locally and then trigger further update reqeusts
