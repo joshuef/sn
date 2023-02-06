@@ -43,10 +43,7 @@ impl Session {
     /// Acquire a session by bootstrapping to a section, maintaining connections to several nodes.
     #[instrument(level = "debug")]
     pub(crate) fn new(local_addr: SocketAddr, network_contacts: SectionTree) -> Result<Self> {
-        let endpoint = Endpoint::builder()
-            .addr(local_addr)
-            .idle_timeout(70_000)
-            .client()?;
+        let endpoint = Endpoint::builder().addr(local_addr).client()?;
         let peer_links = PeerLinks::new(endpoint.clone());
 
         let session = Self {

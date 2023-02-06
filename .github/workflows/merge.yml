@@ -252,7 +252,7 @@ jobs:
         run: ./target/release/testnet --interval 30000
         id: section-startup
         env:
-          SN_NODE_RESPONSE_TIMEOUT: 70
+          SN_NODE_RESPONSE_TIMEOUT: 10
           RUST_LOG: "sn_node,sn_comms,sn_consensus,sn_fault_detection,sn_interface=trace"
 
       - name: Wait for all nodes to join
@@ -270,10 +270,10 @@ jobs:
 
       - name: Run client tests
         env:
-          SN_CMD_TIMEOUT: 90
-          SN_QUERY_TIMEOUT: 90
+          SN_CMD_TIMEOUT: 15
+          SN_QUERY_TIMEOUT: 15
           RUST_LOG: "sn_client=trace,qp2p=debug"
-        run: cd sn_client && cargo test --release --features check-replicas -- --test-threads=1
+        run: cd sn_client && cargo test --release --features check-replicas
         timeout-minutes: 7
 
       - name: Run example app for file API against local network
@@ -383,7 +383,7 @@ jobs:
         run: ./target/release/testnet --interval 30000
         id: section-startup
         env:
-          SN_ADULT_RESPONSE_TIMEOUT: 70
+          SN_NODE_RESPONSE_TIMEOUT: 10
           RUST_LOG: "sn_node,sn_comms,sn_consensus,sn_dysfunction,sn_interface=trace"
 
       - name: Wait for all nodes to join
@@ -401,10 +401,10 @@ jobs:
 
       - name: Run client tests
         env:
-          SN_CMD_TIMEOUT: 90
-          SN_QUERY_TIMEOUT: 90
+          SN_CMD_TIMEOUT: 15
+          SN_QUERY_TIMEOUT: 15
           RUST_LOG: "sn_client=trace,qp2p=debug"
-        run: cd sn_client && cargo test --release --features msg-happy-path -- --test-threads=1
+        run: cd sn_client && cargo test --release --features msg-happy-path
         timeout-minutes: 7
 
       - name: Run example app for file API against local network

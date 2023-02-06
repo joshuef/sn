@@ -90,10 +90,13 @@ impl MsgListener {
                         send_stream,
                     };
                     // move this channel sending off thread so we don't hold up incoming msgs at all.
+                    let conn_id_clone = conn_id.clone();
                     let _handle = tokio::spawn(async move {
                         // handle the message first
                         if let Err(error) = msg_sender.send(msg).await {
                             error!("Error pushing msg {msg_id:?} onto internal msg handling channel: {error:?}");
+                        } else {
+                            info!("Msg {msg_id:?} received and queued over conn_id={conn_id_clone}, from: {peer:?}{stream_info}");
                         }
                     });
                 }

@@ -30,7 +30,7 @@ const ENV_NODE_RESPONSE_TIMEOUT: &str = "SN_NODE_RESPONSE_TIMEOUT";
 
 // Default timeout period set for data queries forwarded to Adult.
 // TODO: how to determine this time properly?
-const NODE_RESPONSE_DEFAULT_TIMEOUT: Duration = Duration::from_secs(70);
+const NODE_RESPONSE_DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 lazy_static! {
     static ref NODE_RESPONSE_TIMEOUT: Duration = match var(ENV_NODE_RESPONSE_TIMEOUT)
