@@ -90,7 +90,7 @@ impl MyNode {
                 let error = DataError::InsufficientNodeCount {
                     prefix: context.network_knowledge.prefix(),
                     expected: index as u8 + 1, // plus one here as we're 0 index
-                    found: context.network_knowledge.members().len() as u8,
+                    found: targets.len() as u8,
                 };
 
                 let data_response = ClientDataResponse::NetworkIssue(error);
