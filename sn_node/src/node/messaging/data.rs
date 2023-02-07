@@ -11,6 +11,7 @@ use crate::node::{
 };
 use crate::storage::{Error as StorageError, StorageLevel};
 
+use sn_interface::network_knowledge::NetworkKnowledge;
 use sn_interface::{
     data_copy_count,
     messaging::{
@@ -56,7 +57,7 @@ impl MyNode {
         };
 
         let (targets, _backup_nodes) =
-            Self::target_data_holders(&context, target_addr, query_index);
+            Self::target_data_holders(&context.network_knowledge, target_addr, query_index);
 
         // make sure the expected replication factor is achieved
         if query_index.is_none() && data_copy_count() > targets.len() {
@@ -161,7 +162,8 @@ impl MyNode {
         let (kind, payload) = MyNode::serialize_node_msg(context.name, &node_msg)?;
         let wire_msg = WireMsg::new_msg(msg_id, payload, kind, dst);
 
-        let (targets, _backup_nodes) = MyNode::target_data_holders(context, name, None);
+        let (targets, _backup_nodes) =
+            MyNode::target_data_holders(&context.network_knowledge, name, None);
 
         debug!(
             "{msg_id:?} Forwarding on RegisterCmd for Spentbook msg to data holders: {targets:?}"
@@ -184,12 +186,12 @@ impl MyNode {
     ///
     /// Primary storage _must_ meet the `data_copy_count` at least, otherwise an error will be thrown
     pub(crate) fn target_data_holders(
-        context: &NodeContext,
+        network_knowledge: &NetworkKnowledge,
         target: XorName,
         query_index: Option<usize>,
     ) -> (BTreeSet<Peer>, BTreeSet<Peer>) {
         // TODO: reuse our_members_sorted_by_distance_to API when core is merged into upper layer
-        let members = context.network_knowledge.members();
+        let members = network_knowledge.members();
 
         debug!("Total members known about: {:?}", members.len());
 

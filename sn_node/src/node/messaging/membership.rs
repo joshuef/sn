@@ -21,7 +21,7 @@ use sn_consensus::{Decision, Generation, SignedVote, VoteResponse};
 use sn_interface::{
     data_copy_count,
     messaging::system::{JoinResponse, NodeMsg, SectionSig, SectionSigned},
-    network_knowledge::{MembershipState, NodeState},
+    network_knowledge::{MembershipState, NetworkKnowledge, NodeState},
     types::{log_markers::LogMarker, Peer},
 };
 use xor_name::XorName;
@@ -208,7 +208,7 @@ impl MyNode {
         }
 
         // Do not disable node joins in first section.
-        if !self.is_startup_joining_allowed(&self.context()) {
+        if !MyNode::is_startup_joining_allowed(&self.context().network_knowledge) {
             // ..otherwise, switch off joins_allowed on a node joining.
             // TODO: fix racing issues here? https://github.com/maidsafe/safe_network/issues/890
             self.joins_allowed = false;
@@ -262,7 +262,7 @@ impl MyNode {
         // Once we've grown the section, we do not need to allow more nodes in.
         // (Unless we've triggered the storage critical fail safe to grow until split.)
         if net_increase
-            && !self.is_startup_joining_allowed(&self.context())
+            && !MyNode::is_startup_joining_allowed(&self.context().network_knowledge)
             && !self.joins_allowed_until_split
         {
             self.joins_allowed = false;
@@ -279,18 +279,18 @@ impl MyNode {
         Ok(cmds)
     }
 
-    pub(crate) fn is_startup_joining_allowed(&self, context: &NodeContext) -> bool {
+    pub(crate) fn is_startup_joining_allowed(network_knowledge: &NetworkKnowledge) -> bool {
         const TEMP_SECTION_LIMIT: usize = 20;
 
         // lets grab data holders for a random xornamd
         let random_xorname = XorName::random(&mut OsRng);
         let (primary_storage, _backup_nodes) =
-            MyNode::target_data_holders(context, random_xorname, None);
+            MyNode::target_data_holders(network_knowledge, random_xorname, None);
         let we_dont_have_enough_storage_nodes = primary_storage.len() < data_copy_count();
 
         debug!("Checking if we should allow joins due to being in the startup phase of a network: we should allow joins? {we_dont_have_enough_storage_nodes:?}. primary len: {:?}, desired copy count: {:?}", primary_storage.len(), data_copy_count());
 
-        let members_count = self.network_knowledge.members().len();
+        let members_count = network_knowledge.members().len();
 
         if cfg!(feature = "limit-network-size") {
             we_dont_have_enough_storage_nodes && members_count <= TEMP_SECTION_LIMIT

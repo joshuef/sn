@@ -117,7 +117,7 @@ impl FlowCtrl {
         // how do we handle the need for a bidi stream (if using the whole client flow?)
 
         // if self.timestamps.last_adult_health_check.elapsed() > ADULT_HEALTH_CHECK_INTERVAL {
-        //     debug!(" ----> adult health periodics sgtart");
+        //     debug!("adult health periodics sgtart");
         //     self.timestamps.last_adult_health_check = now;
         //     let health_cmds = match Self::perform_health_checks(self.node.clone()).await {
         //         Ok(cmds) => cmds,
@@ -127,7 +127,7 @@ impl FlowCtrl {
         //         }
         //     };
         //     cmds.extend(health_cmds);
-        //     debug!(" ----> adult health periodics done");
+        //     debug!("adult health periodics done");
         // }
 
         // // The above health check only queries for chunks
@@ -144,19 +144,22 @@ impl FlowCtrl {
             self.timestamps.last_vote_check = now;
             let read_locked_node = self.node.read().await;
 
-            trace!(" ----> vote periodics start");
-            for cmd in self.check_for_missed_votes(context, &read_locked_node.membership) {
+            trace!("vote periodics start");
+            for cmd in self
+                .check_for_missed_votes(context, &read_locked_node.membership)
+                .await
+            {
                 cmds.push(cmd);
             }
-            trace!(" ----> vote periodics done");
+            trace!("vote periodics done");
         }
 
         if self.timestamps.last_dkg_msg_check.elapsed() > MISSING_DKG_MSG_INTERVAL {
-            trace!(" ----> dkg msg periodics start");
+            trace!("dkg msg periodics start");
             self.timestamps.last_dkg_msg_check = now;
             Self::check_for_missed_dkg_messages(self.node.clone(), self.cmd_sender_channel.clone())
                 .await;
-            trace!(" ----> dkg msg periodics done");
+            trace!("dkg msg periodics done");
         }
 
         if self.timestamps.last_fault_check.elapsed() > FAULT_CHECK_INTERVAL {
@@ -175,8 +178,11 @@ impl FlowCtrl {
                     ));
                 }
             } else {
-                info!("{}", LogMarker::RelocateEnd);
-                info!("We've joined a section, dropping the relocation proof.");
+                info!(
+                    "{}: new age: {:?}",
+                    LogMarker::RelocateEnd,
+                    context.info.age()
+                );
                 let mut node = self.node.write().await;
                 trace!("[NODE WRITE]: handling relocation periodic check write gottt...");
                 node.relocation_proof = None;

@@ -8,6 +8,7 @@
 
 //! Relocation related types and utilities.
 
+use crate::node::MyNode;
 use sn_interface::{
     elder_count,
     network_knowledge::{recommended_section_size, NetworkKnowledge, NodeState, RelocationDst},
@@ -48,8 +49,10 @@ pub(super) fn find_nodes_to_relocate(
         recommended_section_size(),
     );
 
+    let is_startup_joining_allowed = MyNode::is_startup_joining_allowed(network_knowledge);
+
     // no relocation if total section size is too small
-    if section_size < recommended_section_size() {
+    if !is_startup_joining_allowed && section_size < recommended_section_size() {
         return vec![];
     }
 
