@@ -282,7 +282,7 @@ impl FlowCtrl {
         context: &NodeContext,
         membership_context: &Option<Membership>,
     ) -> Vec<Cmd> {
-        info!("Checking for missed votes");
+        trace!("Checking for missed votes");
         let mut cmds = vec![];
         if let Some(membership) = &membership_context {
             let last_received_vote_time = membership.last_received_vote_time();
@@ -308,7 +308,7 @@ impl FlowCtrl {
 
     /// Checks the interval since last dkg vote received
     async fn check_for_missed_dkg_messages(node: Arc<RwLock<MyNode>>, cmd_channel: CmdChannel) {
-        info!("Checking for DKG missed messages");
+        trace!("Checking for DKG missed messages");
 
         // DKG checks can be long running, move off thread to unblock the main loop
         let _handle = tokio::task::spawn(async move {
@@ -338,7 +338,7 @@ impl FlowCtrl {
     }
 
     async fn vote_out_faulty_nodes(&mut self) -> Vec<Cmd> {
-        info!("Voting out faulty nodes");
+        trace!("Voting out faulty nodes");
         let mut cmds = vec![];
         let faulty_nodes = self.get_faulty_node_names().await;
 
