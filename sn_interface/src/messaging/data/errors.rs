@@ -39,9 +39,9 @@ pub enum Error {
     InsufficientNodeCount {
         /// The prefix of the section.
         prefix: Prefix,
-        /// Expected number of Adults for minimum replication.
+        /// Expected number of storage nodes for minimum replication.
         expected: u8,
-        /// Actual number of Adults found to hold the data.
+        /// Actual number of storage nodes found to hold the data.
         found: u8,
     },
     /// Entry could not be found on the data

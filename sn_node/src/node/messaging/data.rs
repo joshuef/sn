@@ -183,7 +183,7 @@ impl MyNode {
     /// returns (Primary Storage, Backup Storage)
     ///
     /// Primary storage _must_ meet the `data_copy_count` at least, otherwise an error will be thrown
-    fn target_data_holders(
+    pub(crate) fn target_data_holders(
         context: &NodeContext,
         target: XorName,
         query_index: Option<usize>,
