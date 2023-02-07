@@ -496,7 +496,7 @@ pub(crate) fn into_msg_bytes(
     for peer in recipients {
         match network_knowledge.generate_dst(&peer.name()) {
             Ok(dst) => {
-                debug!("Dst generated for outgoing msg is: {dst:?}");
+                trace!("Dst generated for outgoing msg is: {dst:?}");
                 // TODO log error here isntead of throwing
                 let all_the_bytes = initial_wire_msg.serialize_with_new_dst(&dst)?;
                 msgs.push((peer, all_the_bytes));
