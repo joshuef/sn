@@ -348,7 +348,10 @@ async fn send_msg_on_stream(
     send_stream.set_priority(stream_prio);
     trace!("Prio set for {correlation_id:?} to {target_peer:?}, over {stream_id}");
 
-    if let Err(error) = send_stream.send_user_msg(bytes).await {
+    if let Err(error) = send_stream
+        .send_user_msg(bytes, correlation_id.as_ref())
+        .await
+    {
         error!(
             "Could not send response {correlation_id:?} to peer {target_peer:?} \
             over response {stream_id}: {error:?}"

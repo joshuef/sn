@@ -253,7 +253,7 @@ jobs:
         id: section-startup
         env:
           SN_NODE_RESPONSE_TIMEOUT: 10
-          RUST_LOG: "sn_node,sn_comms,sn_consensus,sn_fault_detection,sn_interface=trace"
+          RUST_LOG: "sn_node,sn_comms,sn_consensus,sn_fault_detection,sn_interface,qp2p=trace"
 
       - name: Wait for all nodes to join
         shell: bash

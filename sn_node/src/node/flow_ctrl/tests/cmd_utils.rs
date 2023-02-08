@@ -132,7 +132,7 @@ impl<'a> ProcessAndInspectCmds<'a> {
         };
         let wire_msg = WireMsg::new_msg(msg_id, serialised_payload, msg_kind, dst);
         let user_msg = wire_msg.serialize()?;
-        send_stream.send_user_msg(user_msg).await?;
+        send_stream.send_user_msg(user_msg, msg_id.as_ref()).await?;
 
         match comm_rx.recv().await {
             Some(MsgFromPeer {

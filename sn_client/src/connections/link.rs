@@ -56,7 +56,7 @@ impl Link {
         debug!("{msg_id:?} to {peer:?} bidi opened");
         send_stream.set_priority(10);
         send_stream
-            .send_user_msg(bytes.clone())
+            .send_user_msg(bytes.clone(), msg_id.as_ref())
             .await
             .map_err(LinkError::Send)?;
         debug!("{msg_id:?} bidi msg sent to {peer:?}");

@@ -2317,6 +2317,7 @@ dependencies = [
 name = "log_cmds_inspector"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "eyre",
  "grep",
@@ -3035,13 +3036,13 @@ dependencies = [
 
 [[package]]
 name = "qp2p"
-version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd4c0beab550e3cc390d88d1f6dc36e478502f28ad58902ddc8844d08d12d81e"
+version = "0.35.1"
+source = "git+https://github.com/bochaco/qp2p.git?branch=testing-qp2p-msg-ids#0dbd3cc2b977caf898fc87e7757a0ba7406243a1"
 dependencies = [
  "bincode",
  "bytes",
  "futures",
+ "hex_fmt",
  "quinn 0.9.3",
  "quinn-proto 0.9.2",
  "rcgen",
