@@ -3037,7 +3037,7 @@ dependencies = [
 [[package]]
 name = "qp2p"
 version = "0.35.1"
-source = "git+https://github.com/bochaco/qp2p.git?branch=testing-qp2p-msg-ids#0dbd3cc2b977caf898fc87e7757a0ba7406243a1"
+source = "git+https://github.com/bochaco/qp2p.git?branch=testing-qp2p-msg-ids#77ca77c7f4cd85cfcced0205ea6e0a33d5000430"
 dependencies = [
  "bincode",
  "bytes",
