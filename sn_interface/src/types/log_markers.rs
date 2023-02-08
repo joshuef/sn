@@ -108,5 +108,5 @@ pub enum LogMarker {
     ConnectionReused,
     // Relocation
     RelocateStart,
-    RelocateEnd,
+    RelocateEnded,
 }

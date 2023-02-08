@@ -180,11 +180,11 @@ impl FlowCtrl {
             } else {
                 info!(
                     "{}: new age: {:?}",
-                    LogMarker::RelocateEnd,
+                    LogMarker::RelocateEnded,
                     context.info.age()
                 );
                 let mut node = self.node.write().await;
-                trace!("[NODE WRITE]: handling relocation periodic check write gottt...");
+                trace!("[NODE WRITE]: handling relocation periodic check write");
                 node.relocation_proof = None;
             }
         }

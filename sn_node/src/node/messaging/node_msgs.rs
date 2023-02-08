@@ -231,21 +231,25 @@ impl MyNode {
                         }
 
                         info!(
-                            "=========>> This node ({:?} @ {:?}) has been approved to join the section at {:?}!", context.name, context.info.addr,
-                            target_sap.prefix(),
+                            "=========>> This node ({:?} @ {:?}) has been approved to join the section at {:?} with age: {:?}!", context.name, context.info.addr,
+                            target_sap.prefix(), context.info.age()
                         );
 
-                        if decision
-                            .proposals
-                            .keys()
-                            .filter(|n| n.state() == MembershipState::Joined)
-                            .filter(|n| n.name() == context.name)
-                            .any(|n| n.previous_name().is_some())
-                        {
-                            // We could clear the cached relocation proof here,
-                            // but we have the periodic check doing it, so no need to duplicate the logic.
-                            info!("{}", LogMarker::RelocateEnd);
-                        }
+                        // if decision
+                        //     .proposals
+                        //     .keys()
+                        //     .filter(|n| n.state() == MembershipState::Joined)
+                        //     .filter(|n| n.name() == context.name)
+                        //     .any(|n| n.previous_name().is_some())
+                        // {
+                        //     // We could clear the cached relocation proof here,
+                        //     // but we have the periodic check doing it, so no need to duplicate the logic.
+                        //     info!(
+                        //         "{}: new age: {:?}",
+                        //         LogMarker::RelocateEnded,
+                        //         context.info.age()
+                        //     );
+                        // }
 
                         Ok(vec![])
                     }

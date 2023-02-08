@@ -56,16 +56,20 @@ pub(super) fn find_nodes_to_relocate(
         return vec![];
     }
 
-    let max_reloctions = elder_count() / 2;
-    let allowed_relocations = min(section_size - recommended_section_size(), max_reloctions);
+    let max_relocations = if is_startup_joining_allowed { elder_count() } else { elder_count() / 2 };
+
+    debug!("Max relocations: {max_relocations:?}");
+    let allowed_relocations = if is_startup_joining_allowed { elder_count() } else { min(section_size - recommended_section_size(), max_relocations)};
+    // let allowed_relocations = min(section_size - recommended_section_size(), max_relocations);
+    debug!("Allowed_relocations: {allowed_relocations:?}");
 
     // Find the peers that pass the relocation check
     let mut candidates: Vec<_> = network_knowledge
         .section_members()
         .into_iter()
         // only adults get relocated
-        .filter(|state| network_knowledge.is_adult(&state.name()))
-        .filter(|info| check(info.age(), churn_id))
+        // .filter(|state| network_knowledge.is_adult(&state.name()))
+        .filter(|info| relocation_check(info.age(), churn_id))
         // the newly joined node shall not be relocated immediately
         .filter(|info| !excluded.contains(&info.name()))
         .collect();
@@ -74,17 +78,19 @@ pub(super) fn find_nodes_to_relocate(
     let target_name = XorName::from_content(&churn_id.0);
     candidates.sort_by(|lhs, rhs| target_name.cmp_distance(&lhs.name(), &rhs.name()));
 
-    info!("Finding relocation candidates {candidates:?}");
+    info!("Finding Relocation candidates {candidates:?}");
 
-    let max_age = if let Some(age) = candidates.iter().map(|info| info.age()).max() {
-        age
-    } else {
-        return vec![];
-    };
+
+    // // in one pass relocate only oldest nodes
+    // let target_age = if let Some(age) = candidates.iter().map(|info| info.age()).max() {
+    //     age
+    // } else {
+    //     return vec![];
+    // };
 
     candidates
         .into_iter()
-        .filter(|peer| peer.age() == max_age)
+        // .filter(|peer| peer.age() == target_age)
         .map(|peer| {
             let dst_section = XorName::from_content_parts(&[&peer.name().0, &churn_id.0]);
             (peer, RelocationDst::new(dst_section))
@@ -93,15 +99,15 @@ pub(super) fn find_nodes_to_relocate(
         .collect()
 }
 
-// Relocation check - returns whether a member with the given age is a candidate for relocation on
-// a churn event with the given churn id.
-pub(crate) fn check(age: u8, churn_id: &ChurnId) -> bool {
+/// Relocation check - returns whether a member with the given age is a candidate for relocation on
+/// a churn event with the given churn id.
+pub(crate) fn relocation_check(age: u8, churn_id: &ChurnId) -> bool {
     // Evaluate the formula: `signature % 2^age == 0` Which is the same as checking the signature
     // has at least `age` trailing zero bits.
     trailing_zeros(&churn_id.0) >= age as u32
 }
 
-// Returns the number of trailing zero bits of the bytes slice.
+/// Returns the number of trailing zero bits of the bytes slice.
 fn trailing_zeros(bytes: &[u8]) -> u32 {
     let mut output = 0;
 
