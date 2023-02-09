@@ -282,7 +282,7 @@ impl Client {
                 response = self.get_chunk(&address).await;
             }
             response
-        }.await
+        }.await;
         // })
         // .await
         // .map_err(|_| Error::ChunkUploadValidationTimeout {
@@ -609,10 +609,12 @@ mod tests {
 
         let mut tasks = vec![];
 
+        let bytes = file.bytes();
         for client in clients {
+            let bytes = bytes.clone();
             let handle: Instrumented<tokio::task::JoinHandle<Result<()>>> =
                 tokio::spawn(async move {
-                    match client.read_bytes(address).await {
+                    match client.upload_and_verify(bytes).await {
                         Ok(_data) => {
                             debug!("client #{:?} got the data", client.public_key());
                         }
