@@ -3036,7 +3036,7 @@ dependencies = [
 [[package]]
 name = "qp2p"
 version = "0.35.1"
-source = "git+https://github.com/joshuef/qp2p.git?branch=testing-qp2p-congestions#07abfa9f5cea703131e0906463654e09e18bb050"
+source = "git+https://github.com/joshuef/qp2p.git?branch=testing-qp2p-congestions#3a1e0a885a914beea0a2cd139584c9391c0c3afa"
 dependencies = [
  "bincode",
  "bytes",

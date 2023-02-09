@@ -110,7 +110,7 @@ impl PeerSession {
 
             let conn_id = conn.id();
             trace!("Connection {conn_id} got to {peer:?} for {msg_id:?}");
-            let (mut send_stream, mut recv_stream) = match conn.open_bi().await {
+            let (mut send_stream, recv_stream) = match conn.open_bi().await {
                 Ok(bi_stream) => bi_stream,
                 Err(err) => {
                     error!("{msg_id:?} Error opening bi-stream over {conn_id}: {err:?}");
