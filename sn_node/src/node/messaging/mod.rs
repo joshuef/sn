@@ -82,7 +82,12 @@ impl MyNode {
 
         // alternatively we could flag in msg kind for this...
         // todo: this peer is actually client + forwarder ip....
-        let is_for_us = wire_msg.dst().name == context.name || msg_kind.is_client_spend();
+
+        // we've forwadedd it to ourselves as we're the holder. This prevents a loop.
+        // TODO: cut that wee loop down
+        let is_from_us = origin.addr() == context.info.addr;
+        let is_for_us =
+            is_from_us || wire_msg.dst().name == context.name || msg_kind.is_client_spend();
 
         // first check for AE, if this isn't an ae msg itself
         if !msg_kind.is_ae_msg() {
