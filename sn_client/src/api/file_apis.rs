@@ -610,7 +610,7 @@ mod tests {
         for client in clients {
             let handle: Instrumented<tokio::task::JoinHandle<Result<()>>> =
                 tokio::spawn(async move {
-                    match client.read_bytes(address).await {
+                    match client.upload_and_verify(file.bytes()).await {
                         Ok(_data) => {
                             debug!("client #{:?} got the data", client.public_key());
                         }

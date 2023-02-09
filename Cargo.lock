@@ -2317,7 +2317,6 @@ dependencies = [
 name = "log_cmds_inspector"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "clap",
  "eyre",
  "grep",
@@ -3037,7 +3036,7 @@ dependencies = [
 [[package]]
 name = "qp2p"
 version = "0.35.1"
-source = "git+https://github.com/bochaco/qp2p.git?branch=testing-qp2p-msg-ids#77ca77c7f4cd85cfcced0205ea6e0a33d5000430"
+source = "git+https://github.com/joshuef/qp2p.git?branch=testing-qp2p-congestions#07abfa9f5cea703131e0906463654e09e18bb050"
 dependencies = [
  "bincode",
  "bytes",
