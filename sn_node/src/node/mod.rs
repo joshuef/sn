@@ -71,7 +71,7 @@ mod core {
             AuthorityProof, SectionSig,
         },
         network_knowledge::{
-            supermajority, MyNodeInfo, NetworkKnowledge, NodeState, RelocationProof,
+            supermajority, MyNodeInfo, NetworkKnowledge, NodeState, RelocationState,
             SectionAuthorityProvider, SectionKeyShare, SectionKeysProvider,
         },
         types::{keys::ed25519::Digest256, log_markers::LogMarker},
@@ -112,6 +112,7 @@ mod core {
         pub(crate) elder_promotion_aggregator: SignatureAggregator,
         pub(crate) pending_split_sections:
             BTreeMap<Generation, BTreeSet<SectionSigned<SectionAuthorityProvider>>>,
+        pub(crate) relocation_state: Option<RelocationState>,
         // ======================== Elder only ========================
         pub(crate) membership: Option<Membership>,
         // Section handover consensus state (Some for Elders, None for others)
@@ -122,7 +123,6 @@ mod core {
         pub(crate) fault_cmds_sender: mpsc::Sender<FaultsCmd>,
         // Section administration
         pub(crate) section_proposal_aggregator: SignatureAggregator,
-        pub(crate) relocation_proof: Option<RelocationProof>,
     }
 
     #[derive(custom_debug::Debug, Clone)]
@@ -141,7 +141,7 @@ mod core {
         pub(crate) joins_allowed_until_split: bool,
         #[debug(skip)]
         pub(crate) fault_cmds_sender: mpsc::Sender<FaultsCmd>,
-        pub(crate) relocation_proof: Option<RelocationProof>,
+        pub(crate) relocation_state: Option<RelocationState>,
     }
 
     impl NodeContext {
@@ -206,7 +206,7 @@ mod core {
                 joins_allowed_until_split: self.joins_allowed_until_split,
                 data_storage: self.data_storage.clone(),
                 fault_cmds_sender: self.fault_cmds_sender.clone(),
-                relocation_proof: self.relocation_proof.clone(),
+                relocation_state: self.relocation_state.clone(),
             }
         }
 
@@ -269,6 +269,7 @@ mod core {
                 root_storage_dir,
                 dkg_sessions_info: HashMap::default(),
                 pending_split_sections: Default::default(),
+                relocation_state: None,
                 dkg_start_aggregator: SignatureAggregator::default(),
                 dkg_voter: DkgVoter::default(),
                 handover_voting: handover,
@@ -280,7 +281,6 @@ mod core {
                 elder_promotion_aggregator: SignatureAggregator::default(),
                 handover_request_aggregator: TotalParticipationAggregator::default(),
                 section_proposal_aggregator: SignatureAggregator::default(),
-                relocation_proof: None,
             };
 
             let context = &node.context();

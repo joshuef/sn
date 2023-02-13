@@ -8,14 +8,18 @@
 
 use crate::node::{
     flow_ctrl::cmds::Cmd,
+    messaging::Peers,
     relocation::{find_nodes_to_relocate, ChurnId},
-    MyNode, Result,
+    Error, MyNode, Result,
 };
 
 use sn_interface::{
     elder_count,
-    messaging::system::SectionSigned,
-    network_knowledge::{node_state::RelocationInfo, MembershipState, NodeState, RelocationProof},
+    messaging::system::{NodeMsg, SectionSigned},
+    network_knowledge::{
+        node_state::{RelocationInfo, RelocationTrigger},
+        MembershipState, NodeState, RelocationDst, RelocationProof, RelocationState,
+    },
     types::{keys::ed25519, log_markers::LogMarker},
 };
 
@@ -41,21 +45,74 @@ impl MyNode {
         }
 
         let mut cmds = vec![];
+
         for (node_state, relocation_dst) in
             find_nodes_to_relocate(&self.network_knowledge, &churn_id, excluded)
         {
             info!(
-                "Relocating {:?} to {} (on churn of {churn_id})",
+                "Begin relocation flow for {:?} to {relocation_dst:?} (on churn of {churn_id})",
                 node_state.peer(),
-                relocation_dst.name(),
             );
 
-            cmds.extend(self.propose_membership_change(node_state.relocate(relocation_dst)));
+            let relocation_trigger = RelocationTrigger {
+                dst: RelocationDst::new(relocation_dst),
+            };
+
+            let cmd = Cmd::send_msg(
+                NodeMsg::BeginRelocating(relocation_trigger),
+                Peers::Single(*node_state.peer()),
+                self.context(),
+            );
+            cmds.push(cmd);
         }
 
         Ok(cmds)
     }
 
+    /// On receiving the relocation trigger from the elders, the relocating node can request the section for the
+    /// relocation membership change
+    pub(crate) fn handle_begin_relocating(
+        &mut self,
+        relocation_trigger: RelocationTrigger,
+    ) -> Vec<Cmd> {
+        // store the `RelocationTrigger` to periodically request the elders
+        self.relocation_state = Some(RelocationState::RequestToRelocate(
+            relocation_trigger.clone(),
+        ));
+        info!(
+            "Sending request to relocate our node to {:?}",
+            relocation_trigger.dst
+        );
+        vec![MyNode::send_to_elders(
+            &self.context(),
+            NodeMsg::RelocationRequest {
+                relocation_node: self.info().name(),
+                relocation_trigger,
+            },
+        )]
+    }
+
+    /// The elder proposes a relocation membership change on receiving the relocation request
+    pub(crate) fn handle_relocation_request(
+        &mut self,
+        relocation_node: XorName,
+        relocation_trigger: RelocationTrigger,
+    ) -> Result<Vec<Cmd>> {
+        if !self.network_knowledge().is_adult(&relocation_node) {
+            return Err(Error::InvalidRelocationDetails);
+        }
+
+        let node_state = self
+            .network_knowledge()
+            .get_section_member(&relocation_node)
+            .ok_or(Error::InvalidRelocationDetails)?;
+
+        Ok(self
+            .propose_membership_change(node_state.relocate(relocation_trigger.dst))
+            .map_or_else(Vec::new, |cmd| vec![cmd]))
+    }
+
+    /// Join the destination section as a relocated node
     pub(crate) fn relocate(
         &mut self,
         signed_relocation: SectionSigned<NodeState>,
@@ -116,7 +173,7 @@ impl MyNode {
 
         let proof = RelocationProof::new(info, node_sig, original_info.keypair.public);
         // we cache the proof so that we can retry if the join times out
-        self.relocation_proof = Some(proof.clone());
+        self.relocation_state = Some(RelocationState::JoinAsRelocated(proof.clone()));
 
         Ok(MyNode::try_join_section(self.context(), Some(proof)))
     }
@@ -474,7 +531,7 @@ mod tests {
                         // There are 2 Membership changes here, one to relocate the
                         // node and the other one to allow the node to join as adult after
                         // being relocated
-                        else if let Cmd::HandleMembershipDecision(..) = &cmd {
+                        else if let Cmd::HandleMembershipDecision(_) = &cmd {
                             let mut send_cmds = dispatcher.process_cmd(cmd).await?;
 
                             if relocation_membership_decision_done.len() != from_section_n_elders {

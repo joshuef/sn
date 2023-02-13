@@ -23,7 +23,10 @@ pub use section_tree::test_utils as test_utils_st;
 pub use self::{
     errors::{Error, Result},
     node_info::MyNodeInfo,
-    node_state::{MembershipState, NodeState, RelocationDst, RelocationInfo, RelocationProof},
+    node_state::{
+        MembershipState, NodeState, RelocationDst, RelocationInfo, RelocationProof,
+        RelocationState, RelocationTrigger,
+    },
     section_authority_provider::{SapCandidate, SectionAuthUtils, SectionAuthorityProvider},
     section_keys::{SectionKeyShare, SectionKeysProvider},
     section_tree::{SectionTree, SectionTreeUpdate},
