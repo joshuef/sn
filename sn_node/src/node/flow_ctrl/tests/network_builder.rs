@@ -35,7 +35,6 @@ use tokio::{
 };
 use xor_name::Prefix;
 
-pub(crate) static TEST_EVENT_CHANNEL_SIZE: usize = 20;
 // The default elder age pattern
 pub(crate) const ELDER_AGE_PATTERN: &[u8] = &[50, 45, 40, 35, 30, 25, 20];
 // the Rx channel for each node

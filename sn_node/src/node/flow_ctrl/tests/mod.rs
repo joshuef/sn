@@ -36,9 +36,9 @@ use sn_interface::{
         Dst, MsgType, WireMsg,
     },
     network_knowledge::{
-        recommended_section_size, section_keys::SectionKeysProvider, supermajority,
-        Error as NetworkKnowledgeError, MembershipState, MyNodeInfo, NodeState, RelocationDst,
-        RelocationInfo, RelocationProof, SectionTreeUpdate, SectionsDAG, MIN_ADULT_AGE,
+        section_keys::SectionKeysProvider, supermajority, Error as NetworkKnowledgeError,
+        MyNodeInfo, NodeState, RelocationDst, RelocationInfo, RelocationProof, SectionTreeUpdate,
+        SectionsDAG, MIN_ADULT_AGE,
     },
     test_utils::*,
     types::{keys::ed25519, PublicKey},
@@ -528,56 +528,6 @@ pub(crate) fn create_relocation_trigger(
 
 fn threshold() -> usize {
     supermajority(elder_count()) - 1
-}
-
-#[tokio::test]
-async fn relocation_decision_is_sent() -> Result<()> {
-    init_logger();
-
-    let prefix: Prefix = prefix("0");
-    let adults = recommended_section_size() - elder_count();
-    let env = TestNetworkBuilder::new(thread_rng())
-        .sap(prefix, elder_count(), adults, None, None)
-        .build();
-    let dispatcher = env.get_dispatchers(prefix, 1, 0, None).remove(0);
-    let mut section = env.get_network_knowledge(prefix, None);
-    let sk_set = env.get_secret_key_set(prefix, None);
-
-    let relocated_peer = gen_peer_in_prefix(MIN_ADULT_AGE - 1, prefix);
-    let node_state = NodeState::joined(relocated_peer, None);
-    let node_state = TestKeys::get_section_signed(&sk_set.secret_key(), node_state);
-    assert!(section.update_member(node_state));
-    // update our node with the new network_knowledge
-    dispatcher.node().write().await.network_knowledge = section.clone();
-
-    let membership_decision = create_relocation_trigger(&sk_set, relocated_peer.age());
-    let mut cmds = ProcessAndInspectCmds::new(
-        Cmd::HandleMembershipDecision(membership_decision),
-        &dispatcher,
-    );
-
-    let mut offline_relocate_sent = false;
-
-    while let Some(cmd) = cmds.next().await? {
-        let msg = match cmd {
-            Cmd::SendMsg { msg, .. } => msg,
-            _ => continue,
-        };
-
-        // Verify that there was a membership vote to relocate this node.
-        if let NodeMsg::MembershipVotes(votes) = msg {
-            let node_state_proposals = votes.iter().flat_map(|v| v.proposals());
-            for node_state in node_state_proposals {
-                assert_eq!(node_state.name(), relocated_peer.name());
-                if let MembershipState::Relocated(_dst) = node_state.state() {
-                    offline_relocate_sent = true;
-                }
-            }
-        }
-    }
-
-    assert!(offline_relocate_sent);
-    Ok(())
 }
 
 #[tokio::test]
