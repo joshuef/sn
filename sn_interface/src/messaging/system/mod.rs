@@ -12,7 +12,9 @@ mod node_msgs;
 mod section_sig;
 
 use crate::messaging::AuthorityProof;
-use crate::network_knowledge::{NodeState, RelocationProof, SapCandidate, SectionTreeUpdate};
+use crate::network_knowledge::{
+    NodeState, RelocationProof, RelocationTrigger, SapCandidate, SectionTreeUpdate,
+};
 use crate::SectionAuthorityProvider;
 
 pub use dkg::DkgSessionId;
@@ -81,7 +83,15 @@ pub enum NodeMsg {
     /// Sends the current section key of target section which we know
     /// This expects a response, even if we're up to date.
     AntiEntropyProbe(BlsPublicKey),
-    /// Send from a section to the node to be immediately relocated.
+    /// Sent to the relocating node to begin the relocation process. The `RelocationTrigger` is used
+    /// by the relocating nodes to request the Section for the relocation membership change.
+    BeginRelocating(RelocationTrigger),
+    /// Sent by the relocating node to the Section to start the relocation membership change process.
+    RelocationRequest {
+        relocation_node: XorName,
+        relocation_trigger: RelocationTrigger,
+    },
+    /// Sent from a section to the node to be immediately relocated.
     Relocate(SectionSigned<NodeState>),
     /// Membership Votes, in order they should be processed in.
     MembershipVotes(Vec<SignedVote<NodeState>>),
@@ -178,6 +188,8 @@ impl NodeMsg {
             Self::AntiEntropy { .. } => State::AntiEntropy,
             Self::AntiEntropyProbe { .. } => State::AntiEntropy,
             Self::Relocate(_) => State::Relocate,
+            Self::BeginRelocating(_) => State::Relocate,
+            Self::RelocationRequest { .. } => State::Relocate,
             Self::MembershipAE(_) => State::Membership,
             Self::MembershipVotes(_) => State::Membership,
             Self::TryJoin(_) => State::Join,
@@ -204,6 +216,8 @@ impl Display for NodeMsg {
             Self::AntiEntropy { .. } => write!(f, "NodeMsg::AntiEntropy"),
             Self::AntiEntropyProbe { .. } => write!(f, "NodeMsg::AntiEntropyProbe"),
             Self::Relocate { .. } => write!(f, "NodeMsg::Relocate"),
+            Self::BeginRelocating { .. } => write!(f, "NodeMsg::BeginRelocating"),
+            Self::RelocationRequest { .. } => write!(f, "NodeMsg::RequestRelocation"),
             Self::MembershipVotes { .. } => write!(f, "NodeMsg::MembershipVotes"),
             Self::MembershipAE { .. } => write!(f, "NodeMsg::MembershipAE"),
             Self::TryJoin(_) => write!(f, "NodeMsg::TryJoin"),

@@ -10,7 +10,7 @@
 
 use sn_interface::{
     elder_count,
-    network_knowledge::{recommended_section_size, NetworkKnowledge, NodeState, RelocationDst},
+    network_knowledge::{recommended_section_size, NetworkKnowledge, NodeState},
 };
 use std::{
     cmp::min,
@@ -37,7 +37,7 @@ pub(super) fn find_nodes_to_relocate(
     network_knowledge: &NetworkKnowledge,
     churn_id: &ChurnId,
     excluded: BTreeSet<XorName>,
-) -> Vec<(NodeState, RelocationDst)> {
+) -> Vec<(NodeState, XorName)> {
     // Find the peers that pass the relocation check and take only the oldest ones to avoid
     // relocating too many nodes at the same time.
     // Capped by criteria that cannot relocate too many node at once.
@@ -84,7 +84,7 @@ pub(super) fn find_nodes_to_relocate(
         .filter(|peer| peer.age() == max_age)
         .map(|peer| {
             let dst_section = XorName::from_content_parts(&[&peer.name().0, &churn_id.0]);
-            (peer, RelocationDst::new(dst_section))
+            (peer, dst_section)
         })
         .take(allowed_relocations)
         .collect()
@@ -226,7 +226,7 @@ mod tests {
         for (peer, (state, dst)) in expected_relocated_peers.into_iter().zip(relocations) {
             assert_eq!(peer.name(), state.peer().name());
             let dst_section = XorName::from_content_parts(&[&peer.name().0, &churn_id.0]);
-            assert_eq!(&dst_section, dst.name());
+            assert_eq!(dst_section, dst);
         }
 
         Ok(())

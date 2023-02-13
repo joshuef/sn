@@ -13,13 +13,16 @@ use crate::node::{
     MyNode,
 };
 
-use sn_interface::{messaging::system::NodeMsg, types::log_markers::LogMarker};
+use sn_interface::{
+    messaging::system::NodeMsg, network_knowledge::RelocationState, types::log_markers::LogMarker,
+};
 
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time::Instant};
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(300);
-const RELOCATION_TIMEOUT_SECS: Duration = Duration::from_secs(60);
+const REQUEST_TO_RELOCATE_TIMEOUT_SEC: Duration = Duration::from_secs(60);
+const JOIN_AS_RELOCATED_TIMEOUT_SEC: Duration = Duration::from_secs(60);
 const MISSING_VOTE_INTERVAL: Duration = Duration::from_secs(5);
 const MISSING_DKG_MSG_INTERVAL: Duration = Duration::from_secs(5);
 // const SECTION_PROBE_INTERVAL: Duration = Duration::from_secs(300);
@@ -37,7 +40,8 @@ pub(super) struct PeriodicChecksTimestamps {
     last_vote_check: Instant,
     last_dkg_msg_check: Instant,
     last_fault_check: Instant,
-    last_relocation_retry_check: Instant,
+    request_to_relocate_check: Instant,
+    join_as_relocated_check: Instant,
 }
 
 impl PeriodicChecksTimestamps {
@@ -50,7 +54,8 @@ impl PeriodicChecksTimestamps {
             last_vote_check: Instant::now(),
             last_dkg_msg_check: Instant::now(),
             last_fault_check: Instant::now(),
-            last_relocation_retry_check: Instant::now(),
+            request_to_relocate_check: Instant::now(),
+            join_as_relocated_check: Instant::now(),
         }
     }
 
@@ -60,7 +65,8 @@ impl PeriodicChecksTimestamps {
             || self.last_probe.elapsed() > PROBE_INTERVAL
             || self.last_dkg_msg_check.elapsed() > MISSING_DKG_MSG_INTERVAL
             || self.last_fault_check.elapsed() > FAULT_CHECK_INTERVAL
-            || self.last_relocation_retry_check.elapsed() > RELOCATION_TIMEOUT_SECS
+            || self.request_to_relocate_check.elapsed() > REQUEST_TO_RELOCATE_TIMEOUT_SEC
+            || self.join_as_relocated_check.elapsed() > JOIN_AS_RELOCATED_TIMEOUT_SEC
     }
 }
 
@@ -74,7 +80,7 @@ impl FlowCtrl {
         let context = self.node.read().await.context();
 
         if !context.is_elder {
-            // self.enqueue_cmds_for_adult_periodic_checks(context).await;
+            self.enqueue_cmds_for_adult_periodic_checks(&context).await;
 
             // we've pushed what we have as an adult and processed incoming msgs
             // and cmds... so we can return already
@@ -84,22 +90,65 @@ impl FlowCtrl {
         self.enqueue_cmds_for_elder_periodic_checks(&context).await;
     }
 
-    // /// Periodic tasks run for adults only
-    // async fn enqueue_cmds_for_adult_periodic_checks(&mut self, context: &NodeContext) {
-    //     let mut cmds = vec![];
+    /// Periodic tasks run for adults only
+    async fn enqueue_cmds_for_adult_periodic_checks(&mut self, context: &NodeContext) {
+        let mut cmds = vec![];
 
-    //     // if we've passed enough time, section probe
-    //     if self.timestamps.last_section_probe.elapsed() > SECTION_PROBE_INTERVAL {
-    //         self.timestamps.last_section_probe = Instant::now();
-    //         cmds.push(Self::probe_the_section(context).await);
-    //     }
+        // check if we can request for relocation
+        // The relocation_state will be changed into `JoinAsRelocated` once the request has been
+        // approved by the section
+        if let Some(RelocationState::RequestToRelocate(trigger)) = &context.relocation_state {
+            if self.timestamps.request_to_relocate_check.elapsed() > REQUEST_TO_RELOCATE_TIMEOUT_SEC
+            {
+                info!(
+                    "Periodic check: sending request to relocate our node to {:?}",
+                    trigger.dst
+                );
+                self.timestamps.request_to_relocate_check = Instant::now();
+                cmds.push(MyNode::send_to_elders(
+                    context,
+                    NodeMsg::RelocationRequest {
+                        relocation_node: context.name,
+                        relocation_trigger: trigger.clone(),
+                    },
+                ));
+            }
+        }
 
-    //     for cmd in cmds {
-    //         if let Err(error) = self.cmd_sender_channel.send((cmd, vec![])).await {
-    //             error!("Error queuing adult periodic check: {error:?}");
-    //         }
-    //     }
-    // }
+        // check if we can join the dst section
+        if let Some(RelocationState::JoinAsRelocated(proof)) = &context.relocation_state {
+            if self.timestamps.join_as_relocated_check.elapsed() > JOIN_AS_RELOCATED_TIMEOUT_SEC {
+                self.timestamps.join_as_relocated_check = Instant::now();
+                if !context.network_knowledge.is_section_member(&context.name) {
+                    info!(
+                        "Periodic check: sending request to join the section as a relocated node"
+                    );
+                    cmds.push(MyNode::send_to_elders_await_responses(
+                        context.clone(),
+                        NodeMsg::TryJoin(Some(proof.clone())),
+                    ));
+                } else {
+                    info!("{}", LogMarker::RelocateEnd);
+                    info!("We've joined a section, dropping the relocation proof.");
+                    let mut node = self.node.write().await;
+                    trace!("[NODE WRITE]: handling relocation periodic check write gottt...");
+                    node.relocation_state = None;
+                }
+            }
+        }
+
+        // // if we've passed enough time, section probe
+        // if self.timestamps.last_section_probe.elapsed() > SECTION_PROBE_INTERVAL {
+        //     self.timestamps.last_section_probe = Instant::now();
+        //     cmds.push(Self::probe_the_section(context).await);
+        // }
+
+        for cmd in cmds {
+            if let Err(error) = self.cmd_sender_channel.send((cmd, vec![])).await {
+                error!("Error queuing adult periodic check: {error:?}");
+            }
+        }
+    }
 
     /// Periodic tasks run for elders only
     async fn enqueue_cmds_for_elder_periodic_checks(&mut self, context: &NodeContext) {
@@ -162,25 +211,6 @@ impl FlowCtrl {
         if self.timestamps.last_fault_check.elapsed() > FAULT_CHECK_INTERVAL {
             self.timestamps.last_fault_check = now;
             cmds.extend(self.vote_out_faulty_nodes().await);
-        }
-
-        // This check keeps relocation retrying if it times out.
-        if let Some(proof) = &context.relocation_proof {
-            if !context.network_knowledge.is_section_member(&context.name) {
-                if self.timestamps.last_relocation_retry_check.elapsed() > RELOCATION_TIMEOUT_SECS {
-                    self.timestamps.last_relocation_retry_check = Instant::now();
-                    cmds.push(MyNode::send_to_elders_await_responses(
-                        context.clone(),
-                        NodeMsg::TryJoin(Some(proof.clone())),
-                    ));
-                }
-            } else {
-                info!("{}", LogMarker::RelocateEnd);
-                info!("We've joined a section, dropping the relocation proof.");
-                let mut node = self.node.write().await;
-                trace!("[NODE WRITE]: handling relocation periodic check write gottt...");
-                node.relocation_proof = None;
-            }
         }
 
         for cmd in cmds {
