@@ -417,6 +417,10 @@ impl NetworkKnowledge {
                 // we already know of this one, so nothing to do here.
                 continue;
             }
+            else{
+                // we'llm be remocing this member in the `retain` call below
+                there_was_an_update = true;
+            }
             trace!(
                 "Attempting to update section members. Name: {:?}, new state: {:?}",
                 node_state.name(),

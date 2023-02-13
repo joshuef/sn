@@ -276,7 +276,7 @@ impl MyNode {
             }
             NodeMsg::MembershipVotes(votes) => {
                 let mut node = node.write().await;
-                trace!("[NODE WRITE]: MembershipVotes write gottt...");
+                trace!("[NODE WRITE]: MembershipVotes write.");
                 let mut cmds = vec![];
                 cmds.extend(node.handle_membership_votes(sender, votes)?);
                 Ok(cmds)

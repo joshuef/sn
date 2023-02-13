@@ -63,9 +63,13 @@ pub(super) fn find_nodes_to_relocate(
     // let allowed_relocations = min(section_size - recommended_section_size(), max_relocations);
     debug!("Allowed_relocations: {allowed_relocations:?}");
 
+    let known_members = network_knowledge
+    .section_members();
+
+    debug!("Known members for relocation calcs: {:?}", known_members.len());
+
     // Find the peers that pass the relocation check
-    let mut candidates: Vec<_> = network_knowledge
-        .section_members()
+    let mut candidates: Vec<_> =known_members
         .into_iter()
         // only adults get relocated
         // .filter(|state| network_knowledge.is_adult(&state.name()))

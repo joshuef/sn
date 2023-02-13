@@ -147,7 +147,6 @@ impl FlowCtrl {
             trace!("vote periodics start");
             for cmd in self
                 .check_for_missed_votes(context, &read_locked_node.membership)
-                .await
             {
                 cmds.push(cmd);
             }
@@ -158,7 +157,7 @@ impl FlowCtrl {
             trace!("dkg msg periodics start");
             self.timestamps.last_dkg_msg_check = now;
             Self::check_for_missed_dkg_messages(self.node.clone(), self.cmd_sender_channel.clone())
-                .await;
+                .await;`
             trace!("dkg msg periodics done");
         }
 
@@ -318,7 +317,6 @@ impl FlowCtrl {
 
         // DKG checks can be long running, move off thread to unblock the main loop
         let _handle = tokio::task::spawn(async move {
-            trace!("[NODE READ]: dkg msg lock attempt");
             let node = node.read().await;
             trace!("[NODE READ]: dkg msg lock got");
 
