@@ -403,6 +403,7 @@ impl Membership {
         } else {
             // if this is our ongoing round, lets log the vote
             if is_ongoing_consensus && is_fresh_vote {
+                debug!("Setting last received membership vote now...");
                 self.last_received_vote_time = Some(Instant::now());
             }
 
@@ -420,6 +421,7 @@ impl Membership {
         &mut self,
         signed_vote: SignedVote<NodeState>,
     ) -> Result<SignedVote<NodeState>> {
+        debug!("Casting vote... setting last received vote time");
         self.last_received_vote_time = Some(Instant::now());
         Ok(self.consensus.cast_vote(signed_vote)?)
     }

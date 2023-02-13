@@ -157,7 +157,7 @@ impl FlowCtrl {
             trace!("dkg msg periodics start");
             self.timestamps.last_dkg_msg_check = now;
             Self::check_for_missed_dkg_messages(self.node.clone(), self.cmd_sender_channel.clone())
-                .await;`
+                .await;
             trace!("dkg msg periodics done");
         }
 
