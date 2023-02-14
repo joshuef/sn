@@ -416,8 +416,7 @@ impl NetworkKnowledge {
             if our_current_members.contains(node_state) {
                 // we already know of this one, so nothing to do here.
                 continue;
-            }
-            else{
+            } else {
                 // we'llm be remocing this member in the `retain` call below
                 there_was_an_update = true;
             }

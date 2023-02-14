@@ -76,9 +76,6 @@ pub enum Error {
     NodeNotReachable(SocketAddr),
     #[error("A node has invalid relocation details")]
     InvalidRelocationDetails,
-    /// Timeout when trying to join the network
-    #[error("Timeout when trying to join the network")]
-    JoinTimeout,
     /// Need to re-join the network
     #[error("Node needs to rejoin the network due to {0:?}")]
     RejoinRequired(RejoinReason),

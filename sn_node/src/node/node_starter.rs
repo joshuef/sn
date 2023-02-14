@@ -185,8 +185,8 @@ async fn bootstrap_node(
             .send((Cmd::TryJoinNetwork, vec![]))
             .await
             .map_err(|e| {
-                error!("Failed join: {:?}", e);
-                Error::JoinTimeout
+                error!("Failed to send join try cmd on channel: {:?}", e);
+                Error::CmdChannelSendError
             })?;
 
         // await for join retry time

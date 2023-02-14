@@ -56,20 +56,30 @@ pub(super) fn find_nodes_to_relocate(
         return vec![];
     }
 
-    let max_relocations = if is_startup_joining_allowed { elder_count() } else { elder_count() / 2 };
+    let max_relocations = if is_startup_joining_allowed {
+        elder_count()
+    } else {
+        elder_count() / 2
+    };
 
     debug!("Max relocations: {max_relocations:?}");
-    let allowed_relocations = if is_startup_joining_allowed { elder_count() } else { min(section_size - recommended_section_size(), max_relocations)};
+    let allowed_relocations = if is_startup_joining_allowed {
+        elder_count()
+    } else {
+        min(section_size - recommended_section_size(), max_relocations)
+    };
     // let allowed_relocations = min(section_size - recommended_section_size(), max_relocations);
     debug!("Allowed_relocations: {allowed_relocations:?}");
 
-    let known_members = network_knowledge
-    .section_members();
+    let known_members = network_knowledge.section_members();
 
-    debug!("Known members for relocation calcs: {:?}", known_members.len());
+    debug!(
+        "Known members for relocation calcs: {:?}",
+        known_members.len()
+    );
 
     // Find the peers that pass the relocation check
-    let mut candidates: Vec<_> =known_members
+    let mut candidates: Vec<_> = known_members
         .into_iter()
         // only adults get relocated
         // .filter(|state| network_knowledge.is_adult(&state.name()))
@@ -83,7 +93,6 @@ pub(super) fn find_nodes_to_relocate(
     candidates.sort_by(|lhs, rhs| target_name.cmp_distance(&lhs.name(), &rhs.name()));
 
     info!("Finding Relocation candidates {candidates:?}");
-
 
     // // in one pass relocate only oldest nodes
     // let target_age = if let Some(age) = candidates.iter().map(|info| info.age()).max() {

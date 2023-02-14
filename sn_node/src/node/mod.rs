@@ -37,7 +37,7 @@ pub use self::{
 use self::{core::MyNode, flow_ctrl::cmds::Cmd, node_starter::CmdChannel};
 pub use crate::storage::DataStorage;
 #[cfg(test)]
-pub(crate) use relocation::{relocation_check as relocation_check, ChurnId};
+pub(crate) use relocation::{relocation_check, ChurnId};
 
 pub use sn_interface::network_knowledge::MIN_ADULT_AGE;
 use sn_interface::{

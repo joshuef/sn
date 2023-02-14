@@ -40,8 +40,7 @@ use tokio::runtime::Runtime;
 use tokio::time::Duration;
 use tracing::{self, error, info, warn};
 
-const JOIN_TIMEOUT_SEC: u64 = 5;
-const JOIN_TIMEOUT_RETRY_TIME_SEC: u64 = 15;
+const JOIN_RETRY_TIME_SEC: u64 = 5;
 const JOIN_DISALLOWED_RETRY_TIME_SEC: u64 = 60;
 
 mod log;
@@ -102,7 +101,7 @@ fn create_runtime_and_node(config: &Config) -> Result<()> {
     }
 
     let our_pid = std::process::id();
-    let join_timeout = Duration::from_secs(JOIN_TIMEOUT_SEC);
+    let join_timeout = Duration::from_secs(JOIN_RETRY_TIME_SEC);
     let mut join_retry_sec = JOIN_DISALLOWED_RETRY_TIME_SEC;
     let log_path = if let Some(path) = config.log_dir() {
         format!("{}", path.display())
@@ -115,7 +114,7 @@ fn create_runtime_and_node(config: &Config) -> Result<()> {
         let rt = Runtime::new()?;
 
         let message = format!(
-            "Running {} v{}",
+            "Running {} v{}. PID: {our_pid}",
             Config::clap().get_name(),
             env!("CARGO_PKG_VERSION")
         );
@@ -198,11 +197,6 @@ fn create_runtime_and_node(config: &Config) -> Result<()> {
                         }
                     }
                 }
-            }
-            Err(NodeError::JoinTimeout) => {
-                let message = format!("(PID: {our_pid}): Failed to join the network in {JOIN_TIMEOUT_SEC}. Retrying after {JOIN_TIMEOUT_RETRY_TIME_SEC} seconds.");
-                println!("{message} Node log path: {log_path}");
-                error!("{message}");
             }
             Err(error) => {
                 let err = Err(error)

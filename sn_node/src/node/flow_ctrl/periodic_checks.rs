@@ -145,9 +145,7 @@ impl FlowCtrl {
             let read_locked_node = self.node.read().await;
 
             trace!("vote periodics start");
-            for cmd in self
-                .check_for_missed_votes(context, &read_locked_node.membership)
-            {
+            for cmd in self.check_for_missed_votes(context, &read_locked_node.membership) {
                 cmds.push(cmd);
             }
             trace!("vote periodics done");
