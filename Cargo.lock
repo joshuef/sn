@@ -3111,8 +3111,7 @@ dependencies = [
 [[package]]
 name = "qp2p"
 version = "0.35.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25510a11509057d70cc23ac70f78bcea7bc5ec47dfa284c554d199273d9e2ac3"
+source = "git+https://github.com/joshuef/qp2p.git?branch=LimitViaChannel#77d1aa92b8ec7153f16ed294cc4ef679ab7dae05"
 dependencies = [
  "bincode",
  "bytes",

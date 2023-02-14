@@ -18,7 +18,7 @@ test = []
 custom_debug = "~0.5.0"
 dashmap = {version = "5.1.0", features = [ "serde" ]}
 futures = "~0.3.13"
-qp2p = "~0.35.0"
+qp2p = { git = "https://github.com/joshuef/qp2p.git", branch = "LimitViaChannel" }
 sn_interface = { path = "../sn_interface", version = "^0.17.9" }
 thiserror = "1.0.23"
 tokio = { version = "1.0.23", features = [ "sync" ] }

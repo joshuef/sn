@@ -62,7 +62,7 @@ itertools = "~0.10.0"
 lazy_static = "1"
 multibase = "~0.9.1"
 num_cpus = "1.13.0"
-qp2p = "~0.35.0"
+qp2p = { git = "https://github.com/joshuef/qp2p.git", branch = "LimitViaChannel" }
 rand = "~0.8.5"
 rayon = "1.5.1"
 rmp-serde = "1.0.0"
