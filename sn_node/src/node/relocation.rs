@@ -82,7 +82,7 @@ pub(super) fn find_nodes_to_relocate(
     let mut candidates: Vec<_> = known_members
         .into_iter()
         // only adults get relocated
-        // .filter(|state| network_knowledge.is_adult(&state.name()))
+        .filter(|state| network_knowledge.is_adult(&state.name()))
         .filter(|info| relocation_check(info.age(), churn_id))
         // the newly joined node shall not be relocated immediately
         .filter(|info| !excluded.contains(&info.name()))
