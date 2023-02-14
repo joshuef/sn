@@ -269,7 +269,8 @@ impl Client {
         // `read_bytes` could return earlier than query_timeout
         // with `DataNotFound` eg, but this could just mean that the data has not yet
         // reached adults...and so, we retry once but within the timeout limit set
-        let _chunk = tokio::time::timeout(self.query_timeout, async {
+        let _chunk = //tokio::time::timeout(self.query_timeout,
+            async {
             let mut response = self.get_chunk(&address).await;
             if response.is_err() {
                 error!(
@@ -281,12 +282,13 @@ impl Client {
                 response = self.get_chunk(&address).await;
             }
             response
-        })
-        .await
-        .map_err(|_| Error::ChunkUploadValidationTimeout {
-            elapsed: self.query_timeout,
-            address,
-        })??;
+        }.await
+        // })
+        // .await
+        // .map_err(|_| Error::ChunkUploadValidationTimeout {
+        //     elapsed: self.query_timeout,
+        //     address,
+        // })??;
 
         Ok(())
     }

@@ -42,16 +42,16 @@ impl Client {
             signature,
         };
 
-        tokio::time::timeout(self.cmd_timeout, async {
+        // tokio::time::timeout(self.cmd_timeout, async {
             self.session
                 .send_cmd(dst_address, auth, serialised_cmd, is_spend_cmd)
-                .await
-        })
-        .await
-        .map_err(|_| Error::CmdAckValidationTimeout {
-            elapsed: self.cmd_timeout,
-            dst_address,
-        })?
+                .await?
+        // })
+        // .await
+        // .map_err(|_| Error::CmdAckValidationTimeout {
+        //     elapsed: self.cmd_timeout,
+        //     dst_address,
+        // })?
     }
 
     /// Public API to send a `DataCmd` to the network.

@@ -45,7 +45,7 @@ impl Session {
     pub(crate) fn new(local_addr: SocketAddr, network_contacts: SectionTree) -> Result<Self> {
         let endpoint = Endpoint::builder()
             .addr(local_addr)
-            .idle_timeout(70_000)
+            // .idle_timeout(70_000)
             .client()?;
         let peer_links = PeerLinks::new(endpoint.clone());
 

@@ -112,7 +112,7 @@ impl<'a> ProcessAndInspectCmds<'a> {
         let client_addr: SocketAddr = (Ipv4Addr::LOCALHOST, 0).into();
         let client_endpoint = Endpoint::builder()
             .addr(client_addr)
-            .idle_timeout(70_000)
+            // .idle_timeout(70_000)
             .client()
             .expect("failed to create new client endpoint");
 
