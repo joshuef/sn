@@ -54,7 +54,8 @@ pub(super) fn find_nodes_to_relocate(
     }
 
     let max_reloctions = elder_count() / 2;
-    let allowed_relocations = min(section_size - recommended_section_size(), max_reloctions);
+    // let allowed_relocations = min(section_size - recommended_section_size(), max_reloctions);
+    let allowed_relocations = 1;
 
     // Find the peers that pass the relocation check
     let mut candidates: Vec<_> = network_knowledge
