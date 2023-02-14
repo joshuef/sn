@@ -40,7 +40,7 @@ use tokio::runtime::Runtime;
 use tokio::time::Duration;
 use tracing::{self, error, info, warn};
 
-const JOIN_RETRY_TIME_SEC: u64 = 5;
+const JOIN_RETRY_TIME_SEC: u64 = 25;
 const JOIN_DISALLOWED_RETRY_TIME_SEC: u64 = 60;
 
 mod log;
