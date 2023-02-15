@@ -3111,7 +3111,7 @@ dependencies = [
 [[package]]
 name = "qp2p"
 version = "0.35.1"
-source = "git+https://github.com/joshuef/qp2p.git?branch=LimitViaChannel#d6196ed0f8873e7823d82c5e73c8234c766ee6dd"
+source = "git+https://github.com/joshuef/qp2p.git?branch=LimitViaChannel#1ecec3c793d083a41504cbec38efc888d36d70f6"
 dependencies = [
  "bincode",
  "bytes",

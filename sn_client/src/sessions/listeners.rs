@@ -35,18 +35,20 @@ struct MsgResent {
 impl Session {
     #[instrument(skip_all, level = "debug")]
     async fn read_resp_from_recvstream(
-        recv_stream: &mut RecvStream,
+        recv_stream: RecvStream,
         peer: Peer,
         correlation_id: MsgId,
     ) -> Result<(MsgId, ClientDataResponse), Error> {
+        let stream_id = recv_stream.id();
         let bytes = recv_stream.read().await?;
+
         match WireMsg::deserialize(bytes)? {
             MsgType::ClientDataResponse { msg_id, msg } => Ok((msg_id, msg)),
             msg => {
                 warn!(
                     "Unexpected msg type received on {} from {peer:?} in response \
                     to {correlation_id:?}: {msg:?}",
-                    recv_stream.id()
+                    stream_id
                 );
                 Err(Error::UnexpectedMsgType {
                     correlation_id,
@@ -75,6 +77,8 @@ impl Session {
         // Unless we receive AntiEntropy responses, which require re-sending the
         // message, the first msg received is the response we expect and return
         let mut attempt = 0;
+        let stream_id = recv_stream.id();
+
         let result = loop {
             let addr = peer.addr();
             if attempt > MAX_AE_RETRIES_TO_ATTEMPT {
@@ -90,7 +94,7 @@ impl Session {
             let stream_id = recv_stream.id();
             debug!("Waiting for response msg on {stream_id} from {peer:?} @ index: {peer_index} for {correlation_id:?}, attempt #{attempt}");
             let (msg_id, resp_msg) =
-                match Self::read_resp_from_recvstream(&mut recv_stream, peer, correlation_id).await
+                match Self::read_resp_from_recvstream(recv_stream, peer, correlation_id).await
                 {
                     Ok(resp_info) => resp_info,
                     Err(err) => break MsgResponse::Failure(addr, err),
@@ -170,7 +174,7 @@ impl Session {
             "{} of correlation {correlation_id:?} to {}, on {}, with {result:?}",
             LogMarker::ReceiveCompleted,
             peer.addr(),
-            recv_stream.id()
+            stream_id
         );
         result
     }
