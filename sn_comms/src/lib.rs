@@ -118,7 +118,9 @@ impl Comm {
     pub fn new(local_addr: SocketAddr) -> Result<(Self, Receiver<CommEvent>)> {
         let (our_endpoint, incoming_conns) = Endpoint::builder()
             .addr(local_addr)
-            .idle_timeout(70_000)
+            .max_concurrent_bidi_streams(1)
+            .max_concurrent_uni_streams(1)
+            // .idle_timeout(70_000)
             .server()?;
 
         trace!("Creating comms..");

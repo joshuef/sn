@@ -3111,7 +3111,7 @@ dependencies = [
 [[package]]
 name = "qp2p"
 version = "0.35.1"
-source = "git+https://github.com/joshuef/qp2p.git?branch=LimitViaChannel#2a815677025041f03f73aa16e151818588259b34"
+source = "git+https://github.com/joshuef/qp2p.git?branch=LimitViaChannel#d6196ed0f8873e7823d82c5e73c8234c766ee6dd"
 dependencies = [
  "bincode",
  "bytes",
@@ -4092,9 +4092,9 @@ dependencies = [
 
 [[package]]
 name = "sn_consensus"
-version = "3.2.0"
+version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f75f9ffd40647b41172877cba296946eeb43ba76f4b588988b57f816ec1c60b"
+checksum = "8330204fc45a089bc7ad97d2f73be652ef9be0c9da2b2f64848dd61f7c525abe"
 dependencies = [
  "bincode",
  "blsttc",
