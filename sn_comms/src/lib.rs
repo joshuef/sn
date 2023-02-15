@@ -369,7 +369,7 @@ fn send_and_return_response(
         };
         match WireMsg::from(node_response_bytes) {
             Ok(wire_msg) => {
-                listener::msg_received(wire_msg, peer, None, comm_events.clone());
+                listener::msg_received(wire_msg, peer, None, comm_events.clone()).await;
             }
             Err(error) => {
                 error!("Failed sending {msg_id:?} to {peer:?}: {error:?}");

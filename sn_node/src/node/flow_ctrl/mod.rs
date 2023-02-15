@@ -87,7 +87,7 @@ impl FlowCtrl {
         let node_context = cmd_ctrl.node().read().await.context();
         // reduce to 1 for backpressure here...
         let (cmd_sender_channel, mut incoming_cmds_from_apis) =
-            mpsc::channel(STANDARD_CHANNEL_SIZE);
+            mpsc::channel(1);
         let (rejoin_network_tx, rejoin_network_rx) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let node_identifier = node_context.info.name();

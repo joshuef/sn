@@ -50,7 +50,7 @@ pub(crate) async fn listen_for_msgs(
 
     while let Some(result) = incoming_msgs.next_with_stream().await.transpose() {
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        // tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
         match result {
             Ok((msg_bytes, send_stream)) => {
