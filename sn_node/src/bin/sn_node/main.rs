@@ -67,7 +67,7 @@ fn main() -> Result<()> {
 
         // Create a background thread which checks for deadlocks every 3s
         let _handle = thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(3));
+            thread::sleep(Duration::from_millis(500));
             let deadlocks = deadlock::check_deadlock();
             if deadlocks.is_empty() {
                 continue;

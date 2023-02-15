@@ -125,8 +125,8 @@ impl Comm {
 
         trace!("Creating comms..");
         // comm_events_receiver will be used by upper layer to receive all msgs coming in from the network
-        let (comm_events_sender, comm_events_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
-        let (cmd_sender, cmd_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
+        let (comm_events_sender, comm_events_receiver) = mpsc::channel(1);
+        let (cmd_sender, cmd_receiver) = mpsc::channel(1);
 
         // listen for msgs/connections to our endpoint
         listener::listen_for_connections(comm_events_sender.clone(), incoming_conns);

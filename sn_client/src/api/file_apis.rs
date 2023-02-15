@@ -595,11 +595,9 @@ mod tests {
 
         let uploader = create_test_client().await?;
         // create file with random bytes 5mb
-        let bytes = random_bytes(5 * 1024 * 1024);
-        let file = LargeFile::new(bytes)?;
 
         // Store file (also verifies that the chunks are stored)
-        let address = uploader.upload_and_verify(file.bytes()).await?;
+        // let address = uploader.upload_and_verify(file.bytes()).await?;
 
         debug!("======> Data uploaded");
 
@@ -609,9 +607,10 @@ mod tests {
 
         let mut tasks = vec![];
 
-        let bytes = file.bytes();
         for client in clients {
-            let bytes = bytes.clone();
+            let bytes = random_bytes(5 * 1024 * 1024);
+            let file = LargeFile::new(bytes)?;
+            let bytes = file.bytes();
             let handle: Instrumented<tokio::task::JoinHandle<Result<()>>> =
                 tokio::spawn(async move {
                     match client.upload_and_verify(bytes).await {
