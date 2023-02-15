@@ -80,7 +80,7 @@ pub(crate) async fn listen_for_msgs(
                     "Msg {msg_id:?} received, over conn_id={conn_id}, from: {peer:?}{stream_info} was: {wire_msg:?}"
                 );
 
-                msg_received(wire_msg, peer, send_stream, comm_events.clone());
+                msg_received(wire_msg, peer, send_stream, comm_events.clone()).await;
             }
             Err(error) => {
                 warn!("Error on connection {conn_id} with {remote_address}: {error:?}");
@@ -91,7 +91,7 @@ pub(crate) async fn listen_for_msgs(
     trace!(%conn_id, %remote_address, "{}", LogMarker::ConnectionClosed);
 }
 
-pub(crate) fn msg_received(
+pub(crate) async fn msg_received(
     wire_msg: WireMsg,
     peer: Peer,
     send_stream: Option<qp2p::SendStream>,
@@ -104,10 +104,10 @@ pub(crate) fn msg_received(
         send_stream,
     });
     // move this channel sending off thread so we don't hold up incoming msgs at all.
-    let _handle = tokio::spawn(async move {
+    // let _handle = tokio::spawn(async move {
         // handle the message first
         if let Err(error) = comm_events.send(msg_event).await {
             error!("Error pushing msg {msg_id:?} onto internal msg handling channel: {error:?}");
         }
-    });
+    // });
 }
