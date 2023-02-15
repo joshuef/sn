@@ -131,7 +131,31 @@ impl FlowCtrl {
         let _handle = tokio::task::spawn(async move {
             // Get a stable identifier for statemap naming. This is NOT the node's current name.
             // It's the initial name... but will not change for the entire statemap
+            // let mut sys = System::new();
             while let Some((cmd, cmd_id)) = incoming_cmds_from_apis.recv().await {
+
+                // check CPU. Wait.
+
+                // use sysinfo::{ CpuExt, RefreshKind, System, SystemExt};
+
+                // sys.refresh_cpu(); // Refreshing CPU information.
+                // for cpu in sys.cpus() {
+                //     trace!("{}% ", cpu.cpu_usage());
+                // }
+                // use rand::rngs::OsRng;
+                // // let mut rng = rand::thread_rng();
+                // let x: f64 = OsRng.gen_range(0.0..1.0);
+
+                // if x > 0.6 {
+                //     trace!(
+                //        "\n FAKE CPU LOAD \n",
+                //    );
+
+                    // tiny sleep so testnet doesn't detect a faulty node and exit
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                // }
+
+
                 cmd_ctrl
                     .process_cmd_job(
                         cmd,

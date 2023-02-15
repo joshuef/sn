@@ -120,6 +120,7 @@ impl MyNode {
             }
         }
 
+
         // Deserialize the payload of the incoming message
         let msg_type = match wire_msg.into_msg() {
             Ok(msg_type) => msg_type,
