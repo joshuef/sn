@@ -49,6 +49,9 @@ pub(crate) async fn listen_for_msgs(
     let remote_address = conn.remote_address();
 
     while let Some(result) = incoming_msgs.next_with_stream().await.transpose() {
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
         match result {
             Ok((msg_bytes, send_stream)) => {
                 let stream_info = if let Some(stream) = &send_stream {

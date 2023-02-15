@@ -87,7 +87,7 @@ impl FlowCtrl {
         let node_context = cmd_ctrl.node().read().await.context();
         // reduce to 1 for backpressure here...
         let (cmd_sender_channel, mut incoming_cmds_from_apis) =
-            mpsc::channel(1);
+            mpsc::channel(STANDARD_CHANNEL_SIZE);
         let (rejoin_network_tx, rejoin_network_rx) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let node_identifier = node_context.info.name();
@@ -152,7 +152,7 @@ impl FlowCtrl {
                 //    );
 
                     // tiny sleep so testnet doesn't detect a faulty node and exit
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    // tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
                 // }
 
 
