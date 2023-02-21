@@ -57,7 +57,7 @@ impl MyNode {
     pub(crate) fn send_to_elders(context: &NodeContext, msg: NodeMsg) -> Cmd {
         let sap = context.network_knowledge.section_auth();
         let recipients = sap.elders_set();
-        Cmd::send_msg(msg, Peers::Multiple(recipients), context.clone())
+        Cmd::send_msg(msg, Peers::Multiple(recipients))
     }
 
     /// Send a (`NodeMsg`) message to all Elders in our section, await all responses & enqueue
@@ -68,7 +68,6 @@ impl MyNode {
             msg,
             msg_id: MsgId::new(),
             recipients,
-            context,
         }
     }
 
@@ -140,7 +139,6 @@ impl MyNode {
             correlation_id,
             source_client,
             send_stream,
-            context.clone(),
         ));
 
         Ok(cmds)
@@ -259,21 +257,18 @@ impl MyNode {
                 Ok(cmds)
             }
             NodeMsg::MembershipAE(gen) => {
-                let (node_context, membership_context) = {
+                let membership_context = {
                     trace!("[NODE READ]: membership ae read ");
                     let membership = node.read().await.membership.clone();
                     trace!("[NODE READ]: membership ae read got");
-                    (context, membership)
+                    membership
                 };
 
-                Ok(MyNode::handle_membership_anti_entropy(
-                    membership_context,
-                    node_context,
-                    sender,
-                    gen,
+                Ok(
+                    MyNode::handle_membership_anti_entropy(membership_context, sender, gen)
+                        .into_iter()
+                        .collect(),
                 )
-                .into_iter()
-                .collect())
             }
             NodeMsg::ProposeNodeOff {
                 vote_node_off: proposal,

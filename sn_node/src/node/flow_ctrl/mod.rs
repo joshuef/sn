@@ -116,7 +116,6 @@ impl FlowCtrl {
             }
         };
 
-        let node_arc_for_replication = node.clone();
         let node_arc_for_processing = node.clone();
 
         let flow_ctrl = Self {
@@ -152,7 +151,6 @@ impl FlowCtrl {
         });
 
         Self::send_out_data_for_replication(
-            node_arc_for_replication,
             node_context.data_storage,
             data_replication_receiver,
             cmd_sender_channel.clone(),
@@ -166,7 +164,6 @@ impl FlowCtrl {
 
     /// Listens on data_replication_receiver on a new thread, sorts and batches data, generating SendMsg Cmds
     async fn send_out_data_for_replication(
-        node_arc: Arc<RwLock<MyNode>>,
         node_data_storage: DataStorage,
         mut data_replication_receiver: Receiver<(Vec<DataAddress>, Peer)>,
         cmd_channel: Sender<(Cmd, Vec<usize>)>,
@@ -177,7 +174,6 @@ impl FlowCtrl {
             // is any overhead reduction worth the increased complexity?
             while let Some((data_addresses, peer)) = data_replication_receiver.recv().await {
                 let send_cmd_channel = cmd_channel.clone();
-                let the_node = node_arc.clone();
                 let data_storage = node_data_storage.clone();
                 // move replication off thread so we don't block the receiver
                 let _handle = tokio::task::spawn(async move {
@@ -203,9 +199,7 @@ impl FlowCtrl {
                     trace!("Sending out data batch to {peer:?}");
                     let msg = NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateDataBatch(data_bundle));
 
-                    let node_context = the_node.read().await.context();
-
-                    let cmd = Cmd::send_msg(msg, Peers::Single(peer), node_context.clone());
+                    let cmd = Cmd::send_msg(msg, Peers::Single(peer));
                     if let Err(error) = send_cmd_channel.send((cmd, vec![])).await {
                         error!("Failed to enqueue send msg command for replication of data batch to {peer:?}: {error:?}");
                     }

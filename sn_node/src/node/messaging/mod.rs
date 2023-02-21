@@ -96,7 +96,6 @@ impl MyNode {
             if let Some((update, ae_kind)) = entropy {
                 debug!("bailing early, AE found for {msg_id:?}");
                 return MyNode::generate_anti_entropy_cmds(
-                    &context,
                     &wire_msg,
                     origin,
                     update,

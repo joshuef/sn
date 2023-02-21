@@ -57,7 +57,6 @@ impl MyNode {
             let cmd = Cmd::send_msg(
                 NodeMsg::PrepareToRelocate(RelocationDst::new(relocation_dst)),
                 Peers::Single(*node_state.peer()),
-                self.context(),
             );
             cmds.push(cmd);
         }
