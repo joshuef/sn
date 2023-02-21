@@ -58,6 +58,28 @@ pub(crate) enum Cmd {
         wire_msg: WireMsg,
         send_stream: Option<SendStream>,
     },
+    /// Process a deserialised node msg (after AE checks etc)
+    ProcessNodeMsg {
+        msg_id: MsgId,
+        msg: NodeMsg,
+        origin: Peer,
+        send_stream: Option<SendStream>,
+    },
+    /// Process a deserialised client msg (after AE checks etc)
+    ProcessClientMsg {
+        msg_id: MsgId,
+        msg: ClientMsg,
+        auth: AuthorityProof<ClientAuth>,
+        origin: Peer,
+        send_stream: Option<SendStream>,
+    },
+    /// Process a deserialised AntiEntropy msg
+    ProcessAeMsg {
+        msg_id: MsgId,
+        kind: AntiEntropyKind,
+        section_tree_update: SectionTreeUpdate,
+        origin: Peer,
+    },
     /// Allows joining of new nodes.
     SetJoinsAllowed(bool),
     /// Allows joining of new nodes until the section splits.
@@ -271,6 +293,9 @@ impl Cmd {
             | Cmd::SendAndForwardResponseToClient { .. }
             | Cmd::HandleCommsError { .. } => State::Comms,
             Cmd::HandleMsg { .. } => State::HandleMsg,
+            Cmd::ProcessNodeMsg { .. } => State::HandleMsg,
+            Cmd::ProcessClientMsg { .. } => State::HandleMsg,
+            Cmd::ProcessAeMsg { .. } => State::HandleMsg,
             Cmd::UpdateNetworkAndHandleValidClientMsg { .. } => State::ClientMsg,
             Cmd::TrackNodeIssue { .. } => State::FaultDetection,
             Cmd::HandleNodeOffAgreement { .. } => State::Agreement,
@@ -292,6 +317,15 @@ impl fmt::Display for Cmd {
         match self {
             Cmd::HandleMsg { wire_msg, .. } => {
                 write!(f, "HandleMsg {:?}", wire_msg.msg_id())
+            }
+            Cmd::ProcessNodeMsg { msg_id, .. } => {
+                write!(f, "ProcessNodeMsg {:?}", msg_id)
+            }
+            Cmd::ProcessClientMsg { msg_id, .. } => {
+                write!(f, "ProcessClientMsg {:?}", msg_id)
+            }
+            Cmd::ProcessAeMsg { msg_id, .. } => {
+                write!(f, "ProcessAeMsg {:?}", msg_id)
             }
             Cmd::UpdateNetworkAndHandleValidClientMsg { msg_id, msg, .. } => {
                 write!(f, "UpdateAndHandleValidClientMsg {msg_id:?}: {msg:?}")
