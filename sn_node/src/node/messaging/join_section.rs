@@ -16,7 +16,9 @@ impl MyNode {
         context: NodeContext,
         relocation: Option<RelocationProof>,
     ) -> Option<Cmd> {
+        debug!("tyring to join...");
         if context.network_knowledge.is_section_member(&context.name) {
+            debug!("tyring to join...WE JOINED?!");
             None
         } else {
             Some(MyNode::send_to_elders_await_responses(
@@ -101,11 +103,10 @@ mod tests {
         let elder_peer = elder.info().peer();
 
         let elder_context = elder.context();
-        let elder = Arc::new(RwLock::new(elder));
 
         let joiner_peer = joining_node.info().peer();
         let some_cmd =
-            MyNode::handle_join(elder, &elder_context, joiner_peer, MsgId::new(), None, None)
+            MyNode::handle_join(&mut elder, &elder_context, joiner_peer, MsgId::new(), None, None)
                 .await
                 .expect("An error was not expected.");
 
@@ -165,10 +166,9 @@ mod tests {
         assert!(adult.is_not_elder());
 
         let adult_context = adult.context();
-        let adult = Arc::new(RwLock::new(adult));
 
         let joiner_peer = joining_node.info().peer();
-        let cmd = MyNode::handle_join(adult, &adult_context, joiner_peer, MsgId::new(), None, None)
+        let cmd = MyNode::handle_join(&mut adult, &adult_context, joiner_peer, MsgId::new(), None, None)
             .await
             .expect("An error was not expected.");
 
@@ -202,10 +202,9 @@ mod tests {
         let elder = nodes.pop().expect("One elder should exist.");
 
         let elder_context = elder.context();
-        let elder = Arc::new(RwLock::new(elder));
 
         let joiner_peer = joining_node.info().peer();
-        let cmd = MyNode::handle_join(elder, &elder_context, joiner_peer, MsgId::new(), None, None)
+        let cmd = MyNode::handle_join(&mut elder, &elder_context, joiner_peer, MsgId::new(), None, None)
             .await
             .expect("An error was not expected.");
 
@@ -237,10 +236,9 @@ mod tests {
         let elder = nodes.pop().expect("One elder should exist.");
 
         let elder_context = elder.context();
-        let elder = Arc::new(RwLock::new(elder));
 
         let joiner_peer = joining_node.info().peer();
-        let cmd = MyNode::handle_join(elder, &elder_context, joiner_peer, MsgId::new(), None, None)
+        let cmd = MyNode::handle_join(&mut elder, &elder_context, joiner_peer, MsgId::new(), None, None)
             .await
             .expect("An error was not expected.");
 
@@ -275,11 +273,10 @@ mod tests {
         elder.joins_allowed = false;
 
         let elder_context = elder.context();
-        let elder = Arc::new(RwLock::new(elder));
 
         let joiner_peer = joining_node.info().peer();
         let some_cmd =
-            MyNode::handle_join(elder, &elder_context, joiner_peer, MsgId::new(), None, None)
+            MyNode::handle_join(&mut elder, &elder_context, joiner_peer, MsgId::new(), None, None)
                 .await
                 .expect("An error was not expected.");
 
@@ -426,8 +423,9 @@ mod tests {
         let (dispatcher, data_replication_receiver) = Dispatcher::new();
         let cmd_ctrl = CmdCtrl::new(dispatcher);
         let (cmd_channel, rejoin_rx) = FlowCtrl::start(
-            node.clone(),
+            node,
             cmd_ctrl,
+            JOIN_TIMEOUT,
             incoming_msg_receiver,
             data_replication_receiver,
             mpsc::channel(10),

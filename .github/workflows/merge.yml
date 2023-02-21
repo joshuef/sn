@@ -1,5 +1,5 @@
 # Run all tests on all platforms.
-name: Merge Flow. Run All Tests
+name: Run All Tests
 
 on:
   push:

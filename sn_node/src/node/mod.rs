@@ -21,7 +21,6 @@ mod logging;
 mod membership;
 mod messaging;
 mod node_starter;
-mod node_test_api;
 mod relocation;
 
 /// Standard channel size, to allow for large swings in throughput
@@ -31,10 +30,9 @@ pub use self::{
     cfg::config_handler::Config,
     error::{Error, Result},
     flow_ctrl::RejoinReason,
-    node_starter::{new_test_api, start_new_node},
-    node_test_api::NodeTestApi,
+    node_starter::start_new_node,
 };
-use self::{core::MyNode, flow_ctrl::cmds::Cmd, node_starter::CmdChannel};
+use self::{core::MyNode, flow_ctrl::cmds::Cmd};
 pub use crate::storage::DataStorage;
 #[cfg(test)]
 pub(crate) use relocation::{check as relocation_check, ChurnId};
@@ -56,7 +54,7 @@ mod core {
             handover::Handover,
             membership::{elder_candidates, try_split_dkg, Membership},
             messaging::Peers,
-            DataStorage, Error, Result, XorName,
+            DataStorage, Result, XorName,
         },
         UsedSpace,
     };
@@ -126,7 +124,7 @@ mod core {
     }
 
     #[derive(custom_debug::Debug, Clone)]
-    pub struct NodeContext {
+    pub(crate) struct NodeContext {
         pub(crate) root_storage_dir: PathBuf,
         pub(crate) is_elder: bool,
         pub(crate) data_storage: DataStorage,
@@ -145,15 +143,15 @@ mod core {
     }
 
     impl NodeContext {
-        /// Returns the SAP of the section matching the name.
-        pub(crate) fn section_sap_matching_name(
-            &self,
-            name: &XorName,
-        ) -> Result<SectionAuthorityProvider> {
-            self.network_knowledge
-                .section_auth_by_name(name)
-                .map_err(Error::from)
-        }
+        // /// Returns the SAP of the section matching the name.
+        // pub(crate) fn section_sap_matching_name(
+        //     &self,
+        //     name: &XorName,
+        // ) -> Result<SectionAuthorityProvider> {
+        //     self.network_knowledge
+        //         .section_auth_by_name(name)
+        //         .map_err(Error::from)
+        // }
 
         /// Log an issue in dysfunction
         /// Spawns a process to send this incase the channel may be full, we don't hold up
