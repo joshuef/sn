@@ -17,8 +17,8 @@ use sn_interface::{
     messaging::system::NodeMsg, network_knowledge::RelocationState, types::log_markers::LogMarker,
 };
 
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
-use tokio::{sync::RwLock, time::Instant};
+use std::{collections::BTreeSet, time::Duration};
+use tokio::time::Instant;
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(300);
 const REQUEST_TO_RELOCATE_TIMEOUT_SEC: Duration = Duration::from_secs(5);
@@ -72,29 +72,43 @@ impl PeriodicChecksTimestamps {
 
 impl FlowCtrl {
     /// Generate and fire commands for all types of periodic checks
-    pub(super) async fn perform_periodic_checks(&mut self, node: Arc<RwLock<MyNode>>) {
+    pub(super) async fn perform_periodic_checks(&mut self, node: &mut MyNode) {
         if !self.timestamps.something_expired() {
             return;
         }
-        let context = node.read().await.context();
+        let context = node.context();
         let mut cmds = vec![];
 
-        cmds.extend(self.enqueue_cmds_for_node_periodic_checks(&context).await);
+        cmds.extend(
+            self.enqueue_cmds_for_node_periodic_checks(&context, node)
+                .await,
+        );
         if !context.is_elder {
             // self.enqueue_cmds_for_adult_periodic_checks(&context).await;
         } else {
-            cmds.extend(self.enqueue_cmds_for_elder_periodic_checks(&context).await);
+            cmds.extend(
+                self.enqueue_cmds_for_elder_periodic_checks(&context, node)
+                    .await,
+            );
         }
 
-        for cmd in cmds {
-            if let Err(error) = self.cmd_sender_channel.send((cmd, vec![])).await {
-                error!("Error queuing periodic check: {error:?}");
+        // move cmd spawn off thread to not block
+        let sender_channel = self.cmd_sender_channel.clone();
+        let _handle = tokio::spawn(async move {
+            for cmd in cmds {
+                if let Err(error) = sender_channel.send((cmd, vec![])).await {
+                    error!("Error queuing periodic check: {error:?}");
+                }
             }
-        }
+        });
     }
 
     /// Periodic tasks run for both elders and adults
-    async fn enqueue_cmds_for_node_periodic_checks(&mut self, context: &NodeContext) -> Vec<Cmd> {
+    async fn enqueue_cmds_for_node_periodic_checks(
+        &mut self,
+        context: &NodeContext,
+        node: &mut MyNode,
+    ) -> Vec<Cmd> {
         let mut cmds = vec![];
 
         // check if we have been asked to prepare for relocation
@@ -130,8 +144,6 @@ impl FlowCtrl {
                 } else {
                     info!("{}", LogMarker::RelocateEnd);
                     info!("We've joined a section, dropping the relocation proof.");
-                    let mut node = self.node.write().await;
-                    trace!("[NODE WRITE]: handling relocation periodic check write gottt...");
                     node.relocation_state = None;
                 }
             }
@@ -153,7 +165,11 @@ impl FlowCtrl {
     // }
 
     /// Periodic tasks run for elders only
-    async fn enqueue_cmds_for_elder_periodic_checks(&mut self, context: &NodeContext) -> Vec<Cmd> {
+    async fn enqueue_cmds_for_elder_periodic_checks(
+        &mut self,
+        context: &NodeContext,
+        node: &MyNode,
+    ) -> Vec<Cmd> {
         let now = Instant::now();
         let mut cmds = vec![];
 
@@ -193,18 +209,17 @@ impl FlowCtrl {
 
         if self.timestamps.last_vote_check.elapsed() > MISSING_VOTE_INTERVAL {
             self.timestamps.last_vote_check = now;
-            let read_locked_node = node.read().await;
+            // let read_locked_node = node.read().await;
 
             trace!(" ----> vote periodics start");
-            cmds.extend(self.check_for_missed_votes(context, &read_locked_node.membership));
+            cmds.extend(self.check_for_missed_votes(context, &node.membership));
             trace!(" ----> vote periodics done");
         }
 
         if self.timestamps.last_dkg_msg_check.elapsed() > MISSING_DKG_MSG_INTERVAL {
             trace!(" ----> dkg msg periodics start");
             self.timestamps.last_dkg_msg_check = now;
-            Self::check_for_missed_dkg_messages(self.node.clone(), self.cmd_sender_channel.clone())
-                .await;
+            Self::check_for_missed_dkg_messages(node, self.cmd_sender_channel.clone());
             trace!(" ----> dkg msg periodics done");
         }
 
@@ -217,7 +232,7 @@ impl FlowCtrl {
     }
 
     // /// Initiates and generates all the subsequent Cmds to perform a healthcheck
-    // async fn perform_health_checks(node: Arc<RwLock<MyNode>>) -> Result<Vec<Cmd>> {
+    // async fn perform_health_checks(node: &MyNode) -> Result<Vec<Cmd>> {
     //     info!("Starting to check the section's health");
     //     let node = node.read().await;
     //     let our_prefix = node.network_knowledge.prefix();
@@ -333,34 +348,29 @@ impl FlowCtrl {
     }
 
     /// Checks the interval since last dkg vote received
-    async fn check_for_missed_dkg_messages(node: Arc<RwLock<MyNode>>, cmd_channel: CmdChannel) {
+    fn check_for_missed_dkg_messages(node: &MyNode, sender_channel: CmdChannel) {
         info!("Checking for DKG missed messages");
 
-        // DKG checks can be long running, move off thread to unblock the main loop
-        let _handle = tokio::task::spawn(async move {
-            trace!("[NODE READ]: dkg msg lock attempt");
-            let node = node.read().await;
-            trace!("[NODE READ]: dkg msg lock got");
+        let dkg_voter = &node.dkg_voter;
+        let last_received_dkg_message = dkg_voter.last_received_dkg_message();
 
-            let dkg_voter = &node.dkg_voter;
+        if let Some(time) = last_received_dkg_message {
+            if time.elapsed() >= MISSING_DKG_MSG_INTERVAL {
+                let cmds = node.dkg_gossip_msgs();
+                if !cmds.is_empty() {
+                    debug!("Dkg msg resending cmd, as Dkg voting appears stalled...");
+                }
 
-            let last_received_dkg_message = dkg_voter.last_received_dkg_message();
-
-            if let Some(time) = last_received_dkg_message {
-                if time.elapsed() >= MISSING_DKG_MSG_INTERVAL {
-                    let cmds = node.dkg_gossip_msgs();
-                    if !cmds.is_empty() {
-                        debug!("Dkg msg resending cmd, as Dkg voting appears stalled...");
-                    }
-
+                // move cmd spawn off thread to not block
+                let _handle = tokio::spawn(async move {
                     for cmd in cmds {
-                        if let Err(error) = cmd_channel.send((cmd, vec![])).await {
+                        if let Err(error) = sender_channel.send((cmd, vec![])).await {
                             error!("Error sending DKG gossip msgs {error:?}");
                         }
                     }
-                }
+                });
             }
-        });
+        }
     }
 
     async fn vote_out_faulty_nodes(&mut self) -> Vec<Cmd> {

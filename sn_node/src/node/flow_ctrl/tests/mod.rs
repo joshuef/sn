@@ -316,20 +316,13 @@ async fn handle_agreement_on_offline_of_elder() -> Result<()> {
     // Handle agreement on the Offline proposal
     let proposal = remove_elder.clone();
     let sig = TestKeys::get_section_sig_bytes(&sk_set.secret_key(), &get_single_sig(&proposal));
-    let node = Arc::new(RwLock::new(node));
 
-    ProcessAndInspectCmds::new(
-        Cmd::HandleNodeOffAgreement { proposal, sig },
-        &dispatcher,
-        node.clone(),
-    )
-    .process_all()
-    .await?;
+    ProcessAndInspectCmds::new(Cmd::HandleNodeOffAgreement { proposal, sig }, &dispatcher)
+        .process_all()
+        .await?;
 
     // Verify we initiated a membership churn
     assert!(node
-        .read()
-        .await
         .membership
         .as_ref()
         .ok_or_else(|| eyre!("Membership for the node must be set"))?
@@ -394,7 +387,6 @@ async fn ae_msg_from_the_future_is_handled() -> Result<()> {
         .insert(TestKeys::get_section_key_share(&sk_set1, 0));
 
     let (dispatcher, _) = Dispatcher::new();
-    let node = Arc::new(RwLock::new(node));
 
     ProcessAndInspectCmds::new(
         Cmd::HandleMsg {
@@ -403,16 +395,12 @@ async fn ae_msg_from_the_future_is_handled() -> Result<()> {
             send_stream: None,
         },
         &dispatcher,
-        node.clone(),
     )
     .process_all()
     .await?;
 
     // Verify our `Section` got updated.
-    assert_lists(
-        node.read().await.network_knowledge().elders(),
-        new_section_elders,
-    );
+    assert_lists(node.network_knowledge().elders(), new_section_elders);
     Ok(())
 }
 
@@ -459,8 +447,6 @@ async fn untrusted_ae_msg_errors() -> Result<()> {
         },
     )?;
 
-    let node = Arc::new(RwLock::new(node));
-
     assert!(matches!(
         ProcessAndInspectCmds::new(
             Cmd::HandleMsg {
@@ -469,7 +455,6 @@ async fn untrusted_ae_msg_errors() -> Result<()> {
                 send_stream: None,
             },
             &dispatcher,
-            node.clone()
         )
         .process_all()
         .await,
@@ -478,11 +463,9 @@ async fn untrusted_ae_msg_errors() -> Result<()> {
         ))
     ));
 
-    assert_eq!(node.read().await.network_knowledge().genesis_key(), &pk);
+    assert_eq!(node.network_knowledge().genesis_key(), &pk);
     assert_eq!(
-        node.read()
-            .await
-            .network_knowledge()
+        node.network_knowledge()
             .section_tree()
             .all()
             .collect::<Vec<_>>(),
@@ -509,8 +492,8 @@ async fn msg_to_self() -> Result<()> {
     // don't use the cmd collection fn, as it skips Cmd::SendMsg
     let cmds = dispatcher
         .process_cmd(
-            Cmd::send_msg(node_msg.clone(), Peers::Single(info.peer()), context),
-            Arc::new(RwLock::new(node)),
+            Cmd::send_msg(node_msg.clone(), Peers::Single(info.peer())),
+            &mut node,
         )
         .await?;
 
@@ -577,15 +560,12 @@ async fn handle_elders_update() -> Result<()> {
     let bytes = bincode::serialize(&sap1.sig.public_key).expect("Failed to serialize");
     let sig = TestKeys::get_section_sig_bytes(&sk_set0.secret_key(), &bytes);
 
-    let node = Arc::new(RwLock::new(node));
-
     let mut cmds = ProcessAndInspectCmds::new(
         Cmd::HandleNewEldersAgreement {
             new_elders: sap1,
             sig,
         },
         &dispatcher,
-        node.clone(),
     );
 
     let mut update_actual_recipients = HashSet::new();
@@ -724,7 +704,7 @@ async fn handle_demote_during_split() -> Result<()> {
 
     let node = Arc::new(RwLock::new(node));
 
-    let mut cmds = ProcessAndInspectCmds::new(cmd, &dispatcher, node);
+    let mut cmds = ProcessAndInspectCmds::new(cmd, &dispatcher);
 
     let mut update_recipients = BTreeSet::new();
     while let Some(cmd) = cmds.next().await? {
@@ -775,7 +755,7 @@ async fn spentbook_spend_client_message_should_replicate_to_adults_and_send_ack(
             network_knowledge: None,
         })),
         &dispatcher,
-        Arc::new(RwLock::new(node)),
+        &mut node,
         comm_rx,
     )
     .await?;
@@ -852,7 +832,7 @@ async fn spentbook_spend_transaction_with_no_inputs_should_return_spentbook_erro
             network_knowledge: None,
         })),
         &dispatcher,
-        Arc::new(RwLock::new(node)),
+        &mut node,
         comm_rx,
     )
     .await?;
@@ -959,7 +939,6 @@ async fn spentbook_spend_with_updated_network_knowledge_should_update_the_node()
             network_knowledge: Some((proof_chain, sap)),
         })),
         &dispatcher,
-        node.clone(),
         comm_rx,
     )
     .await?;
