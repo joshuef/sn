@@ -111,6 +111,6 @@ impl MyNode {
         }
 
         let msg = NodeMsg::NodeDataCmd(NodeDataCmd::SendAnyMissingRelevantData(data_i_have));
-        Cmd::send_msg(msg, Peers::Multiple(members), context.clone())
+        Cmd::send_msg(msg, Peers::Multiple(members))
     }
 }

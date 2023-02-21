@@ -72,11 +72,11 @@ impl PeriodicChecksTimestamps {
 
 impl FlowCtrl {
     /// Generate and fire commands for all types of periodic checks
-    pub(super) async fn perform_periodic_checks(&mut self) {
+    pub(super) async fn perform_periodic_checks(&mut self, node: Arc<RwLock<MyNode>>) {
         if !self.timestamps.something_expired() {
             return;
         }
-        let context = self.node.read().await.context();
+        let context = node.read().await.context();
         let mut cmds = vec![];
 
         cmds.extend(self.enqueue_cmds_for_node_periodic_checks(&context).await);
@@ -193,7 +193,7 @@ impl FlowCtrl {
 
         if self.timestamps.last_vote_check.elapsed() > MISSING_VOTE_INTERVAL {
             self.timestamps.last_vote_check = now;
-            let read_locked_node = self.node.read().await;
+            let read_locked_node = node.read().await;
 
             trace!(" ----> vote periodics start");
             cmds.extend(self.check_for_missed_votes(context, &read_locked_node.membership));

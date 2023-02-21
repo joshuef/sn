@@ -36,14 +36,13 @@ use xor_name::XorName;
 impl MyNode {
     /// Forms a `CmdError` msg to send back to the client over the response stream
     pub(crate) fn send_cmd_error_response_over_stream(
-        context: NodeContext,
         msg: DataResponse,
         correlation_id: MsgId,
         send_stream: SendStream,
         source_client: Peer,
     ) -> Cmd {
         debug!("{correlation_id:?} sending cmd response error back to client");
-        Cmd::send_data_response(msg, correlation_id, source_client, send_stream, context)
+        Cmd::send_data_response(msg, correlation_id, source_client, send_stream)
     }
 
     /// Handle data query
@@ -72,7 +71,6 @@ impl MyNode {
             msg_id,
             source_client,
             send_stream,
-            context,
         )]
     }
 
@@ -157,7 +155,6 @@ impl MyNode {
                             origin,
                             send_stream,
                             auth,
-                            context: context.clone(),
                         };
                         return Ok(vec![update_command]);
                     }
@@ -190,7 +187,6 @@ impl MyNode {
                 };
 
                 let cmd = MyNode::send_cmd_error_response_over_stream(
-                    context.clone(),
                     data_response,
                     msg_id,
                     send_stream,

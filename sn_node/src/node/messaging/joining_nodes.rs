@@ -93,15 +93,10 @@ impl MyNode {
                         correlation_id,
                         peer,
                         stream,
-                        context.clone(),
                     )]);
                 }
 
-                return Ok(vec![Cmd::send_msg(
-                    msg,
-                    Peers::Single(peer),
-                    context.clone(),
-                )]);
+                return Ok(vec![Cmd::send_msg(msg, Peers::Single(peer))]);
             }
 
             None
@@ -116,7 +111,6 @@ impl MyNode {
                 correlation_id,
                 peer,
                 send_stream,
-                context.clone(),
             ));
         }
 

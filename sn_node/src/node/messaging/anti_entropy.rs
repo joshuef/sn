@@ -76,7 +76,7 @@ impl MyNode {
             kind: AntiEntropyKind::Update { members },
         });
 
-        Cmd::send_network_msg(ae_msg, recipients, context.clone())
+        Cmd::send_network_msg(ae_msg, recipients)
     }
 
     #[instrument(skip_all)]
@@ -295,17 +295,12 @@ impl MyNode {
         trace!("Resending original {msg_id:?} to {target_peer:?} with {msg_to_resend:?}");
         trace!("{}", LogMarker::AeResendAfterRedirect);
 
-        cmds.push(Cmd::send_msg(
-            msg_to_resend,
-            Peers::Single(target_peer),
-            latest_context,
-        ));
+        cmds.push(Cmd::send_msg(msg_to_resend, Peers::Single(target_peer)));
         Ok(cmds)
     }
 
     /// Generate and return AE commands for a given wire_msg and section_tree_update
     pub(crate) fn generate_anti_entropy_cmds(
-        context: &NodeContext,
         wire_msg: &WireMsg,
         origin: Peer,
         section_tree_update: SectionTreeUpdate,
@@ -338,7 +333,6 @@ impl MyNode {
                 kind,
                 section_tree_update,
                 stream,
-                context: context.clone(),
             });
             return Ok(cmds);
         } else if matches!(wire_msg.kind(), MsgKind::Client { .. }) {
@@ -353,7 +347,6 @@ impl MyNode {
             correlation_id: msg_id,
             kind,
             section_tree_update,
-            context: context.clone(),
         });
         Ok(cmds)
     }
