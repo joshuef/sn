@@ -23,8 +23,8 @@ use sn_interface::{
 use bls::PublicKey as BlsPublicKey;
 use itertools::Itertools;
 use qp2p::SendStream;
-use std::{collections::BTreeSet, sync::Arc};
-use tokio::sync::RwLock;
+use std::collections::BTreeSet;
+
 use xor_name::XorName;
 
 impl MyNode {
@@ -141,13 +141,12 @@ impl MyNode {
 
     #[instrument(skip_all)]
     pub(crate) async fn handle_anti_entropy_msg(
-        node: Arc<RwLock<MyNode>>,
+        node: &mut MyNode,
         starting_context: NodeContext,
         section_tree_update: SectionTreeUpdate,
         kind: AntiEntropyKind,
         sender: Peer,
     ) -> Result<Vec<Cmd>> {
-        trace!("[NODE READ]: handling AE read gottt...");
         let sap = section_tree_update.signed_sap.value.clone();
 
         let members = if let AntiEntropyKind::Update { members } = &kind {
@@ -160,55 +159,26 @@ impl MyNode {
 
         // block off the write lock
         let updated = {
-            let should_update_knowledge = {
-                starting_context
-                    .clone()
-                    .network_knowledge
-                    .update_sap_knowledge_if_valid(
-                        section_tree_update.clone(),
-                        &starting_context.name,
-                    )?
-            };
+            let updated_knowledge = node
+                .network_knowledge
+                .update_sap_knowledge_if_valid(section_tree_update, &starting_context.name)?;
 
-            let should_update_members = {
-                starting_context
-                    .clone()
-                    .network_knowledge
-                    .update_section_member_knowledge(members.clone())?
-            };
+            let updated_members = node
+                .network_knowledge
+                .update_section_member_knowledge(members)?;
 
-            if should_update_knowledge || should_update_members {
-                let mut write_locked_node = node.write().await;
-                trace!("[NODE WRITE]: handling AE write gottt...");
-                let updated_knowledge = write_locked_node
-                    .network_knowledge
-                    .update_sap_knowledge_if_valid(section_tree_update, &starting_context.name)?;
+            if updated_knowledge {
+                debug!("net knowledge updated");
+                cmds.extend(node.update_on_sap_change(&starting_context).await?);
 
-                let updated_members = write_locked_node
-                    .network_knowledge
-                    .update_section_member_knowledge(members)?;
-
-                if updated_knowledge {
-                    debug!("net knowledge updated");
-                    cmds.extend(
-                        write_locked_node
-                            .update_on_sap_change(&starting_context)
-                            .await?,
-                    );
-
-                    trace!("updated for section change");
-                }
-
-                updated_knowledge || updated_members
-            } else {
-                false
+                trace!("updated for section change");
             }
+
+            updated_knowledge || updated_members
         };
 
-        trace!("[NODE READ] Latest context read");
         // mut here to update comms
-        let latest_context = node.read().await.context();
-        trace!("[NODE READ] Latest context got.");
+        let latest_context = node.context();
 
         // Only trigger reorganize data when there is a membership change happens.
         if updated {

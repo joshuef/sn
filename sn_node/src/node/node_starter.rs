@@ -42,21 +42,12 @@ const GENESIS_DBC_FILENAME: &str = "genesis_dbc";
 
 pub(crate) type CmdChannel = mpsc::Sender<(Cmd, Vec<usize>)>;
 
-/// Test only
-pub async fn new_test_api(
-    config: &Config,
-    join_retry_timeout: Duration,
-) -> Result<super::NodeTestApi> {
-    let (node, cmd_channel, _) = new_node(config, join_retry_timeout).await?;
-    Ok(super::NodeTestApi::new(node, cmd_channel))
-}
-
 /// A reference held to the node to keep it running.
 ///
 /// Meant to be held while looping over the event receiver
 /// that transports events from the node.
 #[allow(missing_debug_implementations, dead_code)]
-pub struct NodeRef {
+pub(crate) struct NodeRef {
     node: Arc<RwLock<MyNode>>,
     /// Sender which can be used to add a Cmd to the Node's CmdQueue
     cmd_channel: CmdChannel,
@@ -66,10 +57,10 @@ pub struct NodeRef {
 pub async fn start_new_node(
     config: &Config,
     join_retry_timeout: Duration,
-) -> Result<(NodeRef, mpsc::Receiver<RejoinReason>)> {
-    let (node, cmd_channel, rejoin_network_rx) = new_node(config, join_retry_timeout).await?;
+) -> Result<(CmdChannel, mpsc::Receiver<RejoinReason>)> {
+    let (cmd_channel, rejoin_network_rx) = new_node(config, join_retry_timeout).await?;
 
-    Ok((NodeRef { node, cmd_channel }, rejoin_network_rx))
+    Ok((cmd_channel, rejoin_network_rx))
 }
 
 // Private helper to create a new node using the given config and bootstraps it to the network.
@@ -77,7 +68,7 @@ async fn new_node(
     config: &Config,
     join_retry_timeout: Duration,
 ) -> Result<(
-    Arc<RwLock<MyNode>>,
+    // MyNode,
     CmdChannel,
     mpsc::Receiver<RejoinReason>,
 )> {
@@ -97,38 +88,10 @@ async fn new_node(
 
     let used_space = UsedSpace::new(config.min_capacity(), config.max_capacity());
 
-    let (node, cmd_channel, rejoin_network_rx) =
+    let (cmd_channel, rejoin_network_rx) =
         bootstrap_node(config, used_space, root_dir, join_retry_timeout).await?;
 
-    {
-        trace!("[NODE WRITE]: new node...");
-        let context = node.read().await.context();
-        trace!("[NODE WRITE]: new node write got");
-
-        // Network keypair may have to be changed due to naming criteria or network requirements.
-        let keypair_as_bytes = context.keypair.to_bytes();
-        store_network_keypair(root_dir, keypair_as_bytes).await?;
-
-        let our_pid = std::process::id();
-        let node_prefix = context.network_knowledge.prefix();
-        let node_name = context.name;
-        let node_age = context.info.age();
-        let our_conn_info = context.info.addr;
-        let our_conn_info_json = serde_json::to_string(&our_conn_info)
-            .unwrap_or_else(|_| "Failed to serialize connection info".into());
-        println!(
-            "Node PID: {our_pid:?}, prefix: {node_prefix:?}, \
-            name: {node_name:?}, age: {node_age}, connection info:\n{our_conn_info_json}",
-        );
-        info!(
-            "Node PID: {:?}, prefix: {:?}, name: {:?}, age: {}, connection info: {}",
-            our_pid, node_prefix, node_name, node_age, our_conn_info_json,
-        );
-
-        log_system_details(node_prefix);
-    }
-
-    Ok((node, cmd_channel, rejoin_network_rx))
+    Ok((cmd_channel, rejoin_network_rx))
 }
 
 // Private helper to create a new node using the given config and bootstraps it to the network.
@@ -137,11 +100,7 @@ async fn bootstrap_node(
     used_space: UsedSpace,
     root_storage_dir: &Path,
     join_retry_timeout: Duration,
-) -> Result<(
-    Arc<RwLock<MyNode>>,
-    CmdChannel,
-    mpsc::Receiver<RejoinReason>,
-)> {
+) -> Result<(CmdChannel, mpsc::Receiver<RejoinReason>)> {
     let (fault_cmds_sender, fault_cmds_receiver) =
         mpsc::channel::<FaultsCmd>(STANDARD_CHANNEL_SIZE);
 
@@ -167,53 +126,46 @@ async fn bootstrap_node(
     };
 
     let node_name = node.name();
-    let node = Arc::new(RwLock::new(node));
+    let context = node.context();
     let (dispatcher, data_replication_receiver) = Dispatcher::new();
     let cmd_ctrl = CmdCtrl::new(dispatcher);
     let (cmd_channel, rejoin_network_rx) = FlowCtrl::start(
-        node.clone(),
+        node,
         cmd_ctrl,
+        join_retry_timeout,
         incoming_msg_receiver,
         data_replication_receiver,
         (fault_cmds_sender, fault_cmds_receiver),
     )
     .await;
 
-    // keep trying to join as this node
-    loop {
-        // send the join message...
-        cmd_channel
-            .send((Cmd::TryJoinNetwork, vec![]))
-            .await
-            .map_err(|e| {
-                error!("Failed join: {:?}", e);
-                Error::JoinTimeout
-            })?;
-
-        // await for join retry time
-        let result = tokio::time::timeout(join_retry_timeout, await_join(node.clone())).await;
-
-        if result.is_err() {
-            error!("Join not accepted in {join_retry_timeout:?}. Will try and join again. Error was: {:?}", result);
-            continue;
-        } else {
-            break;
-        }
-    }
-
     info!("Node {:?} join has been accepted.", node_name);
+    let root_dir_buf = config.root_dir()?;
+    let root_dir = root_dir_buf.as_path();
 
-    Ok((node, cmd_channel, rejoin_network_rx))
-}
+    // Network keypair may have to be changed due to naming criteria or network requirements.
+    let keypair_as_bytes = context.keypair.to_bytes();
+    store_network_keypair(root_dir, keypair_as_bytes).await?;
 
-async fn await_join(node: Arc<RwLock<MyNode>>) {
-    let mut is_member = false;
-    while !is_member {
-        let read_only = node.read().await;
-        let our_name = read_only.name();
-        is_member = read_only.network_knowledge.is_section_member(&our_name);
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    let our_pid = std::process::id();
+    let node_prefix = context.network_knowledge.prefix();
+    let node_name = context.name;
+    let node_age = context.info.age();
+    let our_conn_info = context.info.addr;
+    let our_conn_info_json = serde_json::to_string(&our_conn_info)
+        .unwrap_or_else(|_| "Failed to serialize connection info".into());
+    println!(
+        "Node PID: {our_pid:?}, prefix: {node_prefix:?}, \
+            name: {node_name:?}, age: {node_age}, connection info:\n{our_conn_info_json}",
+    );
+    info!(
+        "Node PID: {:?}, prefix: {:?}, name: {:?}, age: {}, connection info: {}",
+        our_pid, node_prefix, node_name, node_age, our_conn_info_json,
+    );
+
+    log_system_details(node_prefix);
+
+    Ok((cmd_channel, rejoin_network_rx))
 }
 
 async fn start_genesis_node(

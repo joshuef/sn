@@ -21,7 +21,6 @@ mod logging;
 mod membership;
 mod messaging;
 mod node_starter;
-mod node_test_api;
 mod relocation;
 
 /// Standard channel size, to allow for large swings in throughput
@@ -31,10 +30,9 @@ pub use self::{
     cfg::config_handler::Config,
     error::{Error, Result},
     flow_ctrl::RejoinReason,
-    node_starter::{new_test_api, start_new_node},
-    node_test_api::NodeTestApi,
+    node_starter::start_new_node,
 };
-use self::{core::MyNode, flow_ctrl::cmds::Cmd, node_starter::CmdChannel};
+use self::{core::MyNode, flow_ctrl::cmds::Cmd};
 pub use crate::storage::DataStorage;
 #[cfg(test)]
 pub(crate) use relocation::{check as relocation_check, ChurnId};

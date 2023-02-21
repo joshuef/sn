@@ -49,7 +49,7 @@ pub(crate) struct CmdJob {
 /// and prioritization, which is not something e.g. tokio tasks allow.
 /// In other words, it enables enhanced flow control.
 #[derive(Debug)]
-pub(crate) enum Cmd {
+pub enum Cmd {
     TryJoinNetwork,
     /// Validate `wire_msg` from `sender`.
     /// Holding the WireMsg that has been received from the network,

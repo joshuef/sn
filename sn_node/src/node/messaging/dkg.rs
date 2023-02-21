@@ -847,13 +847,16 @@ impl MyNode {
 
 #[cfg(test)]
 mod tests {
-    use crate::node::flow_ctrl::{
-        cmds::Cmd,
-        dispatcher::Dispatcher,
-        tests::{
-            cmd_utils::{get_next_msg, TestDispatcher, TestMsgTracker},
-            network_builder::TestNetworkBuilder,
+    use crate::node::{
+        flow_ctrl::{
+            cmds::Cmd,
+            dispatcher::Dispatcher,
+            tests::{
+                cmd_utils::{get_next_msg, TestDispatcher, TestMsgTracker},
+                network_builder::TestNetworkBuilder,
+            },
         },
+        MyNode,
     };
 
     use sn_comms::CommEvent;
@@ -897,8 +900,8 @@ mod tests {
         // terminate if there are no more msgs to process
         let mut done = false;
         while !done {
-            for dispatcher in node_instances.values() {
-                let name = dispatcher.node().read().await.name();
+            for (node, dispatcher) in node_instances.values() {
+                let name = node.name();
                 let comm_rx = comm_receivers
                     .get_mut(&name)
                     .ok_or_else(|| eyre!("comm_rx should be present"))?;
@@ -924,7 +927,7 @@ mod tests {
                     }
                 }
             }
-            if msg_tracker.read().await.is_empty() {
+            if msg_tracker.is_empty() {
                 done = true;
             }
         }
@@ -956,8 +959,8 @@ mod tests {
         // terminate if there are no more msgs to process
         let mut done = false;
         while !done {
-            for dispatcher in node_instances.values() {
-                let name = dispatcher.node().read().await.name();
+            for (node, dispatcher) in node_instances.values() {
+                let name = node.name();
                 let comm_rx = comm_receivers
                     .get_mut(&name)
                     .ok_or_else(|| eyre!("comm_rx should be present"))?;
@@ -976,7 +979,7 @@ mod tests {
                     }
                 }
             }
-            if msg_tracker.read().await.is_empty() {
+            if msg_tracker.is_empty() {
                 done = true;
             }
         }
@@ -1006,8 +1009,8 @@ mod tests {
         // terminate if there are no more msgs to process
         while new_sk_shares.len() != node_count {
             looped_through_n_times += 1;
-            for dispatcher in node_instances.values() {
-                let name = dispatcher.node().read().await.name();
+            for (node, dispatcher) in node_instances.values() {
+                let name = node.name();
                 let comm_rx = comm_receivers
                     .get_mut(&name)
                     .ok_or_else(|| eyre!("comm_rx should be present"))?;
@@ -1062,8 +1065,6 @@ mod tests {
                         .ok_or_else(|| eyre!("there should be node_count nodes"))?;
                     if !random_node
                         .node()
-                        .read()
-                        .await
                         .dkg_voter
                         .reached_termination(&dkg_session_id)?
                     {
@@ -1072,9 +1073,9 @@ mod tests {
                 };
                 info!(
                     "Sending gossip from random node {:?}",
-                    random_node.node().read().await.name()
+                    random_node.node().name()
                 );
-                let cmds = random_node.node().read().await.dkg_gossip_msgs();
+                let cmds = random_node.node().dkg_gossip_msgs();
                 for cmd in cmds {
                     info!("Got cmd {}", cmd);
                     assert_matches!(&cmd, Cmd::SendMsg { .. });
@@ -1097,7 +1098,7 @@ mod tests {
         msg_tracker: Arc<RwLock<TestMsgTracker>>,
         rng: impl RngCore,
     ) -> (
-        BTreeMap<XorName, TestDispatcher>,
+        BTreeMap<XorName, (MyNode, TestDispatcher)>,
         BTreeMap<XorName, mpsc::Receiver<CommEvent>>,
         SecretKeySet,
     ) {
@@ -1112,12 +1113,12 @@ mod tests {
                 let name = node.name();
                 let (dispatcher, _) = Dispatcher::new();
                 let dispatcher = TestDispatcher::new(node, dispatcher, msg_tracker.clone());
-                (name, dispatcher)
+                (name, (node, dispatcher))
             })
-            .collect::<BTreeMap<XorName, TestDispatcher>>();
+            .collect::<BTreeMap<XorName, (MyNode, TestDispatcher)>>();
         let mut comm_receivers = BTreeMap::new();
-        for (name, dispatcher) in node_instances.iter() {
-            let pk = dispatcher.node().read().await.info().public_key();
+        for (name, (mut node, dispatcher)) in node_instances.iter() {
+            let pk = node.info().public_key();
             let comm = env.take_comm_rx(pk);
             let _ = comm_receivers.insert(*name, comm);
         }
@@ -1128,7 +1129,7 @@ mod tests {
     async fn start_dkg(nodes: &mut BTreeMap<XorName, TestDispatcher>) -> Result<DkgSessionId> {
         let mut elders = BTreeMap::new();
         for (name, node) in nodes.iter() {
-            let _ = elders.insert(*name, node.node().read().await.addr);
+            let _ = elders.insert(*name, node.node().addr);
         }
         let bootstrap_members = elders
             .iter()
@@ -1146,11 +1147,7 @@ mod tests {
             membership_gen: 0,
         };
         for dispatcher in nodes.values() {
-            let mut cmd = dispatcher
-                .node()
-                .write()
-                .await
-                .send_dkg_start(session_id.clone())?;
+            let mut cmd = dispatcher.node().send_dkg_start(session_id.clone())?;
             assert_eq!(cmd.len(), 1);
             let cmd = cmd.remove(0);
             assert_matches!(&cmd, Cmd::SendMsg { .. });

@@ -172,7 +172,7 @@ mod tests {
                 network_builder::TestNetworkBuilder,
             },
         },
-        relocation_check, ChurnId,
+        relocation_check, ChurnId, MyNode,
     };
     use sn_comms::CommEvent;
     use sn_consensus::Decision;
@@ -245,7 +245,6 @@ mod tests {
         let mut cmds = ProcessAndInspectCmds::new(
             Cmd::HandleMembershipDecision(membership_decision),
             &dispatcher,
-            node,
         );
 
         let mut trigger_is_sent = false;
@@ -292,8 +291,8 @@ mod tests {
             })
             .collect::<BTreeMap<(Prefix, XorName), Arc<TestDispatcher>>>();
         let mut comm_receivers = BTreeMap::new();
-        for (name, node) in node_instances.iter() {
-            let pk = node.node().read().await.info().public_key();
+        for (name, dispatcher) in node_instances.iter() {
+            let pk = dispatcher.node().info().public_key();
             let comm = env.take_comm_rx(pk);
             let _ = comm_receivers.insert(*name, comm);
         }
@@ -333,11 +332,9 @@ mod tests {
             .get(&(Prefix::default(), relocation_node_old_name))
             .expect("Node should be present")
             .node()
-            .read()
-            .await
             .name();
         for dispatcher in node_instances.values() {
-            let network_knowledge = dispatcher.node().read().await.network_knowledge().clone();
+            let network_knowledge = dispatcher.node().network_knowledge().clone();
             // Make sure the relocation_node (new_name) is part of the elder's network_knowledge
             if !network_knowledge.is_adult(&relocation_node_new_name) {
                 panic!("The relocation node should've joined with a new name");
@@ -346,8 +343,7 @@ mod tests {
             // Make sure the relocation_node's old_name is removed
             // The membership changes are actively monitored by the elders, so skip this check
             // for the adult nodes
-            if dispatcher.node().read().await.is_elder()
-                && network_knowledge.is_adult(&relocation_node_old_name)
+            if dispatcher.node().is_elder() && network_knowledge.is_adult(&relocation_node_old_name)
             {
                 panic!("The relocation node's old name should've been removed");
             }
@@ -406,12 +402,12 @@ mod tests {
                 let (dispatcher, _) = Dispatcher::new();
                 let dispatcher =
                     Arc::new(TestDispatcher::new(node, dispatcher, msg_tracker.clone()));
-                ((prefix, name), dispatcher)
+                ((prefix, name), (node, dispatcher))
             })
-            .collect::<BTreeMap<(Prefix, XorName), Arc<TestDispatcher>>>();
+            .collect::<BTreeMap<(Prefix, XorName), (MyNode, Arc<TestDispatcher>)>>();
         let mut comm_receivers = BTreeMap::new();
-        for (name, dispatcher) in node_instances.iter() {
-            let pk = dispatcher.node().read().await.info().public_key();
+        for (name, (node, dispatcher)) in node_instances.iter() {
+            let pk = dispatcher.node().info().public_key();
             let comm = env.take_comm_rx(pk);
             let _ = comm_receivers.insert(*name, comm);
         }
@@ -449,11 +445,9 @@ mod tests {
             .get(&(prefix0, relocation_node_old_name))
             .expect("Node should be present")
             .node()
-            .read()
-            .await
             .name();
         for ((pref, node_name), dispatcher) in node_instances.iter() {
-            let network_knowledge = dispatcher.node().read().await.network_knowledge().clone();
+            let network_knowledge = dispatcher.node().network_knowledge().clone();
             // the dispatcher for the relocation_node is still under the old name
             if node_name == &relocation_node_old_name {
                 // the relocation node should be part of prefix1
@@ -493,15 +487,10 @@ mod tests {
         dispatcher: Arc<TestDispatcher>,
         relocation_node_name: XorName,
         dst_prefix: Prefix,
+        node: &mut MyNode,
     ) -> Result<()> {
-        info!(
-            "Initialize relocation from {:?}",
-            dispatcher.node().read().await.name()
-        );
-        let relocation_node_state = dispatcher
-            .node()
-            .read()
-            .await
+        info!("Initialize relocation from {:?}", node.name());
+        let relocation_node_state = node
             .network_knowledge()
             .get_section_member(&relocation_node_name)
             .expect("relocation node should be present");
@@ -515,15 +504,12 @@ mod tests {
             .elders_vec();
         let relocation_dst = RelocationDst::new(dst_prefix.name());
         let relocation_node_state = relocation_node_state.relocate(relocation_dst);
-        let mut relocation_send_msg = dispatcher
-            .node()
-            .write()
-            .await
-            .send_node_off_proposal(elders, relocation_node_state.clone())?;
+        let mut relocation_send_msg =
+            node.send_node_off_proposal(elders, relocation_node_state.clone())?;
         assert_eq!(relocation_send_msg.len(), 1);
         let relocation_send_msg = relocation_send_msg.remove(0);
         assert!(dispatcher
-            .process_cmd(relocation_send_msg)
+            .process_cmd(relocation_send_msg, node)
             .await?
             .is_empty());
 
