@@ -131,26 +131,28 @@ impl MyNode {
 
         // if we got here, we are the destination
         match msg_type {
-            NetworkMsg::Node(msg) => {
-                MyNode::handle_node_msg(node, context, msg_id, msg, origin, send_stream).await
-            }
-            NetworkMsg::Client { msg, auth, .. } => {
-                trace!("Client msg {msg_id:?} reached its destination.");
-                // TODO: clarify this err w/ peer
-                let Some(stream) = send_stream else {
-                    error!("No stream for client tho....");
-                    return Err(Error::NoClientResponseStream);
-                };
-                MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, origin, stream).await
-            }
+            NetworkMsg::Node(msg) => Ok(vec![Cmd::ProcessNodeMsg {
+                msg_id,
+                msg,
+                origin,
+                send_stream,
+            }]),
+            NetworkMsg::Client { auth, msg } => Ok(vec![Cmd::ProcessClientMsg {
+                msg_id,
+                msg,
+                auth,
+                origin,
+                send_stream,
+            }]),
             NetworkMsg::AntiEntropy(AntiEntropyMsg::AntiEntropy {
                 section_tree_update,
                 kind,
-            }) => {
-                trace!("Handling msg: AE from {origin}: {msg_id:?}");
-                MyNode::handle_anti_entropy_msg(node, context, section_tree_update, kind, origin)
-                    .await
-            }
+            }) => Ok(vec![Cmd::ProcessAeMsg {
+                msg_id,
+                section_tree_update,
+                kind,
+                origin,
+            }]),
             // Respond to a probe msg
             // We always respond to probe msgs if we're an elder as health checks use this to see if a node is alive
             // and repsonsive, as well as being a method of keeping nodes up to date.
