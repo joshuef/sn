@@ -72,7 +72,6 @@ impl MyNode {
             let data_response = DataResponse::NetworkIssue(error);
 
             return MyNode::send_cmd_error_response_over_stream(
-                context,
                 data_response,
                 msg_id,
                 client_stream,
@@ -95,7 +94,6 @@ impl MyNode {
                 let data_response = DataResponse::NetworkIssue(error);
 
                 return MyNode::send_cmd_error_response_over_stream(
-                    context,
                     data_response,
                     msg_id,
                     client_stream,
@@ -106,7 +104,6 @@ impl MyNode {
 
         Cmd::SendAndForwardResponseToClient {
             wire_msg,
-            context,
             targets,
             client_stream,
             source_client,
@@ -165,11 +162,8 @@ impl MyNode {
             "{msg_id:?} Forwarding on RegisterCmd for Spentbook msg to data holders: {targets:?}"
         );
 
-        let context = context.clone();
-
         Ok(vec![Cmd::SendAndForwardResponseToClient {
             wire_msg,
-            context,
             targets,
             client_stream,
             source_client,
@@ -277,7 +271,7 @@ impl MyNode {
                 LogMarker::DataReorganisationUnderway
             );
             let msg = NodeMsg::NodeDataCmd(NodeDataCmd::SendAnyMissingRelevantData(data_i_have));
-            let cmd = Cmd::send_msg(msg, Peers::Single(sender), context.clone());
+            let cmd = Cmd::send_msg(msg, Peers::Single(sender));
             cmds.push(cmd);
         } else if is_full {
             warn!("Not attempting further retrieval of missing data as we are full");

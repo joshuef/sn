@@ -100,7 +100,7 @@ impl MyNode {
                         // We'll send a membership AE request to see if they can help us catch up.
                         debug!("{:?}", LogMarker::MembershipSendingAeUpdateRequest);
                         let msg = NodeMsg::MembershipAE(membership.generation());
-                        cmds.push(Cmd::send_msg(msg, Peers::Single(peer), self.context()));
+                        cmds.push(Cmd::send_msg(msg, Peers::Single(peer)));
                         // return the vec w/ the AE cmd there so as not to loop and generate AE for
                         // any subsequent commands
                         return Ok(cmds);
@@ -139,7 +139,6 @@ impl MyNode {
 
     pub(crate) fn handle_membership_anti_entropy(
         membership_context: Option<Membership>,
-        node_context: NodeContext,
         peer: Peer,
         gen: Generation,
     ) -> Option<Cmd> {
@@ -157,7 +156,6 @@ impl MyNode {
                     Some(Cmd::send_msg(
                         NodeMsg::MembershipVotes(catchup_votes),
                         Peers::Single(peer),
-                        node_context,
                     ))
                 }
                 Err(e) => {
@@ -323,7 +321,7 @@ impl MyNode {
         let msg = NodeMsg::JoinResponse(JoinResponse::Approved(decision));
 
         trace!("{}", LogMarker::SendNodeApproval);
-        Cmd::send_msg(msg, Peers::Multiple(peers), self.context())
+        Cmd::send_msg(msg, Peers::Multiple(peers))
     }
 
     pub(crate) fn handle_node_left(
@@ -356,7 +354,7 @@ impl MyNode {
             let peer = *node_state.peer();
             info!("Notify relocation to node {:?}", peer);
             let msg = NodeMsg::Relocate(node_state);
-            Some(Cmd::send_msg(msg, Peers::Single(peer), self.context()))
+            Some(Cmd::send_msg(msg, Peers::Single(peer)))
         } else {
             None
         }

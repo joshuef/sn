@@ -48,20 +48,14 @@ impl Dispatcher {
         let context = node.read().await.context();
 
         let result = match cmd {
-            Cmd::TryJoinNetwork => {
-                info!("[NODE READ]: getting lock for try_join_section");
-                let context = node.read().await.context();
-                info!("[NODE READ]: got lock for try_join_section");
-                Ok(MyNode::try_join_section(context, None)
-                    .into_iter()
-                    .collect())
-            }
+            Cmd::TryJoinNetwork => Ok(MyNode::try_join_section(context, None)
+                .into_iter()
+                .collect()),
             Cmd::UpdateCaller {
                 caller,
                 correlation_id,
                 kind,
                 section_tree_update,
-                context,
             } => {
                 info!("Sending ae response msg for {correlation_id:?}");
                 Ok(vec![Cmd::send_network_msg(
@@ -70,7 +64,6 @@ impl Dispatcher {
                         kind,
                     }),
                     Peers::Single(caller),
-                    context,
                 )])
             }
             Cmd::UpdateCallerOnStream {
@@ -80,7 +73,6 @@ impl Dispatcher {
                 section_tree_update,
                 correlation_id,
                 stream,
-                context,
             } => Ok(MyNode::send_ae_response(
                 AntiEntropyMsg::AntiEntropy {
                     kind,
@@ -99,7 +91,6 @@ impl Dispatcher {
                 msg,
                 msg_id,
                 recipients,
-                context,
             } => {
                 MyNode::send_msg(msg, msg_id, recipients, context)?;
                 Ok(vec![])
@@ -108,14 +99,12 @@ impl Dispatcher {
                 msg,
                 msg_id,
                 recipients,
-                context,
             } => {
                 MyNode::send_and_enqueue_any_response(msg, msg_id, context, recipients)?;
                 Ok(vec![])
             }
             Cmd::SendAndForwardResponseToClient {
                 wire_msg,
-                context,
                 targets,
                 client_stream,
                 source_client,
@@ -135,7 +124,6 @@ impl Dispatcher {
                 correlation_id,
                 recipient,
                 send_stream,
-                context,
             } => Ok(MyNode::send_node_msg_response(
                 msg,
                 msg_id,
@@ -152,7 +140,6 @@ impl Dispatcher {
                 msg_id,
                 correlation_id,
                 send_stream,
-                context,
                 source_client,
             } => Ok(MyNode::send_data_response(
                 msg,
@@ -166,9 +153,7 @@ impl Dispatcher {
             .into_iter()
             .collect()),
             Cmd::TrackNodeIssue { name, issue } => {
-                let node = node.read().await;
-                trace!("[NODE READ]: fault tracking read got");
-                node.track_node_issue(name, issue);
+                context.track_node_issue(name, issue);
                 Ok(vec![])
             }
             Cmd::ProcessNodeMsg {
@@ -225,7 +210,6 @@ impl Dispatcher {
                 origin,
                 auth,
                 send_stream,
-                context,
             } => {
                 debug!("Updating network knowledge before handling message");
                 // we create a block to make sure the node's lock is released
@@ -240,6 +224,12 @@ impl Dispatcher {
                     )?
                 };
                 info!("Network knowledge was updated: {updated}");
+
+                let context = if updated {
+                    node.read().await.context()
+                } else {
+                    context
+                };
 
                 MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, origin, send_stream)
                     .await

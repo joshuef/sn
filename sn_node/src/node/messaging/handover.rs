@@ -210,7 +210,7 @@ impl MyNode {
                     sap: sap.clone(),
                     sig_share: sig_share.clone(),
                 };
-                cmds.push(Cmd::send_msg(msg, peers, self.context()));
+                cmds.push(Cmd::send_msg(msg, peers));
 
                 // handle our own if we are elder
                 if let Some(elder) = myself {
@@ -231,7 +231,7 @@ impl MyNode {
                     sap1: sap1.clone(),
                     sig_share1: sig_share1.clone(),
                 };
-                cmds.push(Cmd::send_msg(msg, peers, self.context()));
+                cmds.push(Cmd::send_msg(msg, peers));
 
                 // handle our own if we are elder
                 if let Some(elder) = myself {
@@ -503,11 +503,7 @@ impl MyNode {
                     // We hit an error while processing this vote, perhaps we are missing information.
                     // We'll send a handover AE request to see if they can help us catch up.
                     debug!("{:?}", LogMarker::HandoverSendingAeUpdateRequest);
-                    cmds.push(Cmd::send_msg(
-                        NodeMsg::HandoverAE(gen),
-                        Peers::Single(peer),
-                        self.context(),
-                    ));
+                    cmds.push(Cmd::send_msg(NodeMsg::HandoverAE(gen), Peers::Single(peer)));
                     // return the vec w/ the AE cmd there so as not to loop and generate AE for
                     // any subsequent commands
                     return Ok(cmds);
@@ -534,7 +530,6 @@ impl MyNode {
                 Ok(catchup_votes) => Some(Cmd::send_msg(
                     NodeMsg::HandoverVotes(catchup_votes),
                     Peers::Single(peer),
-                    self.context(),
                 )),
                 Err(e) => {
                     error!("Handover - Error while processing anti-entropy {:?}", e);

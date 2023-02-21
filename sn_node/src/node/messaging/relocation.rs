@@ -61,7 +61,6 @@ impl MyNode {
             let cmd = Cmd::send_msg(
                 NodeMsg::BeginRelocating(relocation_trigger),
                 Peers::Single(*node_state.peer()),
-                self.context(),
             );
             cmds.push(cmd);
         }

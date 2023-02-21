@@ -99,7 +99,7 @@ impl NodeTestApi {
 
     /// Send a system msg.
     pub async fn send(&self, msg: NodeMsg, recipients: BTreeSet<Peer>) -> Result<()> {
-        let cmd = Cmd::send_msg(msg, Peers::Multiple(recipients), self.context().await);
+        let cmd = Cmd::send_msg(msg, Peers::Multiple(recipients));
         self.send_cmd(cmd).await
     }
 
