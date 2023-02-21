@@ -23,7 +23,10 @@ use sn_interface::{
 use bls::PublicKey as BlsPublicKey;
 use itertools::Itertools;
 use qp2p::SendStream;
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::RwLock;
 use xor_name::XorName;
 
@@ -141,13 +144,12 @@ impl MyNode {
 
     #[instrument(skip_all)]
     pub(crate) async fn handle_anti_entropy_msg(
-        node: Arc<RwLock<MyNode>>,
+        node: &mut MyNode,
         starting_context: NodeContext,
         section_tree_update: SectionTreeUpdate,
         kind: AntiEntropyKind,
         sender: Peer,
     ) -> Result<Vec<Cmd>> {
-        trace!("[NODE READ]: handling AE read gottt...");
         let sap = section_tree_update.signed_sap.value.clone();
 
         let members = if let AntiEntropyKind::Update { members } = &kind {
@@ -170,22 +172,14 @@ impl MyNode {
                 )?;
 
             if should_update {
-                let mut write_locked_node = node.write().await;
-                trace!("[NODE WRITE]: handling AE write gottt...");
-                let updated = write_locked_node
-                    .network_knowledge
-                    .update_knowledge_if_valid(
-                        section_tree_update,
-                        members,
-                        &starting_context.name,
-                    )?;
+                let updated = node.network_knowledge.update_knowledge_if_valid(
+                    section_tree_update,
+                    members,
+                    &starting_context.name,
+                )?;
                 debug!("net knowledge updated");
                 // always run this, only changes will trigger events
-                cmds.extend(
-                    write_locked_node
-                        .update_on_section_change(&starting_context)
-                        .await?,
-                );
+                cmds.extend(node.update_on_section_change(&starting_context).await?);
                 trace!("updated for section change");
                 updated
             } else {
@@ -193,10 +187,8 @@ impl MyNode {
             }
         };
 
-        trace!("[NODE READ] Latest context read");
         // mut here to update comms
-        let latest_context = node.read().await.context();
-        trace!("[NODE READ] Latest context got.");
+        let latest_context = node.context();
 
         // Only trigger reorganize data when there is a membership change happens.
         if updated {

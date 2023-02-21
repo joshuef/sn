@@ -35,7 +35,7 @@ use std::{collections::BTreeSet, sync::Arc};
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone)]
-pub(crate) enum Peers {
+pub enum Peers {
     Single(Peer),
     Multiple(BTreeSet<Peer>),
 }

@@ -6,7 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{messaging::Peers, Cmd, Error, MyNode, Result, STANDARD_CHANNEL_SIZE};
+use crate::node::{
+    core::NodeContext, messaging::Peers, Cmd, Error, MyNode, Result, STANDARD_CHANNEL_SIZE,
+};
 
 use sn_interface::{
     messaging::{AntiEntropyMsg, NetworkMsg},
@@ -37,16 +39,10 @@ impl Dispatcher {
     }
 
     /// Handles a single cmd.
-    pub(crate) async fn process_cmd(
-        &self,
-        cmd: Cmd,
-        node: Arc<RwLock<MyNode>>,
-    ) -> Result<Vec<Cmd>> {
+    pub(crate) async fn process_cmd(&self, cmd: Cmd, node: &mut MyNode) -> Result<Vec<Cmd>> {
+        let context = node.context();
         let start = Instant::now();
         let cmd_string = format!("{}", cmd);
-        // TODO: remove this context read as we remove RwLock entirely
-        let context = node.read().await.context();
-
         let result = match cmd {
             Cmd::TryJoinNetwork => Ok(MyNode::try_join_section(context, None)
                 .into_iter()
@@ -100,6 +96,7 @@ impl Dispatcher {
                 msg_id,
                 recipients,
             } => {
+                debug!("send msg enque cmd...?");
                 MyNode::send_and_enqueue_any_response(msg, msg_id, context, recipients)?;
                 Ok(vec![])
             }
@@ -161,10 +158,7 @@ impl Dispatcher {
                 msg,
                 origin,
                 send_stream,
-            } => {
-                MyNode::handle_node_msg(node.clone(), context, msg_id, msg, origin, send_stream)
-                    .await
-            }
+            } => MyNode::handle_node_msg(node, context, msg_id, msg, origin, send_stream).await,
             Cmd::ProcessClientMsg {
                 msg_id,
                 msg,
@@ -188,14 +182,8 @@ impl Dispatcher {
                 origin,
             } => {
                 trace!("Handling msg: AE from {origin}: {msg_id:?}");
-                MyNode::handle_anti_entropy_msg(
-                    node.clone(),
-                    context,
-                    section_tree_update,
-                    kind,
-                    origin,
-                )
-                .await
+                MyNode::handle_anti_entropy_msg(node, context, section_tree_update, kind, origin)
+                    .await
             }
             Cmd::HandleMsg {
                 origin,
@@ -214,9 +202,7 @@ impl Dispatcher {
                 debug!("Updating network knowledge before handling message");
                 // we create a block to make sure the node's lock is released
                 let updated = {
-                    let mut node = node.write().await;
                     let name = node.name();
-                    trace!("[NODE WRITE]: update client write got");
                     node.network_knowledge.update_knowledge_if_valid(
                         SectionTreeUpdate::new(signed_sap, proof_chain),
                         None,
@@ -225,31 +211,18 @@ impl Dispatcher {
                 };
                 info!("Network knowledge was updated: {updated}");
 
-                let context = if updated {
-                    node.read().await.context()
-                } else {
-                    context
-                };
+                let context = if updated { node.context() } else { context };
 
                 MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, origin, send_stream)
                     .await
             }
             Cmd::HandleSectionDecisionAgreement { proposal, sig } => {
-                trace!("[NODE WRITE]: section decision agreements node write...");
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: section decision agreements node write got");
                 node.handle_section_decision_agreement(proposal, sig)
             }
             Cmd::HandleMembershipDecision(decision) => {
-                trace!("[NODE WRITE]: membership decision agreements write...");
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: membership decision agreements write got...");
                 node.handle_membership_decision(decision).await
             }
             Cmd::HandleNewEldersAgreement { new_elders, sig } => {
-                trace!("[NODE WRITE]: new elders decision agreements write...");
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: new elders decision agreements write got...");
                 node.handle_new_elders_agreement(new_elders, sig).await
             }
             Cmd::HandleNewSectionsAgreement {
@@ -258,28 +231,18 @@ impl Dispatcher {
                 sap2,
                 sig2,
             } => {
-                trace!("[NODE WRITE]: new sections decision agreements write...");
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: new sections decision agreements write got...");
                 node.handle_new_sections_agreement(sap1, sig1, sap2, sig2)
                     .await
             }
             Cmd::HandleCommsError { peer, error } => {
                 trace!("Comms error {error}");
-                let node = node.read().await;
-                debug!("[NODE READ]: HandleCommsError read got...");
                 node.handle_comms_error(peer, error);
                 Ok(vec![])
             }
             Cmd::HandleDkgOutcome {
                 section_auth,
                 outcome,
-            } => {
-                trace!("[NODE WRITE]: HandleDKg agreements write...");
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: HandleDKg agreements write got...");
-                node.handle_dkg_outcome(section_auth, outcome).await
-            }
+            } => node.handle_dkg_outcome(section_auth, outcome).await,
             Cmd::EnqueueDataForReplication {
                 recipient,
                 data_batch,
@@ -290,20 +253,12 @@ impl Dispatcher {
                     .map_err(|_| Error::DataReplicationChannel)?;
                 Ok(vec![])
             }
-            Cmd::ProposeVoteNodesOffline(names) => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: propose offline write got");
-                node.cast_offline_proposals(&names)
-            }
+            Cmd::ProposeVoteNodesOffline(names) => node.cast_offline_proposals(&names),
             Cmd::SetJoinsAllowed(joins_allowed) => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: Setting joins allowed..");
                 node.joins_allowed = joins_allowed;
                 Ok(vec![])
             }
             Cmd::SetJoinsAllowedUntilSplit(joins_allowed_until_split) => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: Setting joins allowed until split..");
                 node.joins_allowed = joins_allowed_until_split;
                 node.joins_allowed_until_split = joins_allowed_until_split;
                 Ok(vec![])

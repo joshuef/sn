@@ -147,7 +147,7 @@ impl MyNode {
     // Handler for data messages which have successfully
     // passed all signature checks and msg verifications
     pub(crate) async fn handle_node_msg(
-        node: Arc<RwLock<MyNode>>,
+        node: &mut MyNode,
         context: NodeContext,
         msg_id: MsgId,
         msg: NodeMsg,
@@ -164,8 +164,6 @@ impl MyNode {
                     .map(|c| c.into_iter().collect())
             }
             NodeMsg::BeginRelocating(relocation_trigger) => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: BeginRelocating write gottt...");
                 trace!("Handling BeginRelocating msg from {sender}: {msg_id:?}");
                 Ok(node.handle_begin_relocating(relocation_trigger))
             }
@@ -173,15 +171,11 @@ impl MyNode {
                 relocation_node,
                 relocation_trigger,
             } => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: RelocationRequest write gottt...");
                 trace!("Handling RelocationRequest msg from {sender}: {msg_id:?}");
                 Ok(node.handle_relocation_request(relocation_node, relocation_trigger)?)
             }
 
             NodeMsg::Relocate(signed_relocation) => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: Relocated write gottt...");
                 trace!("Handling Relocate msg from {sender}: {msg_id:?}");
                 Ok(node.relocate(signed_relocation)?.into_iter().collect())
             }
@@ -237,33 +231,19 @@ impl MyNode {
                     }
                 }
             }
-            NodeMsg::HandoverVotes(votes) => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: handover votes write gottt...");
-                node.handle_handover_msg(sender, votes)
-            }
-            NodeMsg::HandoverAE(gen) => {
-                trace!("[NODE READ]: handover ae attempts");
-                let node = node.read().await;
-                trace!("[NODE READ]: handover ae got");
-
-                Ok(node
-                    .handle_handover_anti_entropy(sender, gen)
-                    .into_iter()
-                    .collect())
-            }
+            NodeMsg::HandoverVotes(votes) => node.handle_handover_msg(sender, votes),
+            NodeMsg::HandoverAE(gen) => Ok(node
+                .handle_handover_anti_entropy(sender, gen)
+                .into_iter()
+                .collect()),
             NodeMsg::MembershipVotes(votes) => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: MembershipVotes write gottt...");
                 let mut cmds = vec![];
                 cmds.extend(node.handle_membership_votes(sender, votes)?);
                 Ok(cmds)
             }
             NodeMsg::MembershipAE(gen) => {
                 let membership_context = {
-                    trace!("[NODE READ]: membership ae read ");
-                    let membership = node.read().await.membership.clone();
-                    trace!("[NODE READ]: membership ae read got");
+                    let membership = node.membership.clone();
                     membership
                 };
 
@@ -277,8 +257,6 @@ impl MyNode {
                 proposal,
                 sig_share,
             } => {
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: ProposeSectionState write.");
                 if node.is_not_elder() {
                     trace!(
                         "Adult handling a ProposeSectionState msg from {}: {:?}",
@@ -304,8 +282,6 @@ impl MyNode {
                     sender
                 );
 
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: DKGstart write gottt...");
                 node.untrack_node_issue(sender.name(), IssueType::Dkg);
                 node.handle_dkg_start(session_id, elder_sig)
             }
@@ -321,8 +297,6 @@ impl MyNode {
                     session_id.sh(),
                     sender
                 );
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: DKG Ephemeral write gottt...");
                 node.handle_dkg_ephemeral_pubkey(&session_id, section_auth, pub_key, sig, sender)
             }
             NodeMsg::DkgVotes {
@@ -337,18 +311,11 @@ impl MyNode {
                     sender,
                     votes
                 );
-                let mut node = node.write().await;
-                trace!("[NODE WRITE]: DKG Votes write gottt...");
-
                 node.untrack_node_issue(sender.name(), IssueType::Dkg);
 
                 node.handle_dkg_votes(&session_id, pub_keys, votes, sender)
             }
             NodeMsg::DkgAE(session_id) => {
-                trace!("[NODE READ]: dkg ae read ");
-
-                let node = node.read().await;
-                trace!("[NODE READ]: dkg ae read got");
                 trace!("Handling msg: DkgAE s{} from {}", session_id.sh(), sender);
                 node.handle_dkg_anti_entropy(session_id, sender)
             }
@@ -417,16 +384,10 @@ impl MyNode {
             }
             NodeMsg::RequestHandover { sap, sig_share } => {
                 info!("RequestHandover with msg_id {msg_id:?}");
-                let mut node = node.write().await;
-
-                trace!("[NODE WRITE]: RequestHandover write gottt...");
                 node.handle_handover_request(msg_id, sap, sig_share, sender)
             }
             NodeMsg::SectionHandoverPromotion { sap, sig_share } => {
                 info!("SectionHandoverPromotion with msg_id {msg_id:?}");
-                let mut node = node.write().await;
-
-                trace!("[NODE WRITE]: SectionHandoverPromotion write gottt...");
                 node.handle_handover_promotion(msg_id, sap, sig_share, sender)
             }
             NodeMsg::SectionSplitPromotion {
@@ -436,9 +397,6 @@ impl MyNode {
                 sig_share1,
             } => {
                 info!("SectionSplitPromotion with msg_id {msg_id:?}");
-                let mut node = node.write().await;
-
-                trace!("[NODE WRITE]: SectionSplitPromotion write gottt...");
                 node.handle_section_split_promotion(
                     msg_id, sap0, sig_share0, sap1, sig_share1, sender,
                 )

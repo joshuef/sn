@@ -27,96 +27,95 @@ use super::{flow_ctrl::cmds::Cmd, messaging::Peers};
 /// `Node` or as a part of a section or group location.
 #[allow(missing_debug_implementations)]
 pub struct NodeTestApi {
-    node: Arc<RwLock<MyNode>>,
     cmd_channel: CmdChannel,
 }
 
 impl NodeTestApi {
-    pub(crate) fn new(node: Arc<RwLock<MyNode>>, cmd_channel: CmdChannel) -> Self {
-        Self { node, cmd_channel }
-    }
+    // pub(crate) fn new( cmd_channel: CmdChannel) -> Self {
+    //     Self { node, cmd_channel }
+    // }
 
-    /// Returns the current age of this node.
-    pub async fn age(&self) -> u8 {
-        self.node.read().await.info().age()
-    }
+    // /// Returns the current age of this node.
+    // pub async fn age(&self) -> u8 {
+    //     self.node.read().await.info().age()
+    // }
 
-    /// Returns the current NodeContext
-    pub async fn context(&self) -> NodeContext {
-        self.node.read().await.context()
-    }
+    // /// Returns the current NodeContext
+    // pub async fn context(&self) -> NodeContext {
+    //     self.node.read().await.context()
+    // }
 
-    /// Returns the ed25519 public key of this node.
-    pub async fn public_key(&self) -> PublicKey {
-        self.node.read().await.keypair.public
-    }
+    // /// Returns the ed25519 public key of this node.
+    // pub async fn public_key(&self) -> PublicKey {
+    //     self.node.read().await.keypair.public
+    // }
 
-    /// The name of this node.
-    pub async fn name(&self) -> XorName {
-        self.node.read().await.info().name()
-    }
+    // /// The name of this node.
+    // pub async fn name(&self) -> XorName {
+    //     self.node.read().await.info().name()
+    // }
 
-    /// Returns connection info of this node.
-    pub async fn our_connection_info(&self) -> SocketAddr {
-        self.node.read().await.info().addr
-    }
+    // /// Returns connection info of this node.
+    // pub async fn our_connection_info(&self) -> SocketAddr {
+    //     self.node.read().await.info().addr
+    // }
 
-    /// Returns the Section Signed Chain
-    pub async fn section_chain(&self) -> SectionsDAG {
-        self.node.read().await.section_chain()
-    }
+    // /// Returns the Section Signed Chain
+    // pub async fn section_chain(&self) -> SectionsDAG {
+    //     self.node.read().await.section_chain()
+    // }
 
-    /// Returns the Section Chain's genesis key
-    pub async fn genesis_key(&self) -> bls::PublicKey {
-        *self.node.read().await.network_knowledge().genesis_key()
-    }
+    // /// Returns the Section Chain's genesis key
+    // pub async fn genesis_key(&self) -> bls::PublicKey {
+    //     *self.node.read().await.network_knowledge().genesis_key()
+    // }
 
-    /// Prefix of our section
-    pub async fn our_prefix(&self) -> Prefix {
-        self.node.read().await.network_knowledge().prefix()
-    }
+    // /// Prefix of our section
+    // pub async fn our_prefix(&self) -> Prefix {
+    //     self.node.read().await.network_knowledge().prefix()
+    // }
 
-    /// Returns whether the node is Elder.
-    pub async fn is_elder(&self) -> bool {
-        self.node.read().await.is_elder()
-    }
+    // /// Returns whether the node is Elder.
+    // pub async fn is_elder(&self) -> bool {
+    //     self.node.read().await.is_elder()
+    // }
 
-    /// Returns the information of all the current section elders.
-    pub async fn our_elders(&self) -> BTreeSet<Peer> {
-        self.node.read().await.network_knowledge().elders()
-    }
+    // /// Returns the information of all the current section elders.
+    // pub async fn our_elders(&self) -> BTreeSet<Peer> {
+    //     self.node.read().await.network_knowledge().elders()
+    // }
 
-    /// Returns the information of all the current section adults.
-    pub async fn our_adults(&self) -> BTreeSet<Peer> {
-        self.node.read().await.network_knowledge().adults()
-    }
+    // /// Returns the information of all the current section adults.
+    // pub async fn our_adults(&self) -> BTreeSet<Peer> {
+    //     self.node.read().await.network_knowledge().adults()
+    // }
 
-    /// Returns the info about the section matching the name.
-    pub async fn matching_section(&self, name: &XorName) -> Result<SectionAuthorityProvider> {
-        let context = &self.node.read().await.context();
-        context.section_sap_matching_name(name)
-    }
+    // /// Returns the info about the section matching the name.
+    // pub async fn matching_section(&self, name: &XorName) -> Result<SectionAuthorityProvider> {
+    //     let context = &self.node.read().await.context();
+    //     context.section_sap_matching_name(name)
+    // }
 
-    /// Send a system msg.
-    pub async fn send(&self, msg: NodeMsg, recipients: BTreeSet<Peer>) -> Result<()> {
-        let cmd = Cmd::send_msg(msg, Peers::Multiple(recipients));
-        self.send_cmd(cmd).await
-    }
+    // /// Send a system msg.
+    // pub async fn send(&self, msg: NodeMsg, recipients: BTreeSet<Peer>) -> Result<()> {
+    //     let cmd = Cmd::send_msg(msg, Peers::Multiple(recipients));
+    //     self.send_cmd(cmd).await
+    // }
 
-    /// Send a message.
-    /// Messages sent here, either section to section or node to node.
-    async fn send_cmd(&self, cmd: Cmd) -> Result<()> {
-        self.cmd_channel
-            .send((cmd, vec![]))
-            .await
-            .map_err(|_| Error::CmdChannelSendError)?;
+    // /// Send a message.
+    // /// Messages sent here, either section to section or node to node.
+    // async fn send_cmd(&self, cmd: Cmd) -> Result<()> {
+    //     self.cmd_channel
+    //         .send((cmd, vec![]))
+    //         .await
+    //         .map_err(|_| Error::CmdChannelSendError)?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    /// Returns the current BLS public key set if this node has one, or
-    /// `Error::MissingSecretKeyShare` otherwise.
-    pub async fn public_key_set(&self) -> Result<bls::PublicKeySet> {
-        self.node.read().await.public_key_set()
-    }
+    // /// Returns the current BLS public key set if this node has one, or
+    // /// `Error::MissingSecretKeyShare` otherwise.
+    // pub async fn public_key_set(&self) -> Result<bls::PublicKeySet> {
+    //     self.node.read().await.public_key_set()
+    // }
 }

@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{
+    core::NodeContext,
     flow_ctrl::{cmds::Cmd, dispatcher::Dispatcher, RejoinReason},
     Error, MyNode,
 };
@@ -40,13 +41,14 @@ impl CmdCtrl {
     /// Processes the passed in cmd on a new task
     pub(crate) async fn process_cmd_job(
         &self,
-        node: Arc<RwLock<MyNode>>,
+        node: &mut MyNode,
         cmd: Cmd,
         mut id: Vec<usize>,
-        node_identifier: XorName,
         cmd_process_api: mpsc::Sender<(Cmd, Vec<usize>)>,
         rejoin_network_sender: mpsc::Sender<RejoinReason>,
     ) {
+        let node_identifier = node.info().name();
+
         if id.is_empty() {
             id.push(self.id_counter.fetch_add(1, Ordering::SeqCst));
         }
