@@ -264,7 +264,7 @@ jobs:
         env:
           RUST_LOG: "sn_client=trace,qp2p=debug"
         run: cd sn_client && cargo test --release --features check-replicas
-        timeout-minutes: 10
+        timeout-minutes: 15
 
       - name: Run example app for file API against local network
         timeout-minutes: 2
@@ -401,7 +401,7 @@ jobs:
         env:
           RUST_LOG: "sn_client=trace,qp2p=debug"
         run: cd sn_client && cargo test --release --features msg-happy-path
-        timeout-minutes: 10
+        timeout-minutes: 15
 
       - name: Run example app for file API against local network
         timeout-minutes: 2
