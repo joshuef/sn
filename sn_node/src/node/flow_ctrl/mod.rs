@@ -38,12 +38,10 @@ use sn_interface::{
 use std::{
     collections::BTreeSet,
     net::SocketAddr,
-    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::sync::{
     mpsc::{self, Receiver, Sender},
-    RwLock,
 };
 use xor_name::XorName;
 
@@ -137,7 +135,7 @@ impl FlowCtrl {
             rejoin_network_tx,
         ));
 
-        let cmd_channel = cmd_sender_channel.clone();
+        let _cmd_channel = cmd_sender_channel.clone();
         let cmd_channel_for_msgs = cmd_sender_channel.clone();
 
         // // start a new thread to kick off incoming cmds

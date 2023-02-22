@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{
-    core::NodeContext, messaging::Peers, Cmd, Error, MyNode, Result, STANDARD_CHANNEL_SIZE,
+    messaging::Peers, Cmd, Error, MyNode, Result, STANDARD_CHANNEL_SIZE,
 };
 
 use sn_interface::{
@@ -16,10 +16,9 @@ use sn_interface::{
     types::{DataAddress, Peer},
 };
 
-use std::{sync::Arc, time::Instant};
+use std::{time::Instant};
 use tokio::sync::{
     mpsc::{channel, Receiver, Sender},
-    RwLock,
 };
 
 // Cmd Dispatcher.

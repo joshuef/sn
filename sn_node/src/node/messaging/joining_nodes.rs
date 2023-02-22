@@ -20,8 +20,8 @@ use sn_interface::{
     types::{log_markers::LogMarker, Peer},
 };
 
-use std::sync::Arc;
-use tokio::sync::RwLock;
+
+
 
 // Message handling
 impl MyNode {

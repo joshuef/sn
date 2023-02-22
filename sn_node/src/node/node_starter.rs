@@ -56,7 +56,7 @@ pub(crate) type CmdChannel = mpsc::Sender<(Cmd, Vec<usize>)>;
 /// Meant to be held while looping over the event receiver
 /// that transports events from the node.
 #[allow(missing_debug_implementations, dead_code)]
-pub struct NodeRef {
+pub(crate) struct NodeRef {
     node: Arc<RwLock<MyNode>>,
     /// Sender which can be used to add a Cmd to the Node's CmdQueue
     cmd_channel: CmdChannel,

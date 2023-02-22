@@ -25,9 +25,8 @@ use itertools::Itertools;
 use qp2p::SendStream;
 use std::{
     collections::BTreeSet,
-    sync::{Arc, Mutex},
 };
-use tokio::sync::RwLock;
+
 use xor_name::XorName;
 
 impl MyNode {

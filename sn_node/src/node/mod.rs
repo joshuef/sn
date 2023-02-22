@@ -127,7 +127,7 @@ mod core {
     }
 
     #[derive(custom_debug::Debug, Clone)]
-    pub struct NodeContext {
+    pub(crate) struct NodeContext {
         pub(crate) root_storage_dir: PathBuf,
         pub(crate) is_elder: bool,
         pub(crate) data_storage: DataStorage,

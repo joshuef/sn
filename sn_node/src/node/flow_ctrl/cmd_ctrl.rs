@@ -7,7 +7,6 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{
-    core::NodeContext,
     flow_ctrl::{cmds::Cmd, dispatcher::Dispatcher, RejoinReason},
     Error, MyNode,
 };
@@ -16,8 +15,8 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use tokio::sync::{mpsc, RwLock};
-use xor_name::XorName;
+use tokio::sync::{mpsc};
+
 
 /// Takes care of spawning a new task for the processing of a cmd,
 /// collecting resulting cmds from it, and sending it back to the calling context,

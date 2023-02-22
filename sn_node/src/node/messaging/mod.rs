@@ -31,8 +31,8 @@ use sn_interface::{
     types::{log_markers::LogMarker, Peer},
 };
 
-use std::{collections::BTreeSet, sync::Arc};
-use tokio::sync::RwLock;
+use std::{collections::BTreeSet};
+
 
 #[derive(Debug, Clone)]
 pub enum Peers {

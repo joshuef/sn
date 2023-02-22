@@ -25,8 +25,8 @@ use sn_interface::{
 };
 
 use qp2p::{SendStream, UsrMsgBytes};
-use std::{collections::BTreeSet, sync::Arc};
-use tokio::sync::RwLock;
+use std::{collections::BTreeSet};
+
 use xor_name::XorName;
 
 impl MyNode {
