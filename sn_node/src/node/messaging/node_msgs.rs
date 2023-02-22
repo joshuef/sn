@@ -25,7 +25,7 @@ use sn_interface::{
 };
 
 use qp2p::{SendStream, UsrMsgBytes};
-use std::{collections::BTreeSet};
+use std::collections::BTreeSet;
 
 use xor_name::XorName;
 

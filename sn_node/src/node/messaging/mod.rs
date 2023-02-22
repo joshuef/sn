@@ -31,8 +31,7 @@ use sn_interface::{
     types::{log_markers::LogMarker, Peer},
 };
 
-use std::{collections::BTreeSet};
-
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub enum Peers {

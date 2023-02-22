@@ -15,8 +15,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use tokio::sync::{mpsc};
-
+use tokio::sync::mpsc;
 
 /// Takes care of spawning a new task for the processing of a cmd,
 /// collecting resulting cmds from it, and sending it back to the calling context,

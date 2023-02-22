@@ -6,16 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{CmdChannel};
-
-
-
-
-
-
-
-
-
+use crate::node::CmdChannel;
 
 /// Test interface for sending and receiving messages to and from other nodes.
 ///

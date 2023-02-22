@@ -23,9 +23,7 @@ use sn_interface::{
 use bls::PublicKey as BlsPublicKey;
 use itertools::Itertools;
 use qp2p::SendStream;
-use std::{
-    collections::BTreeSet,
-};
+use std::collections::BTreeSet;
 
 use xor_name::XorName;
 

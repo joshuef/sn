@@ -40,9 +40,7 @@ use std::{
     net::SocketAddr,
     time::{Duration, Instant},
 };
-use tokio::sync::{
-    mpsc::{self, Receiver, Sender},
-};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use xor_name::XorName;
 
 /// Keep this as 1 so we properly feedback if we're not popping things out of the channel fast enough

@@ -20,9 +20,6 @@ use sn_interface::{
     types::{log_markers::LogMarker, Peer},
 };
 
-
-
-
 // Message handling
 impl MyNode {
     pub(crate) async fn handle_join(

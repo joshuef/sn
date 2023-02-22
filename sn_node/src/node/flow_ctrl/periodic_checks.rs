@@ -18,7 +18,7 @@ use sn_interface::{
 };
 
 use std::{collections::BTreeSet, time::Duration};
-use tokio::{time::Instant};
+use tokio::time::Instant;
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(300);
 const REQUEST_TO_RELOCATE_TIMEOUT_SEC: Duration = Duration::from_secs(5);

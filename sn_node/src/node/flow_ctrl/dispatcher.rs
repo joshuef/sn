@@ -6,9 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{
-    messaging::Peers, Cmd, Error, MyNode, Result, STANDARD_CHANNEL_SIZE,
-};
+use crate::node::{messaging::Peers, Cmd, Error, MyNode, Result, STANDARD_CHANNEL_SIZE};
 
 use sn_interface::{
     messaging::{AntiEntropyMsg, NetworkMsg},
@@ -16,10 +14,8 @@ use sn_interface::{
     types::{DataAddress, Peer},
 };
 
-use std::{time::Instant};
-use tokio::sync::{
-    mpsc::{channel, Receiver, Sender},
-};
+use std::time::Instant;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 // Cmd Dispatcher.
 pub(crate) struct Dispatcher {
