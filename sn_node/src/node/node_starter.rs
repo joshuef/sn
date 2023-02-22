@@ -42,7 +42,7 @@ const GENESIS_DBC_FILENAME: &str = "genesis_dbc";
 
 pub(crate) type CmdChannel = mpsc::Sender<(Cmd, Vec<usize>)>;
 
-// /// Test only
+/// Test only
 // pub async fn new_test_api(
 //     config: &Config,
 //     join_retry_timeout: Duration,

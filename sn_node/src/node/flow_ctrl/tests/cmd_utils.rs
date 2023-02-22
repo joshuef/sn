@@ -84,21 +84,19 @@ pub(crate) struct ProcessAndInspectCmds<'a> {
     pending_cmds: VecDeque<Cmd>,
     index_inspected: usize,
     dispatcher: &'a Dispatcher,
-    node: Arc<RwLock<MyNode>>,
 }
 
 impl<'a> ProcessAndInspectCmds<'a> {
-    pub(crate) fn new(cmd: Cmd, dispatcher: &'a Dispatcher, node: Arc<RwLock<MyNode>>) -> Self {
-        Self::from(vec![cmd], dispatcher, node)
+    pub(crate) fn new(cmd: Cmd, dispatcher: &'a Dispatcher) -> Self {
+        Self::from(vec![cmd], dispatcher)
     }
 
-    fn from(cmds: Vec<Cmd>, dispatcher: &'a Dispatcher, node: Arc<RwLock<MyNode>>) -> Self {
+    fn from(cmds: Vec<Cmd>, dispatcher: &'a Dispatcher) -> Self {
         // We initialise `index_inspected` with MAX value, it will wraparound to 0 upon the first
         // call to `next()` method, thus making sure the first cmd is inspected in first iteration.
         let index_inspected = usize::MAX;
 
         Self {
-            node,
             pending_cmds: VecDeque::from(cmds),
             index_inspected,
             dispatcher,
@@ -113,10 +111,10 @@ impl<'a> ProcessAndInspectCmds<'a> {
     pub(crate) async fn new_from_client_msg(
         msg: ClientMsg,
         dispatcher: &'a Dispatcher,
-        node: Arc<RwLock<MyNode>>,
+        node: &mut MyNode,
         mut comm_rx: Receiver<CommEvent>,
     ) -> crate::node::error::Result<ProcessAndInspectCmds> {
-        let context = node.read().await.context();
+        let context = node.context();
         let (msg_id, serialised_payload, msg_kind, _auth) =
             get_client_msg_parts_for_handling(&msg)?;
 
@@ -159,14 +157,14 @@ impl<'a> ProcessAndInspectCmds<'a> {
                 ..
             })) => {
                 let cmds =
-                    MyNode::handle_msg(node.clone(), peer, wire_msg, Some(send_stream)).await?;
-                Ok(Self::from(cmds, dispatcher, node))
+                    MyNode::handle_msg(node, peer, wire_msg, Some(send_stream)).await?;
+                Ok(Self::from(cmds, dispatcher))
             }
             _ => Err(crate::node::error::Error::NoClientResponseStream),
         }
     }
 
-    pub(crate) async fn next(&mut self) -> crate::node::error::Result<Option<&Cmd>> {
+    pub(crate) async fn next(&mut self, &mut node: MyNode) -> crate::node::error::Result<Option<&Cmd>> {
         let mut next_index = self.index_inspected + 1;
         if next_index < self.pending_cmds.len() {
             let cmd = self.pending_cmds.get(next_index);
@@ -183,7 +181,7 @@ impl<'a> ProcessAndInspectCmds<'a> {
                     | Cmd::SendDataResponse { .. }
                     | Cmd::SendAndForwardResponseToClient { .. }
             ) {
-                let new_cmds = self.dispatcher.process_cmd(cmd, self.node.clone()).await?;
+                let new_cmds = self.dispatcher.process_cmd(cmd, node).await?;
                 self.pending_cmds.extend(new_cmds);
 
                 if next_index < self.pending_cmds.len() {
@@ -197,8 +195,8 @@ impl<'a> ProcessAndInspectCmds<'a> {
         Ok(None)
     }
 
-    pub(crate) async fn process_all(&mut self) -> crate::node::error::Result<()> {
-        while self.next().await?.is_some() { /* we just process all cmds */ }
+    pub(crate) async fn process_all(&mut self, &mut node: MyNode) -> crate::node::error::Result<()> {
+        while self.next(node).await?.is_some() { /* we just process all cmds */ }
         Ok(())
     }
 }
@@ -247,13 +245,13 @@ impl TestDispatcher {
     pub(crate) async fn process_cmd(&self, cmd: Cmd) -> Result<Vec<Cmd>> {
         self.msg_tracker.write().await.track(&cmd);
         self.dispatcher
-            .process_cmd(cmd, self.node.clone())
+            .process_cmd(cmd, &mut self.node)
             .await
             .wrap_err("Failed to process {cmd}")
     }
 
-    pub(crate) fn node(&self) -> Arc<RwLock<MyNode>> {
-        self.node.clone()
+    pub(crate) fn node(&mut self) -> &mut MyNode {
+        self.node
     }
 
     /// Handle and keep track of Msg from Peers
@@ -270,7 +268,7 @@ impl TestDispatcher {
         if let Some(old_name) = relocation_old_name {
             untracked = untracked || self.msg_tracker.write().await.untrack(msg_id, &old_name);
         }
-        let our_name = self.node().read().await.name();
+        let our_name = self.node().name();
         untracked = untracked || self.msg_tracker.write().await.untrack(msg_id, &our_name);
         assert!(untracked);
 

@@ -220,7 +220,7 @@ impl FlowCtrl {
                             Error::JoinTimeout
                         })
                     {
-                        error!("Could not joing the network: {error:?}");
+                        error!("Could not join the network: {error:?}");
                     }
                 });
                 debug!("we'rennot joined cmd is away");
