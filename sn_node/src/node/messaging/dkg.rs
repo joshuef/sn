@@ -1062,7 +1062,6 @@ mod tests {
                         .ok_or_else(|| eyre!("there should be node_count nodes"))?;
                     if !random_node
                         .node()
-
                         .dkg_voter
                         .reached_termination(&dkg_session_id)?
                     {
@@ -1145,9 +1144,7 @@ mod tests {
             membership_gen: 0,
         };
         for dispatcher in nodes.values() {
-            let mut cmd = dispatcher
-                .node()
-                .send_dkg_start(session_id.clone())?;
+            let mut cmd = dispatcher.node().send_dkg_start(session_id.clone())?;
             assert_eq!(cmd.len(), 1);
             let cmd = cmd.remove(0);
             assert_matches!(&cmd, Cmd::SendMsg { .. });

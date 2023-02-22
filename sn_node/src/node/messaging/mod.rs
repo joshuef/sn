@@ -33,6 +33,8 @@ use sn_interface::{
 
 use std::collections::BTreeSet;
 
+use super::core::NodeContext;
+
 #[derive(Debug, Clone)]
 pub enum Peers {
     Single(Peer),
@@ -64,9 +66,9 @@ impl IntoIterator for Peers {
 
 // Message handling
 impl MyNode {
-    #[instrument(skip(node, wire_msg, send_stream))]
+    #[instrument(skip(context, wire_msg, send_stream))]
     pub(crate) async fn handle_msg(
-        node: &MyNode,
+        context: NodeContext,
         origin: Peer,
         wire_msg: WireMsg,
         send_stream: Option<SendStream>,
@@ -75,8 +77,6 @@ impl MyNode {
         let msg_kind = wire_msg.kind();
 
         trace!("Handling msg {msg_id:?}. from {origin:?} Checking for AE first...");
-
-        let context = node.context();
 
         // alternatively we could flag in msg kind for this...
         // todo: this peer is actually client + forwarder ip....

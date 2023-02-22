@@ -156,15 +156,17 @@ impl<'a> ProcessAndInspectCmds<'a> {
                 send_stream: Some(send_stream),
                 ..
             })) => {
-                let cmds =
-                    MyNode::handle_msg(node, peer, wire_msg, Some(send_stream)).await?;
+                let cmds = MyNode::handle_msg(node, peer, wire_msg, Some(send_stream)).await?;
                 Ok(Self::from(cmds, dispatcher))
             }
             _ => Err(crate::node::error::Error::NoClientResponseStream),
         }
     }
 
-    pub(crate) async fn next(&mut self, &mut node: MyNode) -> crate::node::error::Result<Option<&Cmd>> {
+    pub(crate) async fn next(
+        &mut self,
+        &mut node: MyNode,
+    ) -> crate::node::error::Result<Option<&Cmd>> {
         let mut next_index = self.index_inspected + 1;
         if next_index < self.pending_cmds.len() {
             let cmd = self.pending_cmds.get(next_index);
@@ -195,7 +197,10 @@ impl<'a> ProcessAndInspectCmds<'a> {
         Ok(None)
     }
 
-    pub(crate) async fn process_all(&mut self, &mut node: MyNode) -> crate::node::error::Result<()> {
+    pub(crate) async fn process_all(
+        &mut self,
+        &mut node: MyNode,
+    ) -> crate::node::error::Result<()> {
         while self.next(node).await?.is_some() { /* we just process all cmds */ }
         Ok(())
     }

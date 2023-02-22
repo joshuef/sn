@@ -403,10 +403,7 @@ async fn ae_msg_from_the_future_is_handled() -> Result<()> {
     .await?;
 
     // Verify our `Section` got updated.
-    assert_lists(
-        node.network_knowledge().elders(),
-        new_section_elders,
-    );
+    assert_lists(node.network_knowledge().elders(), new_section_elders);
     Ok(())
 }
 
@@ -471,8 +468,7 @@ async fn untrusted_ae_msg_errors() -> Result<()> {
 
     assert_eq!(node.network_knowledge().genesis_key(), &pk);
     assert_eq!(
-        node
-            .network_knowledge()
+        node.network_knowledge()
             .section_tree()
             .all()
             .collect::<Vec<_>>(),

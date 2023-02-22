@@ -285,6 +285,16 @@ impl Cmd {
             Cmd::TryJoinNetwork => State::Join,
         }
     }
+
+    // Should this Cmd be punted off thread (is it long running or likely frequent)
+    pub(crate) fn can_go_off_thread(&self) -> bool {
+        match self {
+            Cmd::HandleMsg { .. } | Cmd::TrackNodeIssue { .. } | Cmd::ProcessClientMsg { .. } => {
+                true
+            }
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for Cmd {

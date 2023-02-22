@@ -58,6 +58,18 @@ impl CmdCtrl {
         #[cfg(feature = "statemap")]
         sn_interface::statemap::log_state(node_identifier.to_string(), cmd.statemap_state());
 
+        if cmd.can_go_off_thread() {
+            dispatcher.process_cmd_off_thread(
+                cmd,
+                node.context(),
+                id,
+                cmd_process_api,
+                rejoin_network_sender,
+            );
+            // early return
+            return;
+        }
+
         match dispatcher.process_cmd(cmd, node).await {
             Ok(cmds) => {
                 let _handle = tokio::task::spawn(async move {
@@ -92,4 +104,6 @@ impl CmdCtrl {
             sn_interface::statemap::State::Idle,
         );
     }
+
+    // async fn dispatch_cmd(cmd: Cmd)
 }

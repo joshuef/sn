@@ -105,10 +105,16 @@ mod tests {
         let elder_context = elder.context();
 
         let joiner_peer = joining_node.info().peer();
-        let some_cmd =
-            MyNode::handle_join(&mut elder, &elder_context, joiner_peer, MsgId::new(), None, None)
-                .await
-                .expect("An error was not expected.");
+        let some_cmd = MyNode::handle_join(
+            &mut elder,
+            &elder_context,
+            joiner_peer,
+            MsgId::new(),
+            None,
+            None,
+        )
+        .await
+        .expect("An error was not expected.");
 
         let some_cmd = some_cmd
             .iter()
@@ -168,9 +174,16 @@ mod tests {
         let adult_context = adult.context();
 
         let joiner_peer = joining_node.info().peer();
-        let cmd = MyNode::handle_join(&mut adult, &adult_context, joiner_peer, MsgId::new(), None, None)
-            .await
-            .expect("An error was not expected.");
+        let cmd = MyNode::handle_join(
+            &mut adult,
+            &adult_context,
+            joiner_peer,
+            MsgId::new(),
+            None,
+            None,
+        )
+        .await
+        .expect("An error was not expected.");
 
         let cmd = cmd.iter().find(|cmd| matches!(cmd, Cmd::SendMsg { .. }));
         assert_matches!(cmd, None);
@@ -204,9 +217,16 @@ mod tests {
         let elder_context = elder.context();
 
         let joiner_peer = joining_node.info().peer();
-        let cmd = MyNode::handle_join(&mut elder, &elder_context, joiner_peer, MsgId::new(), None, None)
-            .await
-            .expect("An error was not expected.");
+        let cmd = MyNode::handle_join(
+            &mut elder,
+            &elder_context,
+            joiner_peer,
+            MsgId::new(),
+            None,
+            None,
+        )
+        .await
+        .expect("An error was not expected.");
 
         let cmd = cmd.iter().find(|cmd| matches!(cmd, Cmd::SendMsg { .. }));
         assert_matches!(cmd, None);
@@ -238,9 +258,16 @@ mod tests {
         let elder_context = elder.context();
 
         let joiner_peer = joining_node.info().peer();
-        let cmd = MyNode::handle_join(&mut elder, &elder_context, joiner_peer, MsgId::new(), None, None)
-            .await
-            .expect("An error was not expected.");
+        let cmd = MyNode::handle_join(
+            &mut elder,
+            &elder_context,
+            joiner_peer,
+            MsgId::new(),
+            None,
+            None,
+        )
+        .await
+        .expect("An error was not expected.");
 
         let cmd = cmd.iter().find(|cmd| matches!(cmd, Cmd::SendMsg { .. }));
         assert_matches!(cmd, None);
@@ -275,10 +302,16 @@ mod tests {
         let elder_context = elder.context();
 
         let joiner_peer = joining_node.info().peer();
-        let some_cmd =
-            MyNode::handle_join(&mut elder, &elder_context, joiner_peer, MsgId::new(), None, None)
-                .await
-                .expect("An error was not expected.");
+        let some_cmd = MyNode::handle_join(
+            &mut elder,
+            &elder_context,
+            joiner_peer,
+            MsgId::new(),
+            None,
+            None,
+        )
+        .await
+        .expect("An error was not expected.");
 
         let some_cmd = some_cmd
             .iter()

@@ -357,8 +357,7 @@ mod tests {
             // Make sure the relocation_node's old_name is removed
             // The membership changes are actively monitored by the elders, so skip this check
             // for the adult nodes
-            if dispatcher.node().is_elder()
-                && network_knowledge.is_adult(&relocation_node_old_name)
+            if dispatcher.node().is_elder() && network_knowledge.is_adult(&relocation_node_old_name)
             {
                 panic!("The relocation node's old name should've been removed");
             }
@@ -503,10 +502,7 @@ mod tests {
         relocation_node_name: XorName,
         dst_prefix: Prefix,
     ) -> Result<()> {
-        info!(
-            "Initialize relocation from {:?}",
-            dispatcher.node().name()
-        );
+        info!("Initialize relocation from {:?}", dispatcher.node().name());
         let relocation_node_state = dispatcher
             .node()
             .network_knowledge()
@@ -515,9 +511,12 @@ mod tests {
 
         let relocation_dst = RelocationDst::new(dst_prefix.name());
         let relocation_node_state = relocation_node_state.relocate(relocation_dst);
-        let mut relocation_send_msg = dispatcher.node().propose_section_state(
-            SectionStateVote::NodeIsOffline(relocation_node_state.clone()),
-        )?;
+        let mut relocation_send_msg =
+            dispatcher
+                .node()
+                .propose_section_state(SectionStateVote::NodeIsOffline(
+                    relocation_node_state.clone(),
+                ))?;
         assert_eq!(relocation_send_msg.len(), 1);
         let relocation_send_msg = relocation_send_msg.remove(0);
         assert!(dispatcher
