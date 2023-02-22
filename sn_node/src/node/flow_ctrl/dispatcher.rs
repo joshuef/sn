@@ -87,7 +87,7 @@ impl Dispatcher {
             };
 
             let elapsed = start.elapsed();
-            trace!("Running Cmd {cmd_string:?} took {:?}", elapsed);
+            trace!("Running Cmd (off thread) {cmd_string:?} took {:?}", elapsed);
 
             match result {
                 Ok(cmds) => {

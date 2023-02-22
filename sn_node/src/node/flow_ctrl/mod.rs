@@ -242,7 +242,7 @@ impl FlowCtrl {
             self.perform_periodic_checks(&mut node).await;
 
             if !processed {
-                tokio::time::sleep(tokio::time::Duration::from_millis(25)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
             }
         }
 
