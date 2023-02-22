@@ -67,7 +67,7 @@ impl IntoIterator for Peers {
 impl MyNode {
     #[instrument(skip(node, wire_msg, send_stream))]
     pub(crate) async fn handle_msg(
-        node: Arc<RwLock<MyNode>>,
+        node: &MyNode,
         origin: Peer,
         wire_msg: WireMsg,
         send_stream: Option<SendStream>,
@@ -77,8 +77,7 @@ impl MyNode {
 
         trace!("Handling msg {msg_id:?}. from {origin:?} Checking for AE first...");
 
-        let context = node.read().await.context();
-        trace!("[NODE READ]: Handle msg read lock attempt success");
+        let context = node.context();
 
         // alternatively we could flag in msg kind for this...
         // todo: this peer is actually client + forwarder ip....

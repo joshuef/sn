@@ -189,7 +189,7 @@ impl Dispatcher {
                 origin,
                 wire_msg,
                 send_stream,
-            } => MyNode::handle_msg(node.clone(), origin, wire_msg, send_stream).await,
+            } => MyNode::handle_msg(node, origin, wire_msg, send_stream).await,
             Cmd::UpdateNetworkAndHandleValidClientMsg {
                 proof_chain,
                 signed_sap,

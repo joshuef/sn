@@ -195,7 +195,6 @@ impl FlowCtrl {
             while let Ok((cmd, cmd_id)) = incoming_cmds_from_apis.try_recv() {
                 trace!("Taking cmd off stack: {cmd:?}");
                 processed = true;
-                let may_modify = cmd.may_modify();
                 cmd_ctrl
                     .process_cmd_job(
                         &mut node,
