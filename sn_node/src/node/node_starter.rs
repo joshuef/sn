@@ -42,15 +42,6 @@ const GENESIS_DBC_FILENAME: &str = "genesis_dbc";
 
 pub(crate) type CmdChannel = mpsc::Sender<(Cmd, Vec<usize>)>;
 
-/// Test only
-// pub async fn new_test_api(
-//     config: &Config,
-//     join_retry_timeout: Duration,
-// ) -> Result<super::NodeTestApi> {
-//     let (node, cmd_channel, _) = new_node(config, join_retry_timeout).await?;
-//     Ok(super::NodeTestApi::new(cmd_channel))
-// }
-
 /// A reference held to the node to keep it running.
 ///
 /// Meant to be held while looping over the event receiver

@@ -246,7 +246,7 @@ impl FlowCtrl {
             }
         }
 
-        error!("Processing loop dead");
+        // error!("Processing loop dead");
     }
 
     /// Listens on data_replication_receiver on a new thread, sorts and batches data, generating SendMsg Cmds

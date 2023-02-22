@@ -9,7 +9,7 @@
 use crate::{
     node::{
         flow_ctrl::{cmds::Cmd, fault_detection::FaultsCmd},
-        Error, MyNode, Result,
+        MyNode, Result,
     },
     UsedSpace,
 };
@@ -18,7 +18,7 @@ use sn_comms::Comm;
 use sn_interface::{
     dbcs::gen_genesis_dbc,
     messaging::system::SectionSigned,
-    network_knowledge::{NetworkKnowledge, SectionKeyShare, SectionsDAG, GENESIS_DBC_SK},
+    network_knowledge::{NetworkKnowledge, SectionsDAG, GENESIS_DBC_SK},
     types::{log_markers::LogMarker, Peer},
     SectionAuthorityProvider,
 };
@@ -84,20 +84,6 @@ impl MyNode {
 
     pub(crate) fn is_not_elder(&self) -> bool {
         !self.is_elder()
-    }
-
-    /// Returns the current BLS public key set
-    pub(crate) fn public_key_set(&self) -> Result<bls::PublicKeySet> {
-        Ok(self.key_share()?.public_key_set)
-    }
-
-    /// Returns our key share in the current BLS group if this node is a member of one, or
-    /// `Error::MissingSecretKeyShare` otherwise.
-    pub(crate) fn key_share(&self) -> Result<SectionKeyShare> {
-        let section_key = self.network_knowledge.section_key();
-        self.section_keys_provider
-            .key_share(&section_key)
-            .map_err(Error::from)
     }
 
     // ----------------------------------------------------------------------------------------
