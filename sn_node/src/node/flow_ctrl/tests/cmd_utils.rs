@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{flow_ctrl::dispatcher::Dispatcher, messaging::Peers, Cmd, MyNode};
+use crate::node::{messaging::Peers, Cmd, MyNode};
 use sn_comms::{CommEvent, MsgFromPeer};
 use sn_interface::{
     messaging::{
@@ -39,7 +39,6 @@ pub(crate) struct JoinApprovalSent(pub(crate) bool);
 pub(crate) async fn handle_online_cmd(
     peer: &Peer,
     sk_set: &bls::SecretKeySet,
-    dispatcher: Dispatcher,
     node: &mut MyNode,
 ) -> Result<JoinApprovalSent> {
     let node_state = NodeState::joined(*peer, None);
@@ -47,7 +46,7 @@ pub(crate) async fn handle_online_cmd(
 
     let mut all_cmds = ProcessAndInspectCmds::new(
         Cmd::HandleMembershipDecision(membership_decision),
-        dispatcher,
+        // node,
     );
 
     let mut approval_sent = JoinApprovalSent(false);
@@ -77,20 +76,19 @@ pub(crate) async fn handle_online_cmd(
 }
 
 // Process commands, allowing the user to inspect each and all of the intermediate
-// commands that are being returned by the Cmd dispatcher.
+// commands that are being returned by the Cmd node.
 // All commands that are meant to send msgs over the wire are inspected but not processed further.
 pub(crate) struct ProcessAndInspectCmds {
     pending_cmds: VecDeque<Cmd>,
     index_inspected: usize,
-    dispatcher: Dispatcher,
 }
 
 impl ProcessAndInspectCmds {
-    pub(crate) fn new(cmd: Cmd, dispatcher: Dispatcher) -> Self {
-        Self::from(vec![cmd], dispatcher)
+    pub(crate) fn new(cmd: Cmd) -> Self {
+        Self::from(vec![cmd])
     }
 
-    fn from(cmds: Vec<Cmd>, dispatcher: Dispatcher) -> Self {
+    fn from(cmds: Vec<Cmd>) -> Self {
         // We initialise `index_inspected` with MAX value, it will wraparound to 0 upon the first
         // call to `next()` method, thus making sure the first cmd is inspected in first iteration.
         let index_inspected = usize::MAX;
@@ -98,7 +96,6 @@ impl ProcessAndInspectCmds {
         Self {
             pending_cmds: VecDeque::from(cmds),
             index_inspected,
-            dispatcher,
         }
     }
 
@@ -109,7 +106,6 @@ impl ProcessAndInspectCmds {
     // at this point it's useless since `Cmd::SendDataResponse` is not processed but only inspected.
     pub(crate) async fn new_from_client_msg(
         msg: ClientMsg,
-        dispatcher: Dispatcher,
         node: &mut MyNode,
         mut comm_rx: Receiver<CommEvent>,
     ) -> crate::node::error::Result<ProcessAndInspectCmds> {
@@ -156,7 +152,8 @@ impl ProcessAndInspectCmds {
                 ..
             })) => {
                 let cmds = MyNode::handle_msg(node, peer, wire_msg, Some(send_stream)).await?;
-                Ok(Self::from(cmds, dispatcher.clone()))
+                Ok(Self::from(cmds))
+                // Ok(Self::from(cmds, node.clone()))
             }
             _ => Err(crate::node::error::Error::NoClientResponseStream),
         }
@@ -182,7 +179,7 @@ impl ProcessAndInspectCmds {
                     | Cmd::SendDataResponse { .. }
                     | Cmd::SendAndForwardResponseToClient { .. }
             ) {
-                let new_cmds = self.dispatcher.process_cmd(cmd, node).await?;
+                let new_cmds = MyNode::process_cmd(cmd, node, None).await?;
                 self.pending_cmds.extend(new_cmds);
 
                 if next_index < self.pending_cmds.len() {
@@ -224,26 +221,28 @@ pub(crate) fn get_client_msg_parts_for_handling(
     Ok((MsgId::new(), payload, kind, auth_proof))
 }
 
-/// Bundles the `Dispatcher` along with the `TestMsgTracker` to easily track the
+/// Bundles the `MyNode` along with the `TestMsgTracker` to easily track the
 /// NodeMsgs during tests
-pub(crate) struct TestDispatcher {
-    pub(crate) dispatcher: Arc<Dispatcher>,
+pub(crate) struct TestNode {
+    pub(crate) node: Arc<MyNode>,
     pub(crate) msg_tracker: Arc<RwLock<TestMsgTracker>>,
 }
 
-impl TestDispatcher {
-    pub(crate) fn new(dispatcher: Dispatcher, msg_tracker: Arc<RwLock<TestMsgTracker>>) -> Self {
+impl TestNode {
+    pub(crate) fn new(node: MyNode, msg_tracker: Arc<RwLock<TestMsgTracker>>) -> Self {
         Self {
-            dispatcher: Arc::new(dispatcher),
+            node: Arc::new(node),
             msg_tracker,
         }
     }
 
+    pub(crate) fn node(&self) -> Arc<MyNode> {
+        self.node.clone()
+    }
     /// Tracks the cmds before executing them
-    pub(crate) async fn process_cmd(&self, cmd: Cmd, node: &mut MyNode) -> Result<Vec<Cmd>> {
+    pub(crate) async fn process_cmd(&self, cmd: Cmd) -> Result<Vec<Cmd>> {
         self.msg_tracker.write().await.track(&cmd);
-        self.dispatcher
-            .process_cmd(cmd, node)
+        MyNode::process_cmd(cmd, &mut self.node)
             .await
             .wrap_err("Failed to process {cmd}")
     }
@@ -272,8 +271,7 @@ impl TestDispatcher {
             wire_msg: msg.wire_msg,
             send_stream: msg.send_stream,
         };
-        self.dispatcher
-            .process_cmd(handle_node_msg_cmd, node)
+        MyNode::process_cmd(handle_node_msg_cmd, node)
             .await
             .expect("Error while handling node msg")
     }

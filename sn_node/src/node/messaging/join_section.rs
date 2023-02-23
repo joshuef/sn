@@ -34,7 +34,6 @@ mod tests {
     use super::*;
     use crate::node::{
         flow_ctrl::{
-            dispatcher::Dispatcher,
             tests::network_builder::{TestNetwork, TestNetworkBuilder},
             CmdCtrl, FlowCtrl, RejoinReason,
         },
