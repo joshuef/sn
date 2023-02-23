@@ -8,10 +8,7 @@
 
 use crate::node::{
     cfg::keypair_storage::{get_reward_pk, store_network_keypair, store_new_reward_keypair},
-    flow_ctrl::{
-        cmds::Cmd, dispatcher::Dispatcher, fault_detection::FaultsCmd, CmdCtrl, FlowCtrl,
-        RejoinReason,
-    },
+    flow_ctrl::{cmds::Cmd, fault_detection::FaultsCmd, CmdCtrl, FlowCtrl, RejoinReason},
     logging::log_system_details,
     Config, Error, MyNode, Result, STANDARD_CHANNEL_SIZE,
 };
@@ -127,8 +124,8 @@ async fn bootstrap_node(
 
     let node_name = node.name();
     let context = node.context();
-    let (dispatcher, data_replication_receiver) = Dispatcher::new();
-    let cmd_ctrl = CmdCtrl::new(dispatcher);
+
+    let (cmd_ctrl, data_replication_receiver) = CmdCtrl::new();
     let (cmd_channel, rejoin_network_rx) = FlowCtrl::start(
         node,
         cmd_ctrl,

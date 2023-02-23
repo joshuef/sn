@@ -12,10 +12,7 @@ pub(crate) mod dbc_utils;
 pub(crate) mod network_builder;
 
 use crate::node::{
-    flow_ctrl::{
-        dispatcher::Dispatcher,
-        tests::network_builder::{TestNetwork, TestNetworkBuilder},
-    },
+    flow_ctrl::tests::network_builder::{TestNetwork, TestNetworkBuilder},
     messaging::Peers,
     Cmd, Error,
 };
@@ -67,8 +64,7 @@ async fn membership_churn_starts_on_join_request_from_relocated_node() -> Result
     let sk_set = env.get_secret_key_set(prefix, None);
     let section_key = sk_set.public_keys().public_key();
 
-    let (_adult_dispatcher, adult_node) =
-        env.get_dispatchers_and_nodes(prefix, 0, 1, None).remove(0);
+    let adult_node = env.get_nodes(prefix, 0, 1, None).remove(0);
     let old_info = adult_node.info();
     let old_name = old_info.name();
     let old_keypair = old_info.keypair.clone();
@@ -97,8 +93,7 @@ async fn membership_churn_starts_on_join_request_from_relocated_node() -> Result
         NodeMsg::TryJoin(Some(proof)),
     )?;
 
-    let (elder_dispatcher, elder_node) =
-        env.get_dispatchers_and_nodes(prefix, 1, 0, None).remove(0);
+    let elder_node = env.get_nodes(prefix, 1, 0, None).remove(0);
 
     let elder_node = Arc::new(RwLock::new(elder_node));
 
@@ -108,7 +103,6 @@ async fn membership_churn_starts_on_join_request_from_relocated_node() -> Result
             wire_msg,
             send_stream: None,
         },
-        &elder_dispatcher,
         elder_node.clone(),
     )
     .process_all()
@@ -131,12 +125,11 @@ async fn handle_agreement_on_online() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 0, None, None)
         .build();
-    let (dispatcher, node) = env.get_dispatchers_and_nodes(prefix, 1, 0, None).remove(0);
+    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let sk_set = env.get_secret_key_set(prefix, None);
     let new_peer = gen_peer(MIN_ADULT_AGE);
     let node = Arc::new(RwLock::new(node));
-    let join_approval_sent =
-        handle_online_cmd(&new_peer, &sk_set, &dispatcher, node.clone()).await?;
+    let join_approval_sent = handle_online_cmd(&new_peer, &sk_set, node.clone()).await?;
     assert!(join_approval_sent.0);
 
     assert!(node
@@ -162,7 +155,7 @@ async fn handle_agreement_on_online_of_elder_candidate() -> Result<()> {
             None,
         )
         .build();
-    let (dispatcher, mut node) = env.get_dispatchers_and_nodes(prefix, 1, 0, None).remove(0);
+    let (dispatcher, mut node) = env.get_nodes(prefix, 1, 0, None).remove(0);
     let node_name = node.name();
     let section = env.get_network_knowledge(prefix, None);
     let sk_set = env.get_secret_key_set(prefix, None);
@@ -240,7 +233,7 @@ async fn handle_join_request_of_rejoined_node() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 0, None, None)
         .build();
-    let (_dispatcher, mut node) = env.get_dispatchers_and_nodes(prefix, 1, 0, None).remove(0);
+    let (_dispatcher, mut node) = env.get_nodes(prefix, 1, 0, None).remove(0);
 
     // Make a left peer.
     let peer = gen_peer_in_prefix(MIN_ADULT_AGE, prefix);
@@ -271,7 +264,7 @@ async fn handle_agreement_on_offline_of_non_elder() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 1, None, None)
         .build();
-    let (dispatcher, node) = env.get_dispatchers_and_nodes(prefix, 1, 0, None).remove(0);
+    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let sk_set = env.get_secret_key_set(prefix, None);
 
     // get the node state of the non_elder node
@@ -282,13 +275,9 @@ async fn handle_agreement_on_offline_of_non_elder() -> Result<()> {
     let sig = TestKeys::get_section_sig_bytes(&sk_set.secret_key(), &get_single_sig(&proposal));
 
     let node = Arc::new(RwLock::new(node));
-    ProcessAndInspectCmds::new(
-        Cmd::HandleNodeOffAgreement { proposal, sig },
-        &dispatcher,
-        node.clone(),
-    )
-    .process_all()
-    .await?;
+    ProcessAndInspectCmds::new(Cmd::HandleNodeOffAgreement { proposal, sig }, node.clone())
+        .process_all()
+        .await?;
 
     assert!(!node
         .read()
@@ -305,7 +294,7 @@ async fn handle_agreement_on_offline_of_elder() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 0, None, None)
         .build();
-    let mut elders = env.get_dispatchers_and_nodes(prefix, 2, 0, None);
+    let mut elders = env.get_nodes(prefix, 2, 0, None);
     let (dispatcher, node) = elders.remove(0);
     let sk_set = env.get_secret_key_set(prefix, None);
 
@@ -415,7 +404,7 @@ async fn untrusted_ae_msg_errors() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 0, None, None)
         .build();
-    let (dispatcher, node) = env.get_dispatchers_and_nodes(prefix, 1, 0, None).remove(0);
+    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let section = env.get_network_knowledge(prefix, None);
     let signed_sap = section.signed_sap();
     let sk_set = env.get_secret_key_set(prefix, None);
@@ -448,14 +437,11 @@ async fn untrusted_ae_msg_errors() -> Result<()> {
     )?;
 
     assert!(matches!(
-        ProcessAndInspectCmds::new(
-            Cmd::HandleMsg {
-                origin: sender.peer(),
-                wire_msg,
-                send_stream: None,
-            },
-            &dispatcher,
-        )
+        ProcessAndInspectCmds::new(Cmd::HandleMsg {
+            origin: sender.peer(),
+            wire_msg,
+            send_stream: None,
+        },)
         .process_all()
         .await,
         Err(Error::NetworkKnowledge(
@@ -610,7 +596,7 @@ async fn handle_elders_update() -> Result<()> {
 
     assert_eq!(update_actual_recipients, update_expected_recipients);
 
-    assert_lists(node.read().await.network_knowledge().elders(), elders_1);
+    assert_lists(node.network_knowledge().elders(), elders_1);
 
     Ok(())
 }
@@ -684,8 +670,6 @@ async fn handle_demote_during_split() -> Result<()> {
             .insert(TestKeys::get_section_key_share(&sk_set1, 0));
     }
 
-    let (dispatcher, _) = Dispatcher::new();
-
     let cmd = {
         // Sign the saps.
         let sap0 = TestKeys::get_section_signed(&sk_set0.secret_key(), sap0);
@@ -739,7 +723,7 @@ async fn spentbook_spend_client_message_should_replicate_to_adults_and_send_ack(
     let mut env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 6, None, Some(0))
         .build();
-    let (dispatcher, node) = env.get_dispatchers_and_nodes(prefix, 1, 0, None).remove(0);
+    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let sk_set = env.get_secret_key_set(prefix, None);
 
     let (public_key, tx, spent_proofs, spent_transactions) =
@@ -754,7 +738,6 @@ async fn spentbook_spend_client_message_should_replicate_to_adults_and_send_ack(
             spent_transactions,
             network_knowledge: None,
         })),
-        &dispatcher,
         &mut node,
         comm_rx,
     )
@@ -804,7 +787,7 @@ async fn spentbook_spend_transaction_with_no_inputs_should_return_spentbook_erro
     let mut env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 6, None, Some(0))
         .build();
-    let (dispatcher, node) = env.get_dispatchers_and_nodes(prefix, 1, 0, None).remove(0);
+    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let section = env.get_network_knowledge(prefix, None);
     let sk_set = env.get_secret_key_set(prefix, None);
 
@@ -831,7 +814,6 @@ async fn spentbook_spend_transaction_with_no_inputs_should_return_spentbook_erro
             spent_transactions: new_dbc.spent_transactions,
             network_knowledge: None,
         })),
-        &dispatcher,
         &mut node,
         comm_rx,
     )
@@ -877,14 +859,11 @@ async fn spentbook_spend_with_updated_network_knowledge_should_update_the_node()
         .sap(prefix1, elder_count(), 0, None, Some(0))
         .build();
 
-    let (dispatcher, mut node) = env
-        .get_dispatchers_and_nodes(Prefix::default(), 1, 0, None)
-        .remove(0);
+    let (dispatcher, mut node) = env.get_nodes(Prefix::default(), 1, 0, None).remove(0);
     let info = node.info();
     let genesis_sk_set = env.get_secret_key_set(Prefix::default(), None);
 
-    let (_other_dispatcher, other_node) =
-        env.get_dispatchers_and_nodes(prefix1, 1, 0, None).remove(0);
+    let (_other_dispatcher, other_node) = env.get_nodes(prefix1, 1, 0, None).remove(0);
     let other_node_info = other_node.info();
     let other_section_key_share =
         env.get_section_key_share(prefix1, other_node_info.public_key(), None);
@@ -955,7 +934,7 @@ async fn spentbook_spend_with_updated_network_knowledge_should_update_the_node()
     assert!(found, "UpdateNetworkAndHandleValidClientMsg was not generated to update the node's network knowledge");
 
     // Now the proof chain should have the other section key.
-    let tree = node.read().await.network_knowledge().section_tree().clone();
+    let tree = node.network_knowledge().section_tree().clone();
     let proof_chain = tree.get_sections_dag().clone();
     assert_eq!(proof_chain.keys().into_iter().count(), 2);
     let mut proof_chain_iter = proof_chain.keys();

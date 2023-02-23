@@ -248,11 +248,6 @@ impl FlowCtrl {
             let our_name = node.info().name();
             is_member = node.network_knowledge.is_section_member(&our_name);
 
-            // skip periodics
-            if is_member {
-                debug!("we joined!!!");
-            }
-
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
 
