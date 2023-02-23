@@ -199,11 +199,9 @@ impl FlowCtrl {
         let cmd_channel = self.cmd_sender_channel.clone();
         let mut last_join_attempt = Instant::now() - (join_retry_timeout * 2);
         loop {
-            let mut processed = false;
             // first do any pending processing
             while let Ok((cmd, cmd_id)) = incoming_cmds_from_apis.try_recv() {
                 trace!("Taking cmd off stack: {cmd:?}");
-                processed = true;
                 cmd_ctrl
                     .process_cmd_job(
                         &mut node,
@@ -249,11 +247,6 @@ impl FlowCtrl {
             // await for join retry time
             let our_name = node.info().name();
             is_member = node.network_knowledge.is_section_member(&our_name);
-
-            // skip periodics
-            if is_member {
-                debug!("we joined!!!");
-            }
 
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
@@ -318,9 +311,6 @@ impl FlowCtrl {
                         data_addresses,
                         peer,
                     );
-
-
-
 
                     let mut data_bundle = vec![];
 

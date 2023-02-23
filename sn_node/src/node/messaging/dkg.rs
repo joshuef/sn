@@ -848,15 +848,15 @@ impl MyNode {
 #[cfg(test)]
 mod tests {
     use crate::node::{
-        MyNode,
         flow_ctrl::{
-        cmds::Cmd,
-        dispatcher::Dispatcher,
-        tests::{
-            cmd_utils::{get_next_msg, TestDispatcher, TestMsgTracker},
-            network_builder::TestNetworkBuilder,
+            cmds::Cmd,
+            tests::{
+                cmd_utils::{get_next_msg, TestMsgTracker, TestNode},
+                network_builder::TestNetworkBuilder,
+            },
         },
-    }};
+        MyNode,
+    };
 
     use sn_comms::CommEvent;
     use sn_interface::{
@@ -899,7 +899,7 @@ mod tests {
         // terminate if there are no more msgs to process
         let mut done = false;
         while !done {
-            for (node, dispatcher) in node_instances.values() {
+            for (node, test_node) in node_instances.values() {
                 let name = node.name();
                 let comm_rx = comm_receivers
                     .get_mut(&name)
@@ -907,18 +907,18 @@ mod tests {
                 info!("\n\n NODE: {name}");
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    let cmds = dispatcher.test_handle_msg_from_peer(msg, None).await;
+                    let cmds = test_node.test_handle_msg_from_peer(msg, None).await;
                     for cmd in cmds {
                         info!("Got cmd {}", cmd);
                         if let Cmd::SendMsg { .. } = &cmd {
-                            assert!(dispatcher.process_cmd(cmd).await?.is_empty());
+                            assert!(test_node.process_cmd(cmd).await?.is_empty());
                         } else if let Cmd::HandleDkgOutcome {
                             section_auth: _,
                             outcome,
                         } = &cmd
                         {
                             let _ = new_sk_shares.insert(name, outcome.clone());
-                            let dkg_cmds = dispatcher.process_cmd(cmd).await?;
+                            let dkg_cmds = test_node.process_cmd(cmd).await?;
                             verify_dkg_outcome_cmds(dkg_cmds);
                         } else {
                             panic!("got a different cmd {cmd:?}");
@@ -958,7 +958,7 @@ mod tests {
         // terminate if there are no more msgs to process
         let mut done = false;
         while !done {
-            for (node, dispatcher) in node_instances.values() {
+            for (node, test_node) in node_instances.values() {
                 let name = node.name();
                 let comm_rx = comm_receivers
                     .get_mut(&name)
@@ -966,12 +966,12 @@ mod tests {
                 info!("\n\n NODE: {name}");
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    let cmds = dispatcher.test_handle_msg_from_peer(msg, None).await;
+                    let cmds = test_node.test_handle_msg_from_peer(msg, None).await;
                     for mut cmd in cmds {
                         info!("Got cmd {}", cmd);
                         if let Cmd::SendMsg { .. } = cmd {
                             cmd.filter_recipients(BTreeSet::from([dead_node]));
-                            assert!(dispatcher.process_cmd(cmd).await?.is_empty());
+                            assert!(test_node.process_cmd(cmd).await?.is_empty());
                         } else {
                             panic!("got a different cmd {cmd:?}");
                         }
@@ -1008,7 +1008,7 @@ mod tests {
         // terminate if there are no more msgs to process
         while new_sk_shares.len() != node_count {
             looped_through_n_times += 1;
-            for (node, dispatcher) in node_instances.values() {
+            for (node, test_node) in node_instances.values() {
                 let name = node.name();
                 let comm_rx = comm_receivers
                     .get_mut(&name)
@@ -1018,7 +1018,7 @@ mod tests {
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    let cmds = dispatcher.test_handle_msg_from_peer(msg, None).await;
+                    let cmds = test_node.test_handle_msg_from_peer(msg, None).await;
                     for mut cmd in cmds {
                         info!("Got cmd {}", cmd);
                         if let Cmd::SendMsg { ref recipients, .. } = cmd {
@@ -1033,7 +1033,7 @@ mod tests {
                                     .ok_or_else(|| eyre!("Contains node_count peers"))?;
                                 cmd.filter_recipients(BTreeSet::from([drop_recp]));
                             };
-                            assert!(dispatcher.process_cmd(cmd).await?.is_empty());
+                            assert!(test_node.process_cmd(cmd).await?.is_empty());
                         } else if let Cmd::HandleDkgOutcome {
                             section_auth: _,
                             outcome,
@@ -1041,7 +1041,7 @@ mod tests {
                         {
                             // capture the sk_share here as we don't proceed with the SAP update
                             let _ = new_sk_shares.insert(name, outcome.clone());
-                            let dkg_cmds = dispatcher.process_cmd(cmd).await?;
+                            let dkg_cmds = test_node.process_cmd(cmd).await?;
                             verify_dkg_outcome_cmds(dkg_cmds);
                         } else {
                             panic!("got a different cmd {cmd:?}");
@@ -1064,7 +1064,6 @@ mod tests {
                         .ok_or_else(|| eyre!("there should be node_count nodes"))?;
                     if !random_node
                         .node()
-
                         .dkg_voter
                         .reached_termination(&dkg_session_id)?
                     {
@@ -1098,7 +1097,7 @@ mod tests {
         msg_tracker: Arc<RwLock<TestMsgTracker>>,
         rng: impl RngCore,
     ) -> (
-        BTreeMap<XorName, (MyNode, TestDispatcher)>,
+        BTreeMap<XorName, (MyNode, TestNode)>,
         BTreeMap<XorName, mpsc::Receiver<CommEvent>>,
         SecretKeySet,
     ) {
@@ -1111,13 +1110,13 @@ mod tests {
             .into_iter()
             .map(|node| {
                 let name = node.name();
-                let (dispatcher, _) = Dispatcher::new();
-                let dispatcher = TestDispatcher::new(node, dispatcher, msg_tracker.clone());
-                (name, (node, dispatcher))
+                let (test_node, _) = Dispatcher::new();
+                let test_node = TestNode::new(node, test_node, msg_tracker.clone());
+                (name, (node, test_node))
             })
-            .collect::<BTreeMap<XorName, (MyNode, TestDispatcher)>>();
+            .collect::<BTreeMap<XorName, (MyNode, TestNode)>>();
         let mut comm_receivers = BTreeMap::new();
-        for (name, (mut node,dispatcher)) in node_instances.iter() {
+        for (name, (mut node, test_node)) in node_instances.iter() {
             let pk = node.info().public_key();
             let comm = env.take_comm_rx(pk);
             let _ = comm_receivers.insert(*name, comm);
@@ -1126,7 +1125,7 @@ mod tests {
     }
 
     // Each node sends out DKG start msg to the other nodes
-    async fn start_dkg(nodes: &mut BTreeMap<XorName, TestDispatcher>) -> Result<DkgSessionId> {
+    async fn start_dkg(nodes: &mut BTreeMap<XorName, TestNode>) -> Result<DkgSessionId> {
         let mut elders = BTreeMap::new();
         for (name, node) in nodes.iter() {
             let _ = elders.insert(*name, node.node().addr);
@@ -1146,14 +1145,12 @@ mod tests {
             bootstrap_members,
             membership_gen: 0,
         };
-        for dispatcher in nodes.values() {
-            let mut cmd = dispatcher
-                .node()
-                .send_dkg_start(session_id.clone())?;
+        for test_node in nodes.values() {
+            let mut cmd = test_node.node().send_dkg_start(session_id.clone())?;
             assert_eq!(cmd.len(), 1);
             let cmd = cmd.remove(0);
             assert_matches!(&cmd, Cmd::SendMsg { .. });
-            assert!(dispatcher.process_cmd(cmd).await?.is_empty());
+            assert!(test_node.process_cmd(cmd).await?.is_empty());
         }
         Ok(session_id)
     }

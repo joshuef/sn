@@ -6,36 +6,18 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{messaging::Peers, Cmd, Error, MyNode, Result, STANDARD_CHANNEL_SIZE};
+use crate::node::{messaging::Peers, Cmd, Error, MyNode, Result};
 
 use sn_interface::{
     messaging::{AntiEntropyMsg, NetworkMsg},
     network_knowledge::SectionTreeUpdate,
-    types::{DataAddress, Peer},
 };
 
 use std::time::Instant;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-// Cmd Dispatcher.
-#[derive(Clone)]
-pub(crate) struct Dispatcher {
-    data_replication_sender: Sender<(Vec<DataAddress>, Peer)>,
-}
-
-impl Dispatcher {
-    /// Creates dispatcher and returns a receiver for enqueing DataAddresses for replication to specific peers
-    pub(crate) fn new() -> (Self, Receiver<(Vec<DataAddress>, Peer)>) {
-        let (data_replication_sender, data_replication_receiver) = channel(STANDARD_CHANNEL_SIZE);
-        let dispatcher = Self {
-            data_replication_sender,
-        };
-
-        (dispatcher, data_replication_receiver)
-    }
-
+impl MyNode {
     /// Handles a single cmd.
-    pub(crate) async fn process_cmd(&self, cmd: Cmd, node: &mut MyNode) -> Result<Vec<Cmd>> {
+    pub(crate) async fn process_cmd(cmd: Cmd, node: &mut MyNode) -> Result<Vec<Cmd>> {
         let context = node.context();
         let start = Instant::now();
         let cmd_string = format!("{}", cmd);
@@ -243,10 +225,14 @@ impl Dispatcher {
                 recipient,
                 data_batch,
             } => {
-                self.data_replication_sender
-                    .send((data_batch, recipient))
-                    .await
-                    .map_err(|_| Error::DataReplicationChannel)?;
+                if let Some(sender) = &node.data_replication_sender {
+                    sender
+                        .send((data_batch, recipient))
+                        .await
+                        .map_err(|_| Error::DataReplicationChannel)?;
+                } else {
+                    warn!("No data replication sender set!");
+                }
                 Ok(vec![])
             }
             Cmd::ProposeVoteNodesOffline(names) => node.cast_offline_proposals(&names),

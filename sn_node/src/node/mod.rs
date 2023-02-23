@@ -73,7 +73,9 @@ mod core {
             SectionAuthorityProvider, SectionKeyShare, SectionKeysProvider,
         },
         types::{keys::ed25519::Digest256, log_markers::LogMarker},
+        types::{DataAddress, Peer},
     };
+    use tokio::sync::mpsc::Sender;
 
     use ed25519_dalek::Keypair;
     use std::{
@@ -82,7 +84,6 @@ mod core {
         path::PathBuf,
         sync::Arc,
     };
-    use tokio::sync::mpsc;
 
     // File name where to cache this node's section tree (stored at this node's set root storage dir)
     const SECTION_TREE_FILE_NAME: &str = "section_tree";
@@ -118,9 +119,11 @@ mod core {
         pub(crate) handover_voting: Option<Handover>,
         pub(crate) joins_allowed: bool,
         pub(crate) joins_allowed_until_split: bool,
-        pub(crate) fault_cmds_sender: mpsc::Sender<FaultsCmd>,
+        pub(crate) fault_cmds_sender: Sender<FaultsCmd>,
         // Section administration
         pub(crate) section_proposal_aggregator: SignatureAggregator,
+        /// Send data for replication
+        pub(crate) data_replication_sender: Option<Sender<(Vec<DataAddress>, Peer)>>,
     }
 
     #[derive(custom_debug::Debug, Clone)]
@@ -138,7 +141,7 @@ mod core {
         pub(crate) joins_allowed: bool,
         pub(crate) joins_allowed_until_split: bool,
         #[debug(skip)]
-        pub(crate) fault_cmds_sender: mpsc::Sender<FaultsCmd>,
+        pub(crate) fault_cmds_sender: Sender<FaultsCmd>,
         pub(crate) relocation_state: Option<RelocationState>,
     }
 
@@ -215,7 +218,7 @@ mod core {
             section_key_share: Option<SectionKeyShare>,
             used_space: UsedSpace,
             root_storage_dir: PathBuf,
-            fault_cmds_sender: mpsc::Sender<FaultsCmd>,
+            fault_cmds_sender: Sender<FaultsCmd>,
         ) -> Result<Self> {
             let addr = comm.socket_addr();
             comm.set_comm_targets(network_knowledge.members());
@@ -273,6 +276,7 @@ mod core {
                 elder_promotion_aggregator: SignatureAggregator::default(),
                 handover_request_aggregator: TotalParticipationAggregator::default(),
                 section_proposal_aggregator: SignatureAggregator::default(),
+                data_replication_sender: None,
             };
 
             let context = &node.context();

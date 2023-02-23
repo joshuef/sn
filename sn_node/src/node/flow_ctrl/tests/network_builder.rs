@@ -1,7 +1,5 @@
 use crate::{
-    node::{
-        cfg::create_test_capacity_and_root_storage, core::MyNode, flow_ctrl::dispatcher::Dispatcher,
-    },
+    node::{cfg::create_test_capacity_and_root_storage, core::MyNode},
     UsedSpace,
 };
 
@@ -594,29 +592,6 @@ impl TestNetwork {
             &node.1,
             &sk_share,
         )
-    }
-
-    /// Build elder/adult `Dispatcher<MyNode>` instances for a given `Prefix`. The elder_count and adult_count
-    /// should be <= the actual count specified in the SAP.
-    /// The created instance has knowledge about the Network only from the genesis section to its
-    /// current section.
-    ///
-    /// If the Prefix contains multiple churn events (multiple SAPs), provide the churn_idx to get a specific
-    /// SAP, else the latest SAP for the prefix is used.
-    pub(crate) fn get_dispatchers_and_nodes(
-        &self,
-        prefix: Prefix,
-        elder_count: usize,
-        adult_count: usize,
-        churn_idx: Option<usize>,
-    ) -> Vec<(Dispatcher, MyNode)> {
-        self.get_nodes(prefix, elder_count, adult_count, churn_idx)
-            .into_iter()
-            .map(|node| {
-                let (dispatcher, _) = Dispatcher::new();
-                (dispatcher, node)
-            })
-            .collect()
     }
 
     /// Take the `mspc::Receiver` for a given node. The receiver will be moved out of the `TestNetwork`.
