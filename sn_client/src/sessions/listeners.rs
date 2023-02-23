@@ -98,9 +98,8 @@ impl Session {
                 }
                 (response_id, msg) => {
                     warn!(
-                        "Unexpected msg type received on {} from {peer:?} in response \
-                    to {msg_id:?}: {msg:?} with {response_id:?}",
-                        stream_id
+                        "Unexpected msg type received on {stream_id} from {peer:?} in response \
+                        to {msg_id:?}: {msg:?} with {response_id:?}"
                     );
                     return Err(Error::UnexpectedNetworkMsg {
                         correlation_id: msg_id,

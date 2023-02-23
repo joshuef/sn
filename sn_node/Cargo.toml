@@ -49,12 +49,11 @@ num_cpus = "1.13.0"
 opentelemetry = { version = "0.17", features = ["rt-tokio"], optional = true }
 opentelemetry-otlp = { version = "0.10", optional = true }
 opentelemetry-semantic-conventions = { version = "0.9.0", optional = true }
-qp2p = "0.36.1"
+qp2p = "~0.36.2"
 rand = "~0.8"
 rand-07 = { package = "rand", version = "~0.7.3" }
 rayon = "1.5.1"
 rmp-serde = "1.0.0"
-self_encryption = "~0.27.5"
 sn_consensus = "3.2.1"
 sn_updater = { path = "../sn_updater", version = "^0.1.0" }
 sn_comms = { path = "../sn_comms", version = "^0.3.5" }
