@@ -6,9 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{
-    flow_ctrl::cmds::Cmd, messaging::Peers, Error, MyNode, Result, SectionStateVote,
-};
+use crate::node::{flow_ctrl::cmds::Cmd, messaging::Peers, Error, MyNode, Result};
 use sn_fault_detection::IssueType;
 use sn_interface::{
     messaging::{
@@ -20,17 +18,11 @@ use sn_interface::{
 };
 
 impl MyNode {
-    /// Send section state proposal to all our elders
-    pub(crate) fn propose_section_state(&mut self, proposal: SectionStateVote) -> Result<Vec<Cmd>> {
-        let elders = self.network_knowledge.section_auth().elders_vec();
-        self.send_section_state_proposal(elders, proposal)
-    }
-
     /// Send section state proposal to `recipients`
-    pub(crate) fn send_section_state_proposal(
+    pub(crate) fn send_node_off_proposal(
         &mut self,
         recipients: Vec<Peer>,
-        proposal: SectionStateVote,
+        proposal: NodeState,
     ) -> Result<Vec<Cmd>> {
         info!("Sending section state proposal: {proposal:?} to {recipients:?}");
 
@@ -63,8 +55,8 @@ impl MyNode {
         }
 
         let peers = Peers::Multiple(other_peers);
-        let msg = NodeMsg::ProposeSectionState {
-            proposal: proposal.clone(),
+        let msg = NodeMsg::ProposeNodeOff {
+            vote_node_off: proposal.clone(),
             sig_share: sig_share.clone(),
         };
         cmds.push(Cmd::send_msg(msg, peers, self.context()));
@@ -85,7 +77,7 @@ impl MyNode {
     pub(crate) fn handle_section_state_proposal(
         &mut self,
         msg_id: MsgId,
-        proposal: SectionStateVote,
+        proposal: NodeState,
         sig_share: SectionSigShare,
         sender: Peer,
     ) -> Result<Vec<Cmd>> {
@@ -117,7 +109,7 @@ impl MyNode {
             .section_proposal_aggregator
             .try_aggregate(&serialized_proposal, sig_share)
         {
-            Ok(Some(sig)) => Ok(vec![Cmd::HandleSectionDecisionAgreement { proposal, sig }]),
+            Ok(Some(sig)) => Ok(vec![Cmd::HandleNodeOffAgreement { proposal, sig }]),
             Ok(None) => {
                 info!("Section state proposal {msg_id:?} acknowledged, waiting for more...");
                 Ok(vec![])
@@ -134,7 +126,7 @@ impl MyNode {
     #[instrument(skip(self), level = "trace")]
     pub(crate) fn handle_section_decision_agreement(
         &mut self,
-        proposal: SectionStateVote,
+        proposal: NodeState,
         sig: SectionSig,
     ) -> Result<Vec<Cmd>> {
         let serialized_proposal = bincode::serialize(&proposal).map_err(|err| {
@@ -147,15 +139,7 @@ impl MyNode {
 
         debug!("{:?} {:?}", LogMarker::ProposalAgreed, proposal);
         let mut cmds = Vec::new();
-        match proposal {
-            SectionStateVote::NodeIsOffline(node_state) => {
-                cmds.extend(self.handle_offline_agreement(node_state));
-            }
-            SectionStateVote::JoinsAllowed(joins_allowed) => {
-                info!("Section reached agreement to set joins_allowed to: {joins_allowed:?}");
-                self.joins_allowed = joins_allowed;
-            }
-        }
+        cmds.extend(self.handle_offline_agreement(proposal));
         Ok(cmds)
     }
 

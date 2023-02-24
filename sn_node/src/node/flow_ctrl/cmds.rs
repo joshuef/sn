@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{core::NodeContext, messaging::Peers, SectionStateVote, XorName};
+use crate::node::{core::NodeContext, messaging::Peers, XorName};
 
 use qp2p::SendStream;
 use sn_consensus::Decision;
@@ -84,9 +84,9 @@ pub(crate) enum Cmd {
         peer: Peer,
         error: sn_comms::Error,
     },
-    /// Handle agreement on a proposal.
-    HandleSectionDecisionAgreement {
-        proposal: SectionStateVote,
+    /// Handle agreement on a node off proposal.
+    HandleNodeOffAgreement {
+        proposal: NodeState,
         sig: SectionSig,
     },
     /// Handle a membership decision.
@@ -273,7 +273,7 @@ impl Cmd {
             Cmd::HandleMsg { .. } => State::HandleMsg,
             Cmd::UpdateNetworkAndHandleValidClientMsg { .. } => State::ClientMsg,
             Cmd::TrackNodeIssue { .. } => State::FaultDetection,
-            Cmd::HandleSectionDecisionAgreement { .. } => State::Agreement,
+            Cmd::HandleNodeOffAgreement { .. } => State::Agreement,
             Cmd::HandleMembershipDecision(_) => State::Membership,
             Cmd::ProposeVoteNodesOffline(_) => State::Membership,
             Cmd::HandleNewEldersAgreement { .. } => State::Handover,
@@ -299,7 +299,7 @@ impl fmt::Display for Cmd {
             Cmd::HandleCommsError { peer, error } => {
                 write!(f, "HandleCommsError({:?}, {:?})", peer.name(), error)
             }
-            Cmd::HandleSectionDecisionAgreement { .. } => {
+            Cmd::HandleNodeOffAgreement { .. } => {
                 write!(f, "HandleSectionDecisionAgreement")
             }
             Cmd::HandleNewEldersAgreement { .. } => write!(f, "HandleNewEldersAgreement"),

@@ -40,10 +40,7 @@ pub use crate::storage::DataStorage;
 pub(crate) use relocation::{check as relocation_check, ChurnId};
 
 pub use sn_interface::network_knowledge::MIN_ADULT_AGE;
-use sn_interface::{
-    messaging::system::{NodeMsg, SectionStateVote},
-    types::Peer,
-};
+use sn_interface::{messaging::system::NodeMsg, types::Peer};
 
 pub use qp2p::SendStream;
 pub use xor_name::{Prefix, XorName, XOR_NAME_LEN}; // TODO remove pub on API update
@@ -67,7 +64,7 @@ mod core {
     use sn_interface::{
         messaging::{
             signature_aggregator::{SignatureAggregator, TotalParticipationAggregator},
-            system::{DkgSessionId, SectionSigned, SectionStateVote},
+            system::{DkgSessionId, SectionSigned},
             AuthorityProof, SectionSig,
         },
         network_knowledge::{
@@ -585,11 +582,7 @@ mod core {
                 if let Ok(key) = self.section_keys_provider.key_share(&sap.section_key()) {
                     // The section-key has changed, we are now able to function as an elder.
                     if self.initialize_elder_state(key) {
-                        // Whenever there is an elders change, casting a round of joins_allowed
-                        // proposals to sync this particular state.
-                        cmds.extend(self.propose_section_state(SectionStateVote::JoinsAllowed(
-                            self.joins_allowed || self.joins_allowed_until_split,
-                        ))?);
+                        self.joins_allowed = self.joins_allowed || self.joins_allowed_until_split;
                     }
                 } else {
                     error!(

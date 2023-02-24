@@ -194,7 +194,7 @@ mod tests {
     use sn_interface::{
         elder_count, init_logger,
         messaging::{
-            system::{JoinResponse, NodeDataCmd, NodeMsg, SectionStateVote},
+            system::{JoinResponse, NodeDataCmd, NodeMsg},
             AntiEntropyKind, AntiEntropyMsg, NetworkMsg,
         },
         network_knowledge::{recommended_section_size, NodeState, RelocationDst, MIN_ADULT_AGE},
@@ -515,11 +515,20 @@ mod tests {
             .get_section_member(&relocation_node_name)
             .expect("relocation node should be present");
 
+        let elders = dispatcher
+            .node()
+            .read()
+            .await
+            .network_knowledge()
+            .section_auth()
+            .elders_vec();
         let relocation_dst = RelocationDst::new(dst_prefix.name());
         let relocation_node_state = relocation_node_state.relocate(relocation_dst);
-        let mut relocation_send_msg = dispatcher.node().write().await.propose_section_state(
-            SectionStateVote::NodeIsOffline(relocation_node_state.clone()),
-        )?;
+        let mut relocation_send_msg = dispatcher
+            .node()
+            .write()
+            .await
+            .send_node_off_proposal(elders, relocation_node_state.clone())?;
         assert_eq!(relocation_send_msg.len(), 1);
         let relocation_send_msg = relocation_send_msg.remove(0);
         assert!(dispatcher
@@ -578,7 +587,7 @@ mod tests {
                                 name,
                                 tokio::spawn(async move { dis.process_cmd(cmd).await }),
                             ));
-                        } else if let Cmd::HandleSectionDecisionAgreement { .. } = &cmd {
+                        } else if let Cmd::HandleNodeOffAgreement { .. } = &cmd {
                             let mut send_cmd = dispatcher.process_cmd(cmd).await?;
                             assert_eq!(send_cmd.len(), 1);
                             let send_cmd = send_cmd.remove(0);

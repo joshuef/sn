@@ -202,7 +202,7 @@ impl Dispatcher {
                 MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, origin, send_stream)
                     .await
             }
-            Cmd::HandleSectionDecisionAgreement { proposal, sig } => {
+            Cmd::HandleNodeOffAgreement { proposal, sig } => {
                 trace!("[NODE WRITE]: section decision agreements node write...");
                 let mut node = self.node.write().await;
                 trace!("[NODE WRITE]: section decision agreements node write got");

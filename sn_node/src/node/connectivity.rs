@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{flow_ctrl::cmds::Cmd, MyNode, Result, SectionStateVote};
+use crate::node::{flow_ctrl::cmds::Cmd, MyNode, Result};
 
 use sn_fault_detection::IssueType;
 use sn_interface::types::Peer;
@@ -58,10 +58,7 @@ impl MyNode {
         for name in names.iter() {
             if let Some(info) = self.network_knowledge.get_section_member(name) {
                 let info = info.leave()?;
-                if let Ok(cmds) = self.send_section_state_proposal(
-                    elders.clone(),
-                    SectionStateVote::NodeIsOffline(info),
-                ) {
+                if let Ok(cmds) = self.send_node_off_proposal(elders.clone(), info) {
                     result.extend(cmds);
                 }
             }

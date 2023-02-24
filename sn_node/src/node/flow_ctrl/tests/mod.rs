@@ -17,7 +17,7 @@ use crate::node::{
         tests::network_builder::{TestNetwork, TestNetworkBuilder},
     },
     messaging::Peers,
-    Cmd, Error, SectionStateVote,
+    Cmd, Error,
 };
 use cmd_utils::{handle_online_cmd, ProcessAndInspectCmds};
 
@@ -288,15 +288,12 @@ async fn handle_agreement_on_offline_of_non_elder() -> Result<()> {
     let node_state = env.get_nodes(prefix, 0, 1, None).remove(0).info().peer();
     let node_state = NodeState::left(node_state, None);
 
-    let proposal = SectionStateVote::NodeIsOffline(node_state.clone());
+    let proposal = node_state.clone();
     let sig = TestKeys::get_section_sig_bytes(&sk_set.secret_key(), &get_single_sig(&proposal));
 
-    ProcessAndInspectCmds::new(
-        Cmd::HandleSectionDecisionAgreement { proposal, sig },
-        &dispatcher,
-    )
-    .process_all()
-    .await?;
+    ProcessAndInspectCmds::new(Cmd::HandleNodeOffAgreement { proposal, sig }, &dispatcher)
+        .process_all()
+        .await?;
 
     assert!(!dispatcher
         .node()
@@ -322,15 +319,12 @@ async fn handle_agreement_on_offline_of_elder() -> Result<()> {
     let remove_elder = NodeState::left(remove_elder, None);
 
     // Handle agreement on the Offline proposal
-    let proposal = SectionStateVote::NodeIsOffline(remove_elder.clone());
+    let proposal = remove_elder.clone();
     let sig = TestKeys::get_section_sig_bytes(&sk_set.secret_key(), &get_single_sig(&proposal));
 
-    ProcessAndInspectCmds::new(
-        Cmd::HandleSectionDecisionAgreement { proposal, sig },
-        &dispatcher,
-    )
-    .process_all()
-    .await?;
+    ProcessAndInspectCmds::new(Cmd::HandleNodeOffAgreement { proposal, sig }, &dispatcher)
+        .process_all()
+        .await?;
 
     // Verify we initiated a membership churn
     assert!(dispatcher
@@ -1015,7 +1009,7 @@ async fn spentbook_spend_with_updated_network_knowledge_should_update_the_node()
     Ok(())
 }
 
-fn get_single_sig(proposal: &SectionStateVote) -> Vec<u8> {
+fn get_single_sig(proposal: &NodeState) -> Vec<u8> {
     bincode::serialize(proposal).expect("Failed to serialize")
 }
 

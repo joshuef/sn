@@ -278,8 +278,8 @@ impl MyNode {
                 .into_iter()
                 .collect())
             }
-            NodeMsg::ProposeSectionState {
-                proposal,
+            NodeMsg::ProposeNodeOff {
+                vote_node_off: proposal,
                 sig_share,
             } => {
                 let mut node = node.write().await;
