@@ -219,17 +219,17 @@ impl MyNode {
                             target_sap.prefix(),
                         );
 
-                        if decision
-                            .proposals
-                            .keys()
-                            .filter(|n| n.state() == MembershipState::Joined)
-                            .filter(|n| n.name() == context.name)
-                            .any(|n| n.previous_name().is_some())
-                        {
-                            // We could clear the cached relocation proof here,
-                            // but we have the periodic check doing it, so no need to duplicate the logic.
-                            info!("{}", LogMarker::RelocateEnd);
-                        }
+                        // if decision
+                        //     .proposals
+                        //     .keys()
+                        //     .filter(|n| n.state() == MembershipState::Joined)
+                        //     .filter(|n| n.name() == context.name)
+                        //     .any(|n| n.previous_name().is_some())
+                        // {
+                        //     // We could clear the cached relocation proof here,
+                        //     // but we have the periodic check doing it, so no need to duplicate the logic.
+                        //     info!("{}", LogMarker::RelocateEnd);
+                        // }
 
                         Ok(vec![])
                     }

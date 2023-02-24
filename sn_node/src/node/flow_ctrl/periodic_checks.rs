@@ -131,7 +131,7 @@ impl FlowCtrl {
                         NodeMsg::TryJoin(Some(proof.clone())),
                     ));
                 } else {
-                    info!("{}", LogMarker::RelocateEnd);
+                    info!("{}: Age is: {:?}", LogMarker::RelocateEnd, context.info.age());
                     info!("We've joined a section, dropping the relocation proof.");
                     let mut node = self.node.write().await;
                     trace!("[NODE WRITE]: handling relocation periodic check write gottt...");

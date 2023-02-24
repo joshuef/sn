@@ -59,7 +59,7 @@ use xor_name::{Prefix, XorName};
 pub const GENESIS_DBC_SK: &str = "0c5152498fc5b2f9ed691ef875f2c16f1f950910391f7ba1df63e9f0ce4b2780";
 
 /// The minimum age a node becomes an adult node.
-pub const MIN_ADULT_AGE: u8 = 5;
+pub const MIN_ADULT_AGE: u8 = 1;
 
 const SN_ELDER_COUNT: &str = "SN_ELDER_COUNT";
 /// Number of elders per section.
@@ -90,7 +90,7 @@ pub fn elder_count() -> usize {
 /// The section will keep adding nodes when requested by the upper layers, until it can split.
 /// A split happens if both post-split sections would have at least this number of nodes.
 pub fn recommended_section_size() -> usize {
-    2 * elder_count()
+    4 * elder_count()
 }
 
 /// `SuperMajority` of a given group (i.e. > 2/3)

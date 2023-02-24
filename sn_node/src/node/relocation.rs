@@ -53,8 +53,14 @@ pub(super) fn find_nodes_to_relocate(
         return vec![];
     }
 
-    let max_reloctions = elder_count() / 2;
-    let allowed_relocations = min(section_size - recommended_section_size(), max_reloctions);
+    // let max_reloctions = elder_count() / 2;
+
+    // is the worry here that we could relocate _all_ elders?
+    // but we check against that below...
+    // perhaps it was avoiding 50% of section....
+    // but now section is much bigger sooo
+    // double section size is 1/2 section w/ 4 elders
+    let allowed_relocations = elder_count() * 2;
 
     // Find the peers that pass the relocation check
     let mut candidates: Vec<_> = network_knowledge
@@ -73,15 +79,15 @@ pub(super) fn find_nodes_to_relocate(
 
     info!("Finding relocation candidates {candidates:?}");
 
-    let max_age = if let Some(age) = candidates.iter().map(|info| info.age()).max() {
-        age
-    } else {
-        return vec![];
-    };
+    // let max_age = if let Some(age) = candidates.iter().map(|info| info.age()).max() {
+    //     age
+    // } else {
+    //     return vec![];
+    // };
 
     candidates
         .into_iter()
-        .filter(|peer| peer.age() == max_age)
+        // .filter(|peer| peer.age() == max_age)
         .map(|peer| {
             let dst_section = XorName::from_content_parts(&[&peer.name().0, &churn_id.0]);
             (peer, dst_section)
