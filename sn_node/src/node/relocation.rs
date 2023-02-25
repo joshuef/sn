@@ -10,7 +10,7 @@
 
 use sn_interface::{
     elder_count,
-    network_knowledge::{recommended_section_size, NetworkKnowledge, NodeState},
+    network_knowledge::{recommended_section_size, NetworkKnowledge, NodeState}, data_copy_count,
 };
 use std::{
     cmp::min,
@@ -48,10 +48,12 @@ pub(super) fn find_nodes_to_relocate(
         recommended_section_size(),
     );
 
+    // this should be size of storing nodes...
+
     // no relocation if total section size is too small
-    if section_size < recommended_section_size() {
-        return vec![];
-    }
+    // if section_size < data_copy_count() * 3 {
+    //     return vec![];
+    // }
 
     // let max_reloctions = elder_count() / 2;
 
@@ -72,6 +74,7 @@ pub(super) fn find_nodes_to_relocate(
         // the newly joined node shall not be relocated immediately
         .filter(|info| !excluded.contains(&info.name()))
         .collect();
+
     // To avoid a node to manipulate its name to gain priority of always being first in XorName,
     // here we sort the nodes by its distance to the churn_id.
     let target_name = XorName::from_content(&churn_id.0);
@@ -79,21 +82,26 @@ pub(super) fn find_nodes_to_relocate(
 
     info!("Finding relocation candidates {candidates:?}");
 
-    // let max_age = if let Some(age) = candidates.iter().map(|info| info.age()).max() {
-    //     age
-    // } else {
-    //     return vec![];
-    // };
+    // only relocate the youngest nodes this round.
+    // this may help prevent any nodes that would be DKG candidates from being chosen
+    let target_age = if let Some(age) = candidates.iter().map(|info| info.age()).min() {
+        age
+    } else {
+        return vec![];
+    };
 
-    candidates
+    let can : Vec<_>= candidates
         .into_iter()
-        // .filter(|peer| peer.age() == max_age)
+        .filter(|peer| peer.age() == target_age)
         .map(|peer| {
             let dst_section = XorName::from_content_parts(&[&peer.name().0, &churn_id.0]);
             (peer, dst_section)
         })
-        .take(allowed_relocations)
-        .collect()
+        // .take(allowed_relocations)
+        .collect();
+
+    debug!("** candidates {:?}", can.len());
+    can
 }
 
 // Relocation check - returns whether a member with the given age is a candidate for relocation on

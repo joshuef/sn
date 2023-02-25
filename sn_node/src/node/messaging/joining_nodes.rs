@@ -79,29 +79,33 @@ impl MyNode {
             }
 
             if !context.joins_allowed {
-                trace!("Rejecting join request from {peer} - joins currently not allowed.");
-                let msg = NodeMsg::JoinResponse(JoinResponse::Rejected(
-                    JoinRejectReason::JoinsDisallowed,
-                ));
-                trace!("{}", LogMarker::SendJoinRejected);
-                trace!("Sending {msg:?} to {peer}");
+                // TODO: actually gracefully close this stream...
 
-                // Send it over response stream if we have one
-                if let Some(stream) = send_stream {
-                    return Ok(vec![Cmd::send_node_response(
-                        msg,
-                        correlation_id,
-                        peer,
-                        stream,
-                        context.clone(),
-                    )]);
-                }
+                // trace!("Rejecting join request from {peer} - joins currently not allowed.");
+                // let msg = NodeMsg::JoinResponse(JoinResponse::Rejected(
+                //     JoinRejectReason::JoinsDisallowed,
+                // ));
+                // trace!("{}", LogMarker::SendJoinRejected);
+                // trace!("Sending {msg:?} to {peer}");
 
-                return Ok(vec![Cmd::send_msg(
-                    msg,
-                    Peers::Single(peer),
-                    context.clone(),
-                )]);
+                // // Send it over response stream if we have one
+                // if let Some(stream) = send_stream {
+                //     return Ok(vec![Cmd::send_node_response(
+                //         msg,
+                //         correlation_id,
+                //         peer,
+                //         stream,
+                //         context.clone(),
+                //     )]);
+                // }
+
+                // return Ok(vec![Cmd::send_msg(
+                //     msg,
+                //     Peers::Single(peer),
+                //     context.clone(),
+                // )]);
+
+                return Ok(vec![]);
             }
 
             None
