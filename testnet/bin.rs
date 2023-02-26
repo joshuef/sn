@@ -50,7 +50,7 @@ const SAFE_NODE_EXECUTABLE: &str = "sn_node.exe";
 const BASE_TRACING_DIRECTIVES: &str = "testnet=info,sn_launch_tool=debug";
 const NODES_DIR: &str = "local-test-network";
 const DEFAULT_INTERVAL: &str = "5000";
-const DEFAULT_NODE_COUNT: u32 = 60;
+const DEFAULT_NODE_COUNT: u32 = 30;
 
 #[derive(Debug, clap::StructOpt)]
 #[clap(name = "testnet", version)]

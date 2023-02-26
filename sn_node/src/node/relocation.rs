@@ -15,9 +15,11 @@ use sn_interface::{
 use std::{
     cmp::min,
     collections::BTreeSet,
-    fmt::{self, Display, Formatter},
+    fmt::{self, Display, Formatter}, net::SocketAddr,
 };
 use xor_name::XorName;
+
+use super::membership::Membership;
 
 // Unique identifier for a churn event, which is used to select nodes to relocate.
 pub(crate) struct ChurnId(pub(crate) [u8; bls::SIG_SIZE]);
@@ -48,6 +50,7 @@ pub(super) fn find_nodes_to_relocate(
         recommended_section_size(),
     );
 
+    // let
     // this should be size of storing nodes...
 
     // no relocation if total section size is too small
@@ -69,9 +72,13 @@ pub(super) fn find_nodes_to_relocate(
         .section_members()
         .into_iter()
         // only adults get relocated
-        .filter(|state| network_knowledge.is_adult(&state.name()))
+        // net knowledge is adult is not enough YET membership check too
+        // .filter(|state| {
+        //     network_knowledge.is_adult(&state.name())
+        // })
         .filter(|info| check(info.age(), churn_id))
         // the newly joined node shall not be relocated immediately
+        // also no prime elder candidates so we dont stall DKG
         .filter(|info| !excluded.contains(&info.name()))
         .collect();
 
@@ -84,15 +91,15 @@ pub(super) fn find_nodes_to_relocate(
 
     // only relocate the youngest nodes this round.
     // this may help prevent any nodes that would be DKG candidates from being chosen
-    let target_age = if let Some(age) = candidates.iter().map(|info| info.age()).min() {
-        age
-    } else {
-        return vec![];
-    };
+    // let target_age = if let Some(age) = candidates.iter().map(|info| info.age()).min() {
+    //     age
+    // } else {
+    //     return vec![];
+    // };
 
     let can : Vec<_>= candidates
         .into_iter()
-        .filter(|peer| peer.age() == target_age)
+        // .filter(|peer| peer.age() == target_age)
         .map(|peer| {
             let dst_section = XorName::from_content_parts(&[&peer.name().0, &churn_id.0]);
             (peer, dst_section)

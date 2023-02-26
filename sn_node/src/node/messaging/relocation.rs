@@ -33,7 +33,6 @@ impl MyNode {
         churn_id: ChurnId,
         excluded: BTreeSet<XorName>,
     ) -> Result<Vec<Cmd>> {
-        info!("Try to find relocate peers, excluded {excluded:?}");
         // Do not carry out relocation when there is not enough elder nodes.
         if self.network_knowledge.section_auth().elder_count() < elder_count() {
             warn!(
@@ -46,8 +45,19 @@ impl MyNode {
 
         let mut cmds = vec![];
 
+        // excluded nodes
+        let mut excluded_nodes = excluded;
+        info!("Try to find relocate peers, excluded {excluded_nodes:?}");
+
+        // add all potential section candidates to exclusion list right now.
+        for session in &self.best_elder_candidates() {
+            for node in session.elder_names() {
+                let _ = excluded_nodes.insert(node);
+            }
+        }
+
         for (node_state, relocation_dst) in
-            find_nodes_to_relocate(&self.network_knowledge, &churn_id, excluded)
+            find_nodes_to_relocate(&self.network_knowledge, &churn_id, excluded_nodes)
         {
             info!(
                 "Begin relocation flow for {:?} to {relocation_dst:?} (on churn of {churn_id})",
