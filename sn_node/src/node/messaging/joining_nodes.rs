@@ -34,6 +34,9 @@ impl MyNode {
         send_stream: Option<SendStream>,
     ) -> Result<Vec<Cmd>> {
         trace!("Handling join from {peer:?}");
+        let node_check = node.read().await.is_elder();
+
+        debug!("AM I ELDER???? {:?} {:?}", node_check, context.is_elder);
 
         // Ignore a join request if we are not elder.
         if !context.is_elder {
