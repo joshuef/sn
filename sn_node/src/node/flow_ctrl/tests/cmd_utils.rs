@@ -285,7 +285,24 @@ impl TestDispatcher {
             .await
             .expect("Error while handling node msg");
 
+        // Handle the internal ProcessCmds
         if let &[Cmd::ProcessNodeMsg { .. }] = &cmds[..] {
+            cmds = self
+                .dispatcher
+                .process_cmd(cmds.remove(0), self.node())
+                .await
+                .expect("Error while processing node msg");
+        }
+
+        if let &[Cmd::ProcessAeMsg { .. }] = &cmds[..] {
+            cmds = self
+                .dispatcher
+                .process_cmd(cmds.remove(0), self.node())
+                .await
+                .expect("Error while processing node msg");
+        }
+
+        if let &[Cmd::ProcessClientMsg { .. }] = &cmds[..] {
             cmds = self
                 .dispatcher
                 .process_cmd(cmds.remove(0), self.node())
