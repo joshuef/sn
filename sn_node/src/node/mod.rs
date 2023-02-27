@@ -526,6 +526,7 @@ mod core {
                     .filter(|(_, info)| info.session_id.section_chain_len == prev_chain_len)
                     .map(|(_, info)| info.session_id.clone()),
             );
+
             for id in prev_sessions {
                 self.force_dkg_termination(&id, new_section_key);
             }
@@ -593,10 +594,11 @@ mod core {
 
                 self.log_network_stats();
                 self.log_section_stats();
-            } else {
+            }
+            else {
                 // if not elder, clear elder-only state
                 self.handover_voting = None;
-                self.membership = None;
+                // self.membership = None;
             }
 
             if new.is_elder || old.is_elder {

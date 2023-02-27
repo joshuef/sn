@@ -160,18 +160,18 @@ impl MyNode {
 
         // block off the write lock
         let updated = {
-            let should_update = starting_context
-                .clone()
-                .network_knowledge
-                .update_knowledge_if_valid(
-                    section_tree_update.clone(),
-                    members.clone(),
-                    &starting_context.name,
-                )?;
+            // let should_update = starting_context
+            //     .clone()
+            //     .network_knowledge
+            //     .update_knowledge_if_valid(
+            //         section_tree_update.clone(),
+            //         members.clone(),
+            //         &starting_context.name,
+            //     )?;
 
-            if should_update {
+            // if should_update {
                 let mut write_locked_node = node.write().await;
-                trace!("[NODE WRITE]: handling AE write gottt...");
+                trace!("[NODE WRITE]: handling AE write got.");
                 let updated = write_locked_node
                     .network_knowledge
                     .update_knowledge_if_valid(
@@ -180,17 +180,19 @@ impl MyNode {
                         &starting_context.name,
                     )?;
                 debug!("net knowledge updated");
-                // always run this, only changes will trigger events
-                cmds.extend(
-                    write_locked_node
-                        .update_on_section_change(&starting_context)
-                        .await?,
-                );
-                trace!("updated for section change");
+
+                if updated {
+                    // always run this, only changes will trigger events
+                    cmds.extend(
+                        write_locked_node
+                            .update_on_section_change(&starting_context)
+                            .await?,
+                    );
+                }
+
+                trace!("updated for section change? {:?}", updated);
                 updated
-            } else {
-                false
-            }
+            //
         };
 
         trace!("[NODE READ] Latest context read");

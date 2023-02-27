@@ -211,15 +211,22 @@ impl MyNode {
             self.joins_allowed = false;
         }
 
+        let mut relocating = false;
         if let Some((_, sig)) = decision.proposals.iter().max_by_key(|(_, sig)| *sig) {
             let churn_id = ChurnId(sig.to_bytes());
             let excluded_from_relocation =
                 BTreeSet::from_iter(joining_nodes.iter().map(|(n, _)| n.name()));
 
-            cmds.extend(self.try_relocate_peers(churn_id, excluded_from_relocation)?);
+            let relocations = self.try_relocate_peers(churn_id, excluded_from_relocation)?;
+            if !relocations.is_empty() {
+                relocating = true;
+            }
+            cmds.extend(relocations);
         }
 
-        cmds.extend(self.trigger_dkg()?);
+        // if !relocating {
+            cmds.extend(self.trigger_dkg()?);
+        // }
 
         cmds.extend(self.send_ae_update_to_our_section()?);
 

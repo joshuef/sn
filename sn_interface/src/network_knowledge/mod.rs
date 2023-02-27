@@ -241,7 +241,7 @@ impl NetworkKnowledge {
         updated_members: Option<SectionPeersMsg>,
         our_name: &XorName,
     ) -> Result<bool> {
-        trace!("Attempting to update network knoweldge");
+        trace!("Attempting to update network knowledge");
         let mut there_was_an_update = false;
         let signed_sap = section_tree_update.signed_sap.clone();
         let sap_prefix = signed_sap.prefix();
