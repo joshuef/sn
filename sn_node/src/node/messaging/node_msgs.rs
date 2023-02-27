@@ -178,7 +178,7 @@ impl MyNode {
                 let mut node = node.write().await;
                 trace!("[NODE WRITE]: RelocationRequest write gottt...");
                 trace!("Handling RelocationRequest msg from {sender}: {msg_id:?}");
-                Ok(node.handle_relocation_request(sender, relocation_node, relocation_trigger)?)
+                Ok(node.handle_relocation_request_from_member(sender, relocation_node, relocation_trigger)?)
             }
 
             NodeMsg::Relocate(signed_relocation) => {

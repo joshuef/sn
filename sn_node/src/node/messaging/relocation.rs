@@ -20,7 +20,7 @@ use sn_interface::{
         node_state::{RelocationInfo, RelocationTrigger},
         Error, MembershipState, NodeState, RelocationDst, RelocationProof, RelocationState,
     },
-    types::{keys::ed25519, log_markers::LogMarker, Peer},
+    types::{keys::ed25519, log_markers::LogMarker},
 };
 
 use std::collections::BTreeSet;
@@ -85,10 +85,19 @@ impl MyNode {
         &mut self,
         relocation_trigger: RelocationTrigger,
     ) -> Vec<Cmd> {
-        // store the `RelocationTrigger` to periodically request the elders
-        self.relocation_state = Some(RelocationState::RequestToRelocate(
-            relocation_trigger.clone(),
-        ));
+
+        if self.relocation_state.is_none() {
+            // store the `RelocationTrigger` to periodically request the elders
+            self.relocation_state = Some(RelocationState::RequestToRelocate(
+                relocation_trigger.clone(),
+            ));
+
+        }
+        else {
+            warn!("Already trying to init relocattion, so ignoring new trigger: {relocation_trigger:?}");
+            return vec![]
+        }
+
         info!("{} received for our node which is currently: {:?}", LogMarker::RelocateStart, self.name());
         info!(
             "Sending request to relocate our node to {:?}",
@@ -104,23 +113,16 @@ impl MyNode {
     }
 
     /// The elder proposes a relocation membership change on receiving the relocation request
-    pub(crate) fn handle_relocation_request(
+    pub(crate) fn handle_relocation_request_from_member(
         &mut self,
-        sender: Peer,
         relocation_node: XorName,
         relocation_trigger: RelocationTrigger,
     ) -> Result<Vec<Cmd>> {
         // Todo: Verify the relocation trigger here
-        let node_state = if let Some(state) = self
+        let node_state = self
             .network_knowledge()
-            .get_section_member(&relocation_node) {
-                state
-            }
-            else {
-                // TODO: not clear if this is actually the prior name
-                NodeState::joined(sender, None)
-            };
-            // .ok_or(Error::NotAMember)?;
+            .get_section_member(&relocation_node)
+            .ok_or(Error::NotAMember)?;
 
         Ok(self
             .propose_membership_change(node_state.relocate(relocation_trigger.dst))
