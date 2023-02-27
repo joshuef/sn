@@ -89,7 +89,7 @@ impl MyNode {
         self.relocation_state = Some(RelocationState::RequestToRelocate(
             relocation_trigger.clone(),
         ));
-        info!("{}", LogMarker::RelocateStart);
+        info!("{} received for our node which is currently: {:?}", LogMarker::RelocateStart, self.name());
         info!(
             "Sending request to relocate our node to {:?}",
             relocation_trigger.dst

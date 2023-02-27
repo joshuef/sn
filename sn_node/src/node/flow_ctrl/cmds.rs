@@ -203,8 +203,6 @@ pub(crate) enum Cmd {
 
 impl Cmd {
     pub(crate) fn send_msg(msg: NodeMsg, recipients: Peers, context: NodeContext) -> Self {
-        let msg_id = MsgId::new();
-        debug!("Sending msg {msg_id:?} to {recipients:?}: {msg:?}");
         Cmd::send_network_msg(NetworkMsg::Node(msg), recipients, context)
     }
 

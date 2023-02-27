@@ -40,7 +40,7 @@ use tokio::runtime::Runtime;
 use tokio::time::Duration;
 use tracing::{self, error, info, warn};
 
-const JOIN_TIMEOUT_SEC: u64 = 60;
+const JOIN_TIMEOUT_SEC: u64 = 10;
 const JOIN_TIMEOUT_RETRY_TIME_SEC: u64 = 30;
 const JOIN_DISALLOWED_RETRY_TIME_SEC: u64 = 60;
 

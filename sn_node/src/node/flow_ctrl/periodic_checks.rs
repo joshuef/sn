@@ -21,8 +21,8 @@ use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time::Instant};
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(300);
-const REQUEST_TO_RELOCATE_TIMEOUT_SEC: Duration = Duration::from_secs(1);
-const JOIN_AS_RELOCATED_TIMEOUT_SEC: Duration = Duration::from_secs(1);
+const REQUEST_TO_RELOCATE_TIMEOUT_SEC: Duration = Duration::from_secs(5);
+const JOIN_AS_RELOCATED_TIMEOUT_SEC: Duration = Duration::from_secs(5);
 const MISSING_VOTE_INTERVAL: Duration = Duration::from_secs(5);
 const MISSING_DKG_MSG_INTERVAL: Duration = Duration::from_secs(5);
 // const SECTION_PROBE_INTERVAL: Duration = Duration::from_secs(300);
@@ -100,6 +100,7 @@ impl FlowCtrl {
         // check if we can request for relocation
         // The relocation_state will be changed into `JoinAsRelocated` once the request has been
         // approved by the section
+
         if let Some(RelocationState::RequestToRelocate(trigger)) = &context.relocation_state {
             if self.timestamps.request_to_relocate_check.elapsed() > REQUEST_TO_RELOCATE_TIMEOUT_SEC
             {
@@ -107,6 +108,13 @@ impl FlowCtrl {
                     "Periodic check: sending request to relocate our node to {:?}",
                     trigger.dst
                 );
+
+                if self.started_relocating.is_none() {
+                    self.started_relocating = Some(context.name);
+                    debug!("Started trying to relocate our node {:?}", self.started_relocating);
+                }
+
+
                 self.timestamps.request_to_relocate_check = Instant::now();
                 cmds.push(MyNode::send_to_elders(
                     context,
@@ -131,9 +139,10 @@ impl FlowCtrl {
                         NodeMsg::TryJoin(Some(proof.clone())),
                     ));
                 } else {
-                    info!("{}: Age is: {:?}", LogMarker::RelocateEnd, context.info.age());
+                    info!("{} for node: {:?}: Age is: {:?}", LogMarker::RelocateEnd, context.name, context.info.age());
                     info!("We've joined a section, dropping the relocation proof.");
                     let mut node = self.node.write().await;
+                    self.started_relocating = None;
                     trace!("[NODE WRITE]: handling relocation periodic check write gottt...");
                     node.relocation_state = None;
                 }

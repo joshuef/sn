@@ -54,9 +54,9 @@ pub(super) fn find_nodes_to_relocate(
     // this should be size of storing nodes...
 
     // no relocation if total section size is too small
-    // if section_size < data_copy_count() * 3 {
-    //     return vec![];
-    // }
+    if section_size < data_copy_count() * 3 {
+        return vec![];
+    }
 
     // let max_reloctions = elder_count() / 2;
 
