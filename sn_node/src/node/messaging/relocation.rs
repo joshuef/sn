@@ -118,7 +118,7 @@ impl MyNode {
             }
             else {
                 // TODO: not clear if this is actually the prior name
-                NodeState::joined(sender, Some(relocation_node))
+                NodeState::joined(sender, None)
             };
             // .ok_or(Error::NotAMember)?;
 
