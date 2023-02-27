@@ -30,13 +30,13 @@ const FAULT_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 // 30 adult nodes checked per minute., so each node should be queried 10x in 10 mins
 // Which should hopefully trigger fault if we're not getting responses back
 // const ADULT_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(2);
-// const ELDER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(3);
+const ELDER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(3);
 
 pub(super) struct PeriodicChecksTimestamps {
     last_probe: Instant,
     // last_section_probe: Instant,
     // last_adult_health_check: Instant,
-    // last_elder_health_check: Instant,
+    last_elder_health_check: Instant,
     last_vote_check: Instant,
     last_dkg_msg_check: Instant,
     last_fault_check: Instant,
@@ -50,7 +50,7 @@ impl PeriodicChecksTimestamps {
             last_probe: Instant::now(),
             // last_section_probe: Instant::now(),
             // last_adult_health_check: Instant::now(),
-            // last_elder_health_check: Instant::now(),
+            last_elder_health_check: Instant::now(),
             last_vote_check: Instant::now(),
             last_dkg_msg_check: Instant::now(),
             last_fault_check: Instant::now(),
@@ -96,6 +96,15 @@ impl FlowCtrl {
     /// Periodic tasks run for both elders and adults
     async fn enqueue_cmds_for_node_periodic_checks(&mut self, context: &NodeContext) -> Vec<Cmd> {
         let mut cmds = vec![];
+
+        // here we specifically ask for AE prob msgs and manually
+        // track faults for missing AE, and theerefore hopefully keep members updated...
+        if self.timestamps.last_elder_health_check.elapsed() > ELDER_HEALTH_CHECK_INTERVAL {
+            self.timestamps.last_elder_health_check = Instant::now();
+            for cmd in Self::health_check_elders_in_section(context).await {
+                cmds.push(cmd);
+            }
+        }
 
         // check if we can request for relocation
         // The relocation_state will be changed into `JoinAsRelocated` once the request has been
@@ -200,16 +209,6 @@ impl FlowCtrl {
         //     debug!(" ----> adult health periodics done");
         // }
 
-        // // The above health check only queries for chunks
-        // // here we specifically ask for AE prob msgs and manually
-        // // track faults
-        // if self.timestamps.last_elder_health_check.elapsed() > ELDER_HEALTH_CHECK_INTERVAL {
-        //     self.timestamps.last_elder_health_check = now;
-        //     for cmd in Self::health_check_elders_in_section(context).await {
-        //         cmds.push(cmd);
-        //     }
-        // }
-
         if self.timestamps.last_vote_check.elapsed() > MISSING_VOTE_INTERVAL {
             self.timestamps.last_vote_check = now;
             let read_locked_node = self.node.read().await;
@@ -288,38 +287,30 @@ impl FlowCtrl {
         }
     }
 
-    // /// Generates a probe msg, which goes to our elders in order to
-    // /// passively maintain network knowledge over time
-    // async fn probe_the_section(context: &NodeContext) -> Cmd {
-    //     // Send a probe message to an elder
-    //     info!("Starting to probe section");
-    //     MyNode::generate_section_probe_msg(context)
-    // }
+    /// Generates a probe msg, which goes to all section elders in order to
+    /// passively maintain network knowledge over time and track faults.
+    /// Tracking faults while awaiting a response.
+    async fn health_check_elders_in_section(context: &NodeContext) -> Vec<Cmd> {
+        let mut cmds = vec![];
 
-    // /// Generates a probe msg, which goes to all section elders in order to
-    // /// passively maintain network knowledge over time and track faults.
-    // /// Tracking faults while awaiting a response.
-    // async fn health_check_elders_in_section(context: &NodeContext) -> Vec<Cmd> {
-    //     let mut cmds = vec![];
+        // Send a probe message to an elder
+        debug!("Going to health check elders");
 
-    //     // Send a probe message to an elder
-    //     debug!("Going to health check elders");
+        let elders = context.network_knowledge.elders();
+        for elder in elders {
+            // we track a knowledge issue
+            // whhich is countered when an AE-Update is
+            cmds.push(Cmd::TrackNodeIssue {
+                name: elder.name(),
+                issue: sn_fault_detection::IssueType::AeProbeMsg,
+            });
+        }
 
-    //     let elders = context.network_knowledge.elders();
-    //     for elder in elders {
-    //         // we track a knowledge issue
-    //         // whhich is countered when an AE-Update is
-    //         cmds.push(Cmd::TrackNodeIssue {
-    //             name: elder.name(),
-    //             issue: sn_fault_detection::IssueType::AeProbeMsg,
-    //         });
-    //     }
+        // Send a probe message to an elder
+        cmds.push(MyNode::generate_section_probe_msg(context));
 
-    //     // Send a probe message to an elder
-    //     cmds.push(MyNode::generate_section_probe_msg(context));
-
-    //     cmds
-    // }
+        cmds
+    }
 
     /// Checks the interval since last vote received during a generation
     fn check_for_missed_votes(

@@ -347,6 +347,18 @@ mod core {
             ))
         }
 
+        /// Generates a AE probe for our section elders
+        pub(crate) fn generate_section_probe_msg(context: &NodeContext) -> Cmd {
+            // Get prefixes of other sections.
+            let our_prefix = context.network_knowledge.prefix();
+
+            let mut elders = context.network_knowledge.elders();
+
+            let probe = context.network_knowledge.anti_entropy_probe();
+
+            Cmd::send_network_msg(probe, Peers::Multiple(elders), context.clone())
+        }
+
         /// Generates section infos for the best elder candidate among the members at the given generation
         /// Returns a set of candidate `DkgSessionId`'s.
         pub(crate) fn best_elder_candidates_at_gen(
