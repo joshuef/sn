@@ -20,7 +20,7 @@ use sn_interface::{
         node_state::{RelocationInfo, RelocationTrigger},
         Error, MembershipState, NodeState, RelocationDst, RelocationProof, RelocationState,
     },
-    types::{keys::ed25519, log_markers::LogMarker},
+    types::{keys::ed25519, log_markers::LogMarker, Peer},
 };
 
 use std::collections::BTreeSet;
@@ -106,14 +106,21 @@ impl MyNode {
     /// The elder proposes a relocation membership change on receiving the relocation request
     pub(crate) fn handle_relocation_request(
         &mut self,
+        sender: Peer,
         relocation_node: XorName,
         relocation_trigger: RelocationTrigger,
     ) -> Result<Vec<Cmd>> {
         // Todo: Verify the relocation trigger here
-        let node_state = self
+        let node_state = if let Some(state) = self
             .network_knowledge()
-            .get_section_member(&relocation_node)
-            .ok_or(Error::NotAMember)?;
+            .get_section_member(&relocation_node) {
+                state
+            }
+            else {
+                // TODO: not clear if this is actually the prior name
+                NodeState::joined(sender, Some(relocation_node))
+            };
+            // .ok_or(Error::NotAMember)?;
 
         Ok(self
             .propose_membership_change(node_state.relocate(relocation_trigger.dst))
