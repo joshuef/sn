@@ -85,20 +85,21 @@ impl MyNode {
         &mut self,
         relocation_trigger: RelocationTrigger,
     ) -> Vec<Cmd> {
-
         if self.relocation_state.is_none() {
             // store the `RelocationTrigger` to periodically request the elders
             self.relocation_state = Some(RelocationState::RequestToRelocate(
                 relocation_trigger.clone(),
             ));
-
-        }
-        else {
+        } else {
             warn!("Already trying to init relocattion, so ignoring new trigger: {relocation_trigger:?}");
-            return vec![]
+            return vec![];
         }
 
-        info!("{} received for our node which is currently: {:?}", LogMarker::RelocateStart, self.name());
+        info!(
+            "{} received for our node which is currently: {:?}",
+            LogMarker::RelocateStart,
+            self.name()
+        );
         info!(
             "Sending request to relocate our node to {:?}",
             relocation_trigger.dst
@@ -188,6 +189,7 @@ impl MyNode {
         );
 
         let proof = RelocationProof::new(info, node_sig, original_info.keypair.public);
+
         // we cache the proof so that we can retry if the join times out
         self.relocation_state = Some(RelocationState::JoinAsRelocated(proof.clone()));
 

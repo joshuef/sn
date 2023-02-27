@@ -75,7 +75,7 @@ pub(crate) struct FlowCtrl {
     cmd_sender_channel: Sender<(Cmd, Vec<usize>)>,
     fault_channels: FaultChannels,
     timestamps: PeriodicChecksTimestamps,
-    started_relocating : Option<XorName>
+    started_relocating: Option<XorName>,
 }
 
 impl FlowCtrl {
@@ -121,7 +121,7 @@ impl FlowCtrl {
             cmd_sender_channel: cmd_sender_channel.clone(),
             fault_channels,
             timestamps: PeriodicChecksTimestamps::now(),
-            started_relocating: None
+            started_relocating: None,
         };
 
         let _handle = tokio::task::spawn(flow_ctrl.process_messages_and_periodic_checks());

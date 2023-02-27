@@ -111,9 +111,11 @@ impl FlowCtrl {
 
                 if self.started_relocating.is_none() {
                     self.started_relocating = Some(context.name);
-                    debug!("Started trying to relocate our node {:?}", self.started_relocating);
+                    debug!(
+                        "Started trying to relocate our node {:?}",
+                        self.started_relocating
+                    );
                 }
-
 
                 self.timestamps.request_to_relocate_check = Instant::now();
                 cmds.push(MyNode::send_to_elders(
@@ -139,7 +141,12 @@ impl FlowCtrl {
                         NodeMsg::TryJoin(Some(proof.clone())),
                     ));
                 } else {
-                    info!("{} for node: {:?}: Age is: {:?}", LogMarker::RelocateEnd, context.name, context.info.age());
+                    info!(
+                        "{} for node: {:?}: Age is: {:?}",
+                        LogMarker::RelocateEnd,
+                        context.name,
+                        context.info.age()
+                    );
                     info!("We've joined a section, dropping the relocation proof.");
                     let mut node = self.node.write().await;
                     self.started_relocating = None;

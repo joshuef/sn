@@ -225,7 +225,7 @@ impl MyNode {
         }
 
         // if !relocating {
-            cmds.extend(self.trigger_dkg()?);
+        cmds.extend(self.trigger_dkg()?);
         // }
 
         cmds.extend(self.send_ae_update_to_our_section()?);

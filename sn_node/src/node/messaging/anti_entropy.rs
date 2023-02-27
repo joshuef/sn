@@ -170,28 +170,24 @@ impl MyNode {
             //     )?;
 
             // if should_update {
-                let mut write_locked_node = node.write().await;
-                trace!("[NODE WRITE]: handling AE write got.");
-                let updated = write_locked_node
-                    .network_knowledge
-                    .update_knowledge_if_valid(
-                        section_tree_update,
-                        members,
-                        &starting_context.name,
-                    )?;
-                debug!("net knowledge updated");
+            let mut write_locked_node = node.write().await;
+            trace!("[NODE WRITE]: handling AE write got.");
+            let updated = write_locked_node
+                .network_knowledge
+                .update_knowledge_if_valid(section_tree_update, members, &starting_context.name)?;
+            debug!("net knowledge updated");
 
-                if updated {
-                    // always run this, only changes will trigger events
-                    cmds.extend(
-                        write_locked_node
-                            .update_on_section_change(&starting_context)
-                            .await?,
-                    );
-                }
+            if updated {
+                // always run this, only changes will trigger events
+                cmds.extend(
+                    write_locked_node
+                        .update_on_section_change(&starting_context)
+                        .await?,
+                );
+            }
 
-                trace!("updated for section change? {:?}", updated);
-                updated
+            trace!("updated for section change? {:?}", updated);
+            updated
             //
         };
 

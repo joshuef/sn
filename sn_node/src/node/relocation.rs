@@ -9,13 +9,14 @@
 //! Relocation related types and utilities.
 
 use sn_interface::{
-    elder_count,
-    network_knowledge::{recommended_section_size, NetworkKnowledge, NodeState}, data_copy_count,
+    data_copy_count, elder_count,
+    network_knowledge::{recommended_section_size, NetworkKnowledge, NodeState},
 };
 use std::{
     cmp::min,
     collections::BTreeSet,
-    fmt::{self, Display, Formatter}, net::SocketAddr,
+    fmt::{self, Display, Formatter},
+    net::SocketAddr,
 };
 use xor_name::XorName;
 
@@ -97,7 +98,7 @@ pub(super) fn find_nodes_to_relocate(
     //     return vec![];
     // };
 
-    let can : Vec<_>= candidates
+    let can: Vec<_> = candidates
         .into_iter()
         // .filter(|peer| peer.age() == target_age)
         .map(|peer| {

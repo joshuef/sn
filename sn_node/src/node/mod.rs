@@ -594,8 +594,7 @@ mod core {
 
                 self.log_network_stats();
                 self.log_section_stats();
-            }
-            else {
+            } else {
                 // if not elder, clear elder-only state
                 self.handover_voting = None;
                 // self.membership = None;
