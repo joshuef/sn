@@ -279,10 +279,21 @@ impl TestDispatcher {
             wire_msg: msg.wire_msg,
             send_stream: msg.send_stream,
         };
-        self.dispatcher
+        let mut cmds = self
+            .dispatcher
             .process_cmd(handle_node_msg_cmd, self.node())
             .await
-            .expect("Error while handling node msg")
+            .expect("Error while handling node msg");
+
+        if let &[Cmd::ProcessNodeMsg { .. }] = &cmds[..] {
+            cmds = self
+                .dispatcher
+                .process_cmd(cmds.remove(0), self.node())
+                .await
+                .expect("Error while processing node msg");
+        }
+
+        cmds
     }
 }
 
