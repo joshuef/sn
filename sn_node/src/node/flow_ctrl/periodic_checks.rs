@@ -21,8 +21,8 @@ use std::{collections::BTreeSet, time::Duration};
 use tokio::time::Instant;
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(300);
-const REQUEST_TO_RELOCATE_TIMEOUT_SEC: Duration = Duration::from_secs(30);
-const JOIN_AS_RELOCATED_TIMEOUT_SEC: Duration = Duration::from_secs(30);
+const REQUEST_TO_RELOCATE_TIMEOUT_SEC: Duration = Duration::from_secs(1);
+const JOIN_AS_RELOCATED_TIMEOUT_SEC: Duration = Duration::from_secs(1);
 const MISSING_VOTE_INTERVAL: Duration = Duration::from_secs(5);
 const MISSING_DKG_MSG_INTERVAL: Duration = Duration::from_secs(5);
 // const SECTION_PROBE_INTERVAL: Duration = Duration::from_secs(300);
