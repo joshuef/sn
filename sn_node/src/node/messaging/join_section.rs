@@ -33,9 +33,9 @@ impl MyNode {
 mod tests {
     use super::*;
     use crate::node::{
-        flow_ctrl::{
-            tests::network_builder::{TestNetwork, TestNetworkBuilder},
-            CmdCtrl, FlowCtrl, RejoinReason,
+        flow_ctrl::tests::{
+            cmd_utils::{get_next_msg, TestMsgTracker, TestNode},
+            network_builder::{TestNetwork, TestNetworkBuilder},
         },
         messaging::Peers,
         MIN_ADULT_AGE,
@@ -55,27 +55,68 @@ mod tests {
     };
 
     use assert_matches::assert_matches;
-    use eyre::Result;
-    use futures::future::join_all;
+    use eyre::{eyre, Result};
     use rand::thread_rng;
-    use std::{sync::Arc, time::Duration};
-    use tokio::sync::{
-        mpsc::{self, error::TryRecvError, Receiver, Sender},
-        RwLock,
+    use std::{collections::BTreeMap, sync::Arc};
+    use tokio::{
+        sync::{mpsc::Receiver, RwLock},
+        task::JoinHandle,
     };
-    use xor_name::Prefix;
-
-    const JOIN_TIMEOUT: Duration = Duration::from_secs(60);
+    use xor_name::{Prefix, XorName};
 
     #[tokio::test]
     async fn join_happy_path_completes() -> Result<()> {
         init_logger();
+        let prefix = Prefix::default();
+        let elder_count = elder_count();
+        let adult_count = 0;
 
-        // setup section and a joiner
-        let env = setup(elder_count()).await;
+        // Test environment setup
+        let msg_tracker = Arc::new(RwLock::new(TestMsgTracker::default()));
+        let mut env = TestNetworkBuilder::new(thread_rng())
+            .sap(prefix, elder_count, adult_count, None, None)
+            .build();
+        let mut node_instances = env
+            .get_nodes(prefix, elder_count, adult_count, None)
+            .into_iter()
+            .map(|node| {
+                let name = node.name();
+                let node = TestNode::new(node, msg_tracker.clone());
+                (name, Arc::new(RwLock::new(node)))
+            })
+            .collect::<BTreeMap<XorName, Arc<RwLock<TestNode>>>>();
+        let mut comm_receivers = BTreeMap::new();
+        for (name, node) in node_instances.iter() {
+            let pk = node.read().await.node.info().public_key();
+            let comm = env.take_comm_rx(pk);
+            let _ = comm_receivers.insert(*name, comm);
+        }
+        let network_knowledge = env.get_network_knowledge(prefix, None);
 
-        // join the section and return resulting section and next joiner
-        let _new_env = env.join().await?;
+        let (joining_node_name, mut joining_node_handle) = initialize_join(
+            prefix,
+            &network_knowledge,
+            &mut node_instances,
+            &mut comm_receivers,
+            msg_tracker.clone(),
+        )
+        .await?;
+
+        join_loop(
+            &node_instances,
+            &mut comm_receivers,
+            &mut joining_node_handle,
+            msg_tracker,
+        )
+        .await?;
+
+        // Check if the node has joined
+        for node in node_instances.values() {
+            let network_knowledge = node.read().await.node.network_knowledge().clone();
+            if !network_knowledge.is_adult(&joining_node_name) {
+                panic!("The node should've joined");
+            }
+        }
 
         Ok(())
     }
@@ -98,7 +139,7 @@ mod tests {
         };
 
         let mut nodes = env.get_nodes(prefix, 1, 0, None);
-        let elder = nodes.pop().expect("One elder should exist.");
+        let mut elder = nodes.pop().expect("One elder should exist.");
         let elder_peer = elder.info().peer();
 
         let elder_context = elder.context();
@@ -112,7 +153,6 @@ mod tests {
             None,
             None,
         )
-        .await
         .expect("An error was not expected.");
 
         let some_cmd = some_cmd
@@ -166,7 +206,7 @@ mod tests {
         };
 
         let mut nodes = env.get_nodes(prefix, 0, 1, None);
-        let adult = nodes.pop().expect("One adult should exist.");
+        let mut adult = nodes.pop().expect("One adult should exist.");
 
         assert!(adult.is_not_elder());
 
@@ -181,7 +221,6 @@ mod tests {
             None,
             None,
         )
-        .await
         .expect("An error was not expected.");
 
         let cmd = cmd.iter().find(|cmd| matches!(cmd, Cmd::SendMsg { .. }));
@@ -211,7 +250,7 @@ mod tests {
         };
 
         let mut nodes = env.get_nodes(section_prefix, 1, 0, None);
-        let elder = nodes.pop().expect("One elder should exist.");
+        let mut elder = nodes.pop().expect("One elder should exist.");
 
         let elder_context = elder.context();
 
@@ -224,7 +263,6 @@ mod tests {
             None,
             None,
         )
-        .await
         .expect("An error was not expected.");
 
         let cmd = cmd.iter().find(|cmd| matches!(cmd, Cmd::SendMsg { .. }));
@@ -252,7 +290,7 @@ mod tests {
         };
 
         let mut nodes = env.get_nodes(section_prefix, 1, 0, None);
-        let elder = nodes.pop().expect("One elder should exist.");
+        let mut elder = nodes.pop().expect("One elder should exist.");
 
         let elder_context = elder.context();
 
@@ -265,7 +303,6 @@ mod tests {
             None,
             None,
         )
-        .await
         .expect("An error was not expected.");
 
         let cmd = cmd.iter().find(|cmd| matches!(cmd, Cmd::SendMsg { .. }));
@@ -309,7 +346,6 @@ mod tests {
             None,
             None,
         )
-        .await
         .expect("An error was not expected.");
 
         let some_cmd = some_cmd
@@ -335,149 +371,162 @@ mod tests {
     #[tokio::test]
     async fn join_with_old_sap_succeeds() -> Result<()> {
         init_logger();
+        let prefix = Prefix::default();
+        let elder_count = elder_count() - 1;
+        let adult_count = 0;
 
-        let future_elders = 1;
-        let start_elder_count = elder_count() - future_elders;
-        // setup section and a joiner
-        let mut env = setup(start_elder_count).await;
-        // as an old knowledge is used for next joiner, it will go through ae steps within the join process
-        let old_network_knowledge = env.joiner.node.read().await.network_knowledge().clone();
+        // Test environment setup
+        let msg_tracker = Arc::new(RwLock::new(TestMsgTracker::default()));
+        let mut env = TestNetworkBuilder::new(thread_rng())
+            .sap(prefix, elder_count, adult_count, None, None)
+            .build();
+        let mut node_instances = env
+            .get_nodes(prefix, elder_count, adult_count, None)
+            .into_iter()
+            .map(|node| {
+                let name = node.name();
+                let node = TestNode::new(node, msg_tracker.clone());
+                (name, Arc::new(RwLock::new(node)))
+            })
+            .collect::<BTreeMap<XorName, Arc<RwLock<TestNode>>>>();
+        let mut comm_receivers = BTreeMap::new();
+        for (name, node) in node_instances.iter() {
+            let pk = node.read().await.node.info().public_key();
+            let comm = env.take_comm_rx(pk);
+            let _ = comm_receivers.insert(*name, comm);
+        }
+        let network_knowledge = env.get_network_knowledge(prefix, None);
 
-        assert_eq!(env.section.len(), start_elder_count);
-
-        for _ in 0..future_elders {
-            // join the section and return resulting section and next joiner
-            env = env.join().await?;
+        // elder joins the network
+        let (joining_node_name, mut joining_node_handle) = initialize_join(
+            prefix,
+            &network_knowledge,
+            &mut node_instances,
+            &mut comm_receivers,
+            msg_tracker.clone(),
+        )
+        .await?;
+        join_loop(
+            &node_instances,
+            &mut comm_receivers,
+            &mut joining_node_handle,
+            msg_tracker.clone(),
+        )
+        .await?;
+        // Check if the node has joined
+        for node in node_instances.values() {
+            let network_knowledge = node.read().await.node.network_knowledge().clone();
+            if !network_knowledge.is_elder(&joining_node_name) {
+                panic!("The node should've joined as an elder");
+            }
         }
 
-        assert_eq!(env.section.len(), elder_count());
+        // adult joins the network with the old network_knowledge, it will go through ae steps within the join process
+        let (joining_node_name, mut joining_node_handle) = initialize_join(
+            prefix,
+            &network_knowledge,
+            &mut node_instances,
+            &mut comm_receivers,
+            msg_tracker.clone(),
+        )
+        .await?;
 
-        assert_eq!(old_network_knowledge.elders().len(), start_elder_count);
+        join_loop(
+            &node_instances,
+            &mut comm_receivers,
+            &mut joining_node_handle,
+            msg_tracker,
+        )
+        .await?;
 
-        // replace the joiner with a new one, with old network knowledge
-        env.joiner = joiner(old_network_knowledge).await;
-
-        let final_env = env.join().await?;
-
-        assert_eq!(
-            final_env.section.len(),
-            start_elder_count + future_elders + 1
-        );
-
+        // Check if the node has joined
+        for node in node_instances.values() {
+            let network_knowledge = node.read().await.node.network_knowledge().clone();
+            if !network_knowledge.is_adult(&joining_node_name) {
+                panic!("The node should've joined as an adult");
+            }
+        }
         Ok(())
     }
 
-    // =========================================================================
-    // ========================== Test helpers ===============================
-    // =========================================================================
-
-    struct JoinEnv {
-        joiner: TestNode,
-        section: Vec<TestNode>,
-    }
-
-    struct TestNode {
-        node: Arc<RwLock<MyNode>>,
-        cmd_channel: Sender<(Cmd, Vec<usize>)>,
-        rejoin_rx: Receiver<RejoinReason>,
-    }
-
-    impl JoinEnv {
-        async fn join(mut self) -> Result<JoinEnv> {
-            self.joiner
-                .cmd_channel
-                .send((Cmd::TryJoinNetwork, vec![]))
-                .await
-                .map_err(|e| {
-                    error!("Failed join: {:?}", e);
-                    crate::node::Error::JoinTimeout
-                })?;
-
-            tokio::time::timeout(JOIN_TIMEOUT, await_join(self.joiner.node.clone()))
-                .await
-                .map_err(|e| {
-                    error!("Failed join: {:?}", e);
-                    crate::node::Error::JoinTimeout
-                })?;
-
-            assert_matches!(self.joiner.rejoin_rx.try_recv(), Err(TryRecvError::Empty));
-
-            let network_knowledge = self.joiner.node.read().await.network_knowledge().clone();
-
-            self.section.push(self.joiner);
-
-            Ok(JoinEnv {
-                joiner: joiner(network_knowledge).await,
-                section: self.section,
-            })
-        }
-    }
-
-    async fn setup(elders: usize) -> JoinEnv {
-        let (network_knowledge, section) = section(elders).await;
-        JoinEnv {
-            joiner: joiner(network_knowledge).await,
-            section,
-        }
-    }
-
-    async fn joiner(network_knowledge: NetworkKnowledge) -> TestNode {
-        let prefix = network_knowledge.prefix();
+    // Create a new adult and send the TryJoinNetwork to the section
+    async fn initialize_join(
+        prefix: Prefix,
+        network_knowledge: &NetworkKnowledge,
+        node_instances: &mut BTreeMap<XorName, Arc<RwLock<TestNode>>>,
+        comm_receivers: &mut BTreeMap<XorName, Receiver<CommEvent>>,
+        msg_tracker: Arc<RwLock<TestMsgTracker>>,
+    ) -> Result<(XorName, Option<(XorName, JoinHandle<Result<Vec<Cmd>>>)>)> {
+        // create the new adult
         let (info, comm, incoming_msg_receiver) =
             TestNetwork::gen_info(MIN_ADULT_AGE, Some(prefix));
-        let node = TestNetwork::build_a_node_instance(&info, &comm, &network_knowledge);
-        connect_flows(node, incoming_msg_receiver).await
+        let node = TestNetwork::build_a_node_instance(&info, &comm, network_knowledge);
+        let name = node.info().name();
+        let node = Arc::new(RwLock::new(TestNode::new(node, msg_tracker.clone())));
+
+        // spawn a separate task for the joining node as it awaits for responses from the other
+        // nodes
+        let mut send_cmd = node.write().await.process_cmd(Cmd::TryJoinNetwork).await?;
+        assert_eq!(send_cmd.len(), 1);
+        let send_cmd = send_cmd.remove(0);
+        assert_matches!(&send_cmd, Cmd::SendMsgEnqueueAnyResponse { .. });
+        let node_clone = node.clone();
+        let joining_node_handle =
+            tokio::spawn(async move { node_clone.write().await.process_cmd(send_cmd).await });
+        let joining_node_handle = Some((name, joining_node_handle));
+
+        // add the joiner to our set
+        let _ = node_instances.insert(name, node);
+        let _ = comm_receivers.insert(name, incoming_msg_receiver);
+        Ok((name, joining_node_handle))
     }
 
-    async fn section(elders: usize) -> (NetworkKnowledge, Vec<TestNode>) {
-        let prefix = Prefix::default();
-        let mut env = TestNetworkBuilder::new(thread_rng())
-            .sap(prefix, elders, 0, None, None)
-            .build();
+    /// Main loop that sends and processes Cmds
+    async fn join_loop(
+        node_instances: &BTreeMap<XorName, Arc<RwLock<TestNode>>>,
+        comm_receivers: &mut BTreeMap<XorName, Receiver<CommEvent>>,
+        joining_node_handle: &mut Option<(XorName, JoinHandle<Result<Vec<Cmd>>>)>,
+        msg_tracker: Arc<RwLock<TestMsgTracker>>,
+    ) -> Result<()> {
+        // terminate if there are no more msgs to process
+        let mut done = false;
+        while !done {
+            for (name, test_node) in node_instances.iter() {
+                let mut node = test_node.write().await;
+                info!("\n\n NODE: {}", name);
+                let comm_rx = comm_receivers
+                    .get_mut(name)
+                    .ok_or_else(|| eyre!("comm_rx should be present"))?;
 
-        let network_knowledge = env.get_network_knowledge(prefix, None);
+                if let Some((joining_node_name, handle_ref)) = &joining_node_handle {
+                    if joining_node_name == name && handle_ref.is_finished() {
+                        let (_, handle) =
+                            joining_node_handle.take().expect("join_handle is present");
+                        assert!(handle.await??.is_empty());
+                    }
+                }
 
-        let section = join_all(
-            env.get_nodes(prefix, elders, 0, None)
-                .into_iter()
-                .map(|node| {
-                    let public_key = node.info().public_key();
-                    connect_flows(node, env.take_comm_rx(public_key))
-                }),
-        )
-        .await;
+                // Allow the node to receive msgs from others
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-        (network_knowledge, section)
-    }
+                while let Some(msg) = get_next_msg(comm_rx).await {
+                    let mut cmds = node.test_handle_msg_from_peer(msg, None).await;
+                    while !cmds.is_empty() {
+                        let new_cmds = node.process_cmd(cmds.remove(0)).await?;
+                        cmds.extend(new_cmds);
+                    }
+                }
+            }
 
-    async fn connect_flows(node: MyNode, incoming_msg_receiver: Receiver<CommEvent>) -> TestNode {
-        let node = Arc::new(RwLock::new(node));
-        let (dispatcher, data_replication_receiver) = Dispatcher::new();
-        let cmd_ctrl = CmdCtrl::new(dispatcher);
-        let (cmd_channel, rejoin_rx) = FlowCtrl::start(
-            node,
-            cmd_ctrl,
-            JOIN_TIMEOUT,
-            incoming_msg_receiver,
-            data_replication_receiver,
-            mpsc::channel(10),
-        )
-        .await;
-
-        TestNode {
-            node,
-            cmd_channel,
-            rejoin_rx,
+            if msg_tracker.read().await.is_empty() {
+                done = true;
+            } else {
+                debug!(
+                    "remaining msgs {:?}",
+                    msg_tracker.read().await.tracker.keys().collect::<Vec<_>>()
+                );
+            }
         }
-    }
-
-    async fn await_join(node: Arc<RwLock<MyNode>>) {
-        let mut is_member = false;
-        while !is_member {
-            let read_only = node.read().await;
-            let our_name = read_only.name();
-            is_member = read_only.network_knowledge.is_section_member(&our_name);
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+        Ok(())
     }
 }

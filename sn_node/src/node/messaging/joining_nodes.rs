@@ -22,7 +22,7 @@ use sn_interface::{
 
 // Message handling
 impl MyNode {
-    pub(crate) async fn handle_join(
+    pub(crate) fn handle_join(
         node: &mut MyNode,
         context: &NodeContext,
         peer: Peer,

@@ -79,10 +79,7 @@ impl FlowCtrl {
         let context = node.context();
         let mut cmds = vec![];
 
-        cmds.extend(
-            self.enqueue_cmds_for_node_periodic_checks(&context, node)
-                .await,
-        );
+        cmds.extend(self.enqueue_cmds_for_node_periodic_checks(&context, node));
         if !context.is_elder {
             // self.enqueue_cmds_for_adult_periodic_checks(&context).await;
         } else {
@@ -104,7 +101,7 @@ impl FlowCtrl {
     }
 
     /// Periodic tasks run for both elders and adults
-    async fn enqueue_cmds_for_node_periodic_checks(
+    fn enqueue_cmds_for_node_periodic_checks(
         &mut self,
         context: &NodeContext,
         node: &mut MyNode,
