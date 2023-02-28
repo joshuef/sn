@@ -20,7 +20,7 @@ impl MyNode {
     pub(crate) async fn process_cmd(cmd: Cmd, node: &mut MyNode) -> Result<Vec<Cmd>> {
         let context = node.context();
         let start = Instant::now();
-        let cmd_string = format!("{}", cmd);
+        let cmd_string = format!("{cmd}");
         let result = match cmd {
             Cmd::TryJoinNetwork => Ok(MyNode::try_join_section(context, None)
                 .into_iter()

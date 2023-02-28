@@ -12,6 +12,7 @@ pub(crate) mod dbc_utils;
 pub(crate) mod network_builder;
 
 use crate::node::{
+    core::MyNode,
     flow_ctrl::tests::network_builder::{TestNetwork, TestNetworkBuilder},
     messaging::Peers,
     Cmd, Error,
@@ -46,9 +47,7 @@ use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use std::{
     collections::{BTreeSet, HashSet},
     iter,
-    sync::Arc,
 };
-use tokio::sync::RwLock;
 use xor_name::{Prefix, XorName};
 
 #[tokio::test]
@@ -93,26 +92,18 @@ async fn membership_churn_starts_on_join_request_from_relocated_node() -> Result
         NodeMsg::TryJoin(Some(proof)),
     )?;
 
-    let elder_node = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut elder_node = env.get_nodes(prefix, 1, 0, None).remove(0);
 
-    let elder_node = Arc::new(RwLock::new(elder_node));
-
-    ProcessAndInspectCmds::new(
-        Cmd::HandleMsg {
-            origin: new_info.peer(),
-            wire_msg,
-            send_stream: None,
-        },
-        elder_node.clone(),
-    )
-    .process_all()
+    ProcessAndInspectCmds::new(Cmd::HandleMsg {
+        origin: new_info.peer(),
+        wire_msg,
+        send_stream: None,
+    })
+    .process_all(&mut elder_node)
     .await?;
 
     assert!(elder_node
-        .read()
-        .await
         .membership
-        .as_ref()
         .ok_or_else(|| eyre!("Membership for the node must be set"))?
         .is_churn_in_progress());
 
@@ -125,18 +116,13 @@ async fn handle_agreement_on_online() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 0, None, None)
         .build();
-    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let sk_set = env.get_secret_key_set(prefix, None);
     let new_peer = gen_peer(MIN_ADULT_AGE);
-    let node = Arc::new(RwLock::new(node));
-    let join_approval_sent = handle_online_cmd(&new_peer, &sk_set, node.clone()).await?;
+    let join_approval_sent = handle_online_cmd(&new_peer, &sk_set, &mut node).await?;
     assert!(join_approval_sent.0);
 
-    assert!(node
-        .read()
-        .await
-        .network_knowledge()
-        .is_adult(&new_peer.name()));
+    assert!(node.network_knowledge().is_adult(&new_peer.name()));
 
     Ok(())
 }
@@ -155,7 +141,7 @@ async fn handle_agreement_on_online_of_elder_candidate() -> Result<()> {
             None,
         )
         .build();
-    let (dispatcher, mut node) = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let node_name = node.name();
     let section = env.get_network_knowledge(prefix, None);
     let sk_set = env.get_secret_key_set(prefix, None);
@@ -179,17 +165,13 @@ async fn handle_agreement_on_online_of_elder_candidate() -> Result<()> {
         .ok_or_else(|| eyre!("Membership for the node must be set"))?
         .force_bootstrap(node_state);
 
-    let mut cmds = ProcessAndInspectCmds::new(
-        Cmd::HandleMembershipDecision(membership_decision),
-        &dispatcher,
-        Arc::new(RwLock::new(node)),
-    );
+    let mut cmds = ProcessAndInspectCmds::new(Cmd::HandleMembershipDecision(membership_decision));
 
     // Verify we sent a `DkgStart` message with the expected participants.
     let mut dkg_start_sent = false;
     let _changed = expected_new_elders.insert(new_peer);
 
-    while let Some(cmd) = cmds.next().await? {
+    while let Some(cmd) = cmds.next(&mut node).await? {
         let (msg, recipients) = match cmd {
             Cmd::SendMsg {
                 recipients,
@@ -233,7 +215,7 @@ async fn handle_join_request_of_rejoined_node() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 0, None, None)
         .build();
-    let (_dispatcher, mut node) = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut node = env.get_nodes(prefix, 1, 0, None).remove(0);
 
     // Make a left peer.
     let peer = gen_peer_in_prefix(MIN_ADULT_AGE, prefix);
@@ -250,7 +232,6 @@ async fn handle_join_request_of_rejoined_node() -> Result<()> {
     assert!(join_cmd.is_none()); // no cmd signals this membership proposal was dropped.
     assert!(!node
         .membership
-        .as_ref()
         .ok_or_else(|| eyre!("Membership for the node must be set"))?
         .is_churn_in_progress());
     Ok(())
@@ -264,7 +245,7 @@ async fn handle_agreement_on_offline_of_non_elder() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 1, None, None)
         .build();
-    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let sk_set = env.get_secret_key_set(prefix, None);
 
     // get the node state of the non_elder node
@@ -274,14 +255,11 @@ async fn handle_agreement_on_offline_of_non_elder() -> Result<()> {
     let proposal = node_state.clone();
     let sig = TestKeys::get_section_sig_bytes(&sk_set.secret_key(), &get_single_sig(&proposal));
 
-    let node = Arc::new(RwLock::new(node));
-    ProcessAndInspectCmds::new(Cmd::HandleNodeOffAgreement { proposal, sig }, node.clone())
-        .process_all()
+    ProcessAndInspectCmds::new(Cmd::HandleNodeOffAgreement { proposal, sig })
+        .process_all(&mut node)
         .await?;
 
     assert!(!node
-        .read()
-        .await
         .network_knowledge()
         .section_members()
         .contains(&node_state));
@@ -295,10 +273,10 @@ async fn handle_agreement_on_offline_of_elder() -> Result<()> {
         .sap(prefix, elder_count(), 0, None, None)
         .build();
     let mut elders = env.get_nodes(prefix, 2, 0, None);
-    let (dispatcher, node) = elders.remove(0);
+    let mut node = elders.remove(0);
     let sk_set = env.get_secret_key_set(prefix, None);
 
-    let (_remove_dispatcher, remove_elder) = elders.remove(0);
+    let remove_elder = elders.remove(0);
     let remove_elder_peer = remove_elder.info().peer();
     let remove_elder = NodeState::left(remove_elder_peer, None);
 
@@ -306,14 +284,13 @@ async fn handle_agreement_on_offline_of_elder() -> Result<()> {
     let proposal = remove_elder.clone();
     let sig = TestKeys::get_section_sig_bytes(&sk_set.secret_key(), &get_single_sig(&proposal));
 
-    ProcessAndInspectCmds::new(Cmd::HandleNodeOffAgreement { proposal, sig }, &dispatcher)
-        .process_all()
+    ProcessAndInspectCmds::new(Cmd::HandleNodeOffAgreement { proposal, sig })
+        .process_all(&mut node)
         .await?;
 
     // Verify we initiated a membership churn
     assert!(node
         .membership
-        .as_ref()
         .ok_or_else(|| eyre!("Membership for the node must be set"))?
         .is_churn_in_progress());
     Ok(())
@@ -375,17 +352,12 @@ async fn ae_msg_from_the_future_is_handled() -> Result<()> {
     node.section_keys_provider
         .insert(TestKeys::get_section_key_share(&sk_set1, 0));
 
-    let (dispatcher, _) = Dispatcher::new();
-
-    ProcessAndInspectCmds::new(
-        Cmd::HandleMsg {
-            origin: sender.peer(),
-            wire_msg,
-            send_stream: None,
-        },
-        &dispatcher,
-    )
-    .process_all()
+    ProcessAndInspectCmds::new(Cmd::HandleMsg {
+        origin: sender.peer(),
+        wire_msg,
+        send_stream: None,
+    })
+    .process_all(&mut node)
     .await?;
 
     // Verify our `Section` got updated.
@@ -404,7 +376,7 @@ async fn untrusted_ae_msg_errors() -> Result<()> {
     let env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 0, None, None)
         .build();
-    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let section = env.get_network_knowledge(prefix, None);
     let signed_sap = section.signed_sap();
     let sk_set = env.get_secret_key_set(prefix, None);
@@ -442,7 +414,7 @@ async fn untrusted_ae_msg_errors() -> Result<()> {
             wire_msg,
             send_stream: None,
         },)
-        .process_all()
+        .process_all(&mut node)
         .await,
         Err(Error::NetworkKnowledge(
             NetworkKnowledgeError::SAPKeyNotCoveredByProofChain(_)
@@ -467,21 +439,18 @@ async fn msg_to_self() -> Result<()> {
         .sap(prefix, 1, 0, None, None)
         .build();
 
-    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let mut comm_rx = env.take_comm_rx(node.info().public_key());
-    let context = node.context();
     let info = node.info();
-    let (dispatcher, _) = Dispatcher::new();
 
     let node_msg = NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateDataBatch(vec![]));
 
     // don't use the cmd collection fn, as it skips Cmd::SendMsg
-    let cmds = dispatcher
-        .process_cmd(
-            Cmd::send_msg(node_msg.clone(), Peers::Single(info.peer())),
-            &mut node,
-        )
-        .await?;
+    let cmds = MyNode::process_cmd(
+        Cmd::send_msg(node_msg.clone(), Peers::Single(info.peer())),
+        &mut node,
+    )
+    .await?;
 
     assert!(cmds.is_empty());
 
@@ -538,7 +507,6 @@ async fn handle_elders_update() -> Result<()> {
     // the new section key share to our cache
     node.section_keys_provider
         .insert(TestKeys::get_section_key_share(&sk_set1, 0));
-    let (dispatcher, _) = Dispatcher::new();
 
     // Create `HandleNewEldersAgreement` cmd. This will demote one of the
     // current elders and promote the oldest peer.
@@ -546,16 +514,13 @@ async fn handle_elders_update() -> Result<()> {
     let bytes = bincode::serialize(&sap1.sig.public_key).expect("Failed to serialize");
     let sig = TestKeys::get_section_sig_bytes(&sk_set0.secret_key(), &bytes);
 
-    let mut cmds = ProcessAndInspectCmds::new(
-        Cmd::HandleNewEldersAgreement {
-            new_elders: sap1,
-            sig,
-        },
-        &dispatcher,
-    );
+    let mut cmds = ProcessAndInspectCmds::new(Cmd::HandleNewEldersAgreement {
+        new_elders: sap1,
+        sig,
+    });
 
     let mut update_actual_recipients = HashSet::new();
-    while let Some(cmd) = cmds.next().await? {
+    while let Some(cmd) = cmds.next(&mut node).await? {
         let (msg, recipients) = match cmd {
             Cmd::SendMsg {
                 msg,
@@ -686,12 +651,10 @@ async fn handle_demote_during_split() -> Result<()> {
         }
     };
 
-    let node = Arc::new(RwLock::new(node));
-
-    let mut cmds = ProcessAndInspectCmds::new(cmd, &dispatcher);
+    let mut cmds = ProcessAndInspectCmds::new(cmd);
 
     let mut update_recipients = BTreeSet::new();
-    while let Some(cmd) = cmds.next().await? {
+    while let Some(cmd) = cmds.next(&mut node).await? {
         let (msg, recipients) = match cmd {
             Cmd::SendMsg {
                 msg, recipients, ..
@@ -723,7 +686,7 @@ async fn spentbook_spend_client_message_should_replicate_to_adults_and_send_ack(
     let mut env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 6, None, Some(0))
         .build();
-    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let sk_set = env.get_secret_key_set(prefix, None);
 
     let (public_key, tx, spent_proofs, spent_transactions) =
@@ -743,7 +706,7 @@ async fn spentbook_spend_client_message_should_replicate_to_adults_and_send_ack(
     )
     .await?;
 
-    while let Some(cmd) = cmds.next().await? {
+    while let Some(cmd) = cmds.next(&mut node).await? {
         if let Cmd::SendAndForwardResponseToClient {
             wire_msg, targets, ..
         } = cmd
@@ -787,7 +750,7 @@ async fn spentbook_spend_transaction_with_no_inputs_should_return_spentbook_erro
     let mut env = TestNetworkBuilder::new(thread_rng())
         .sap(prefix, elder_count(), 6, None, Some(0))
         .build();
-    let node = env.get_nodes(prefix, 1, 0, None).remove(0);
+    let mut node = env.get_nodes(prefix, 1, 0, None).remove(0);
     let section = env.get_network_knowledge(prefix, None);
     let sk_set = env.get_secret_key_set(prefix, None);
 
@@ -819,7 +782,7 @@ async fn spentbook_spend_transaction_with_no_inputs_should_return_spentbook_erro
     )
     .await?;
 
-    while let Some(cmd) = cmds.next().await? {
+    while let Some(cmd) = cmds.next(&mut node).await? {
         if let Cmd::SendDataResponse {
             msg:
                 DataResponse::CmdResponse {
@@ -859,11 +822,11 @@ async fn spentbook_spend_with_updated_network_knowledge_should_update_the_node()
         .sap(prefix1, elder_count(), 0, None, Some(0))
         .build();
 
-    let (dispatcher, mut node) = env.get_nodes(Prefix::default(), 1, 0, None).remove(0);
+    let mut node = env.get_nodes(Prefix::default(), 1, 0, None).remove(0);
     let info = node.info();
     let genesis_sk_set = env.get_secret_key_set(Prefix::default(), None);
 
-    let (_other_dispatcher, other_node) = env.get_nodes(prefix1, 1, 0, None).remove(0);
+    let other_node = env.get_nodes(prefix1, 1, 0, None).remove(0);
     let other_node_info = other_node.info();
     let other_section_key_share =
         env.get_section_key_share(prefix1, other_node_info.public_key(), None);
@@ -907,7 +870,6 @@ async fn spentbook_spend_with_updated_network_knowledge_should_update_the_node()
     let (public_key, tx) = get_input_dbc_spend_info(&new_dbc2, 2, &bls::SecretKey::random())?;
 
     let comm_rx = env.take_comm_rx(info.public_key());
-    let node = Arc::new(RwLock::new(node));
 
     let mut cmds = ProcessAndInspectCmds::new_from_client_msg(
         ClientMsg::Cmd(DataCmd::Spentbook(SpentbookCmd::Spend {
@@ -917,7 +879,7 @@ async fn spentbook_spend_with_updated_network_knowledge_should_update_the_node()
             spent_transactions: new_dbc2.spent_transactions,
             network_knowledge: Some((proof_chain, sap)),
         })),
-        &dispatcher,
+        &mut node,
         comm_rx,
     )
     .await?;
@@ -926,7 +888,7 @@ async fn spentbook_spend_with_updated_network_knowledge_should_update_the_node()
     // // knowledge and also the other two commands to replicate the spent proof shares and
     // // the ack command, but we've already validated the other two as part of another test.
     let mut found = false;
-    while let Some(cmd) = cmds.next().await? {
+    while let Some(cmd) = cmds.next(&mut node).await? {
         if let Cmd::UpdateNetworkAndHandleValidClientMsg { .. } = cmd {
             found = true;
         }
