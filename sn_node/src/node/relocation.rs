@@ -49,13 +49,12 @@ pub(super) fn find_nodes_to_relocate(
         recommended section_size {recommended_section_size}"
     );
 
-    // no relocation if total section size is too small
-    if section_size <= recommended_section_size {
-        return vec![];
-    }
+    // // no relocation if total section size is too small
+    // if section_size < recommended_section_size() {
+    //     return vec![];
+    // }
 
-    let max_reloctions = elder_count() / 2;
-    let allowed_relocations = min(section_size - recommended_section_size, max_reloctions);
+    let allowed_relocations = elder_count();
 
     // Find the peers that pass the relocation check
     let mut candidates: Vec<_> = section_members
@@ -71,7 +70,8 @@ pub(super) fn find_nodes_to_relocate(
     candidates.sort_by(|lhs, rhs| target_name.cmp_distance(&lhs.name(), &rhs.name()));
 
     info!("Finding relocation candidates {candidates:?}");
-    let max_age = if let Some(age) = candidates.iter().map(|info| info.age()).max() {
+
+    let target_age = if let Some(age) = candidates.iter().map(|info| info.age()).min() {
         age
     } else {
         return vec![];
@@ -79,12 +79,12 @@ pub(super) fn find_nodes_to_relocate(
 
     candidates
         .into_iter()
-        .filter(|peer| peer.age() == max_age)
+        // .filter(|peer| peer.age() == target_age)
         .map(|peer| {
             let dst_section = XorName::from_content_parts(&[&peer.name().0, &churn_id.0]);
             (peer, dst_section)
         })
-        .take(allowed_relocations)
+        // .take(allowed_relocations)
         .collect()
 }
 
