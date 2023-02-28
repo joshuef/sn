@@ -185,7 +185,7 @@ mod tests {
                 network_builder::TestNetworkBuilder,
             },
         },
-        relocation_check, ChurnId, MyNode,
+        relocation_check, ChurnId,
     };
     use sn_comms::CommEvent;
     use sn_consensus::Decision;
@@ -253,13 +253,11 @@ mod tests {
 
         let membership_decision = create_relocation_trigger(&sk_set, relocated_peer.age());
 
-        let node = Arc::new(RwLock::new(node));
-
         let mut cmds =
             ProcessAndInspectCmds::new(Cmd::HandleMembershipDecision(membership_decision));
 
         let mut trigger_is_sent = false;
-        while let Some(cmd) = cmds.next().await? {
+        while let Some(cmd) = cmds.next(&mut node).await? {
             let msg = match cmd {
                 Cmd::SendMsg {
                     msg: NetworkMsg::Node(msg),
@@ -295,14 +293,13 @@ mod tests {
             .map(|node| {
                 let prefix = node.network_knowledge().prefix();
                 let name = node.name();
-                let (dispatcher, _) = Dispatcher::new();
-                let dispatcher = Arc::new(TestNode::new(node, dispatcher, msg_tracker.clone()));
+                let dispatcher = Arc::new(RwLock::new(TestNode::new(node, msg_tracker.clone())));
                 ((prefix, name), dispatcher)
             })
-            .collect::<BTreeMap<(Prefix, XorName), Arc<TestNode>>>();
+            .collect::<BTreeMap<(Prefix, XorName), Arc<RwLock<TestNode>>>>();
         let mut comm_receivers = BTreeMap::new();
-        for (name, dispatcher) in node_instances.iter() {
-            let pk = dispatcher.node().info().public_key();
+        for (name, node) in node_instances.iter() {
+            let pk = node.read().await.node.info().public_key();
             let comm = env.take_comm_rx(pk);
             let _ = comm_receivers.insert(*name, comm);
         }
@@ -314,19 +311,15 @@ mod tests {
             .get_peers(Prefix::default(), 0, 1, None)
             .remove(0)
             .name();
-        for dispatcher in node_instances.iter().filter_map(|((_, name), dispatcher)| {
+        for node in node_instances.iter().filter_map(|((_, name), node)| {
             if name != &relocation_node_old_name {
-                Some(dispatcher)
+                Some(node)
             } else {
                 None
             }
         }) {
-            initialize_relocation(
-                dispatcher.clone(),
-                relocation_node_old_name,
-                Prefix::default(),
-            )
-            .await?;
+            initialize_relocation(node.clone(), relocation_node_old_name, Prefix::default())
+                .await?;
         }
 
         relocation_loop(
@@ -341,10 +334,12 @@ mod tests {
         let relocation_node_new_name = node_instances
             .get(&(Prefix::default(), relocation_node_old_name))
             .expect("Node should be present")
-            .node()
+            .read()
+            .await
+            .node
             .name();
-        for dispatcher in node_instances.values() {
-            let network_knowledge = dispatcher.node().network_knowledge().clone();
+        for node in node_instances.values() {
+            let network_knowledge = node.read().await.node.network_knowledge().clone();
             // Make sure the relocation_node (new_name) is part of the elder's network_knowledge
             if !network_knowledge.is_adult(&relocation_node_new_name) {
                 panic!("The relocation node should've joined with a new name");
@@ -353,7 +348,8 @@ mod tests {
             // Make sure the relocation_node's old_name is removed
             // The membership changes are actively monitored by the elders, so skip this check
             // for the adult nodes
-            if dispatcher.node().is_elder() && network_knowledge.is_adult(&relocation_node_old_name)
+            if node.read().await.node.is_elder()
+                && network_knowledge.is_adult(&relocation_node_old_name)
             {
                 panic!("The relocation node's old name should've been removed");
             }
@@ -409,14 +405,13 @@ mod tests {
                         .update_the_section_tree(st_update_0.clone())
                         .expect("Section tree update failed");
                 }
-                let (dispatcher, _) = Dispatcher::new();
-                let dispatcher = Arc::new(TestNode::new(node, dispatcher, msg_tracker.clone()));
-                ((prefix, name), (node, dispatcher))
+                let node = Arc::new(RwLock::new(TestNode::new(node, msg_tracker.clone())));
+                ((prefix, name), node)
             })
-            .collect::<BTreeMap<(Prefix, XorName), (MyNode, Arc<TestNode>)>>();
+            .collect::<BTreeMap<(Prefix, XorName), Arc<RwLock<TestNode>>>>();
         let mut comm_receivers = BTreeMap::new();
-        for (name, (node, dispatcher)) in node_instances.iter() {
-            let pk = dispatcher.node().info().public_key();
+        for (name, node) in node_instances.iter() {
+            let pk = node.read().await.node.info().public_key();
             let comm = env.take_comm_rx(pk);
             let _ = comm_receivers.insert(*name, comm);
         }
@@ -453,10 +448,12 @@ mod tests {
         let relocation_node_new_name = node_instances
             .get(&(prefix0, relocation_node_old_name))
             .expect("Node should be present")
-            .node()
+            .read()
+            .await
+            .node
             .name();
         for ((pref, node_name), dispatcher) in node_instances.iter() {
-            let network_knowledge = dispatcher.node().network_knowledge().clone();
+            let network_knowledge = dispatcher.read().await.node.network_knowledge().clone();
             // the dispatcher for the relocation_node is still under the old name
             if node_name == &relocation_node_old_name {
                 // the relocation node should be part of prefix1
@@ -493,26 +490,37 @@ mod tests {
 
     // Propose NodeIsOffline(relocation) for the provided node
     async fn initialize_relocation(
-        dispatcher: Arc<TestNode>,
+        node: Arc<RwLock<TestNode>>,
         relocation_node_name: XorName,
         dst_prefix: Prefix,
-        node: &mut MyNode,
     ) -> Result<()> {
-        info!("Initialize relocation from {:?}", node.name());
+        info!(
+            "Initialize relocation from {:?}",
+            node.read().await.node.name()
+        );
         let relocation_node_state = node
+            .read()
+            .await
+            .node
             .network_knowledge()
             .get_section_member(&relocation_node_name)
             .expect("relocation node should be present");
 
         let relocation_dst = RelocationDst::new(dst_prefix.name());
         let relocation_node_state = relocation_node_state.relocate(relocation_dst);
-        let mut relocation_send_msg = node.propose_section_state(
-            SectionStateVote::NodeIsOffline(relocation_node_state.clone()),
-        )?;
+        let mut relocation_send_msg =
+            node.write()
+                .await
+                .node
+                .propose_section_state(SectionStateVote::NodeIsOffline(
+                    relocation_node_state.clone(),
+                ))?;
         assert_eq!(relocation_send_msg.len(), 1);
         let relocation_send_msg = relocation_send_msg.remove(0);
-        assert!(dispatcher
-            .process_cmd(relocation_send_msg, node)
+        assert!(node
+            .write()
+            .await
+            .process_cmd(relocation_send_msg)
             .await?
             .is_empty());
 
@@ -521,7 +529,7 @@ mod tests {
 
     /// Main loop that sends and processes Cmds
     async fn relocation_loop(
-        node_instances: &BTreeMap<(Prefix, XorName), Arc<TestNode>>,
+        node_instances: &BTreeMap<(Prefix, XorName), Arc<RwLock<TestNode>>>,
         comm_receivers: &mut BTreeMap<(Prefix, XorName), Receiver<CommEvent>>,
         from_section_n_elders: usize,
         msg_tracker: Arc<RwLock<TestMsgTracker>>,
@@ -533,7 +541,8 @@ mod tests {
         // terminate if there are no more msgs to process
         let mut done = false;
         while !done {
-            for (key, dispatcher) in node_instances.iter() {
+            for (key, test_node) in node_instances.iter() {
+                let mut node = test_node.write().await;
                 let name = key.1;
                 info!("\n\n NODE: {}", name);
                 let comm_rx = comm_receivers
@@ -553,34 +562,36 @@ mod tests {
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    let cmds = dispatcher.test_handle_msg_from_peer(msg, Some(name)).await;
+                    let cmds = node.test_handle_msg_from_peer(msg, Some(name)).await;
                     for cmd in cmds {
                         info!("Got cmd {}", cmd);
                         if let Cmd::SendMsg { .. } = &cmd {
-                            assert!(dispatcher.process_cmd(cmd).await?.is_empty());
+                            assert!(node.process_cmd(cmd).await?.is_empty());
                         } else if let Cmd::SendMsgEnqueueAnyResponse { .. } = &cmd {
                             // The relocating node waits for the elders to allow it to join the
                             // section. It happens through a bidi stream and hence spawn it as a
                             // separate task.
-                            let dis = dispatcher.clone();
+                            let dis = test_node.clone();
                             join_handle_for_relocating_node = Some((
                                 name,
-                                tokio::spawn(async move { dis.process_cmd(cmd).await }),
+                                tokio::spawn(
+                                    async move { dis.write().await.process_cmd(cmd).await },
+                                ),
                             ));
                         } else if let Cmd::HandleSectionDecisionAgreement { .. } = &cmd {
-                            let mut send_cmd = dispatcher.process_cmd(cmd).await?;
+                            let mut send_cmd = node.process_cmd(cmd).await?;
                             assert_eq!(send_cmd.len(), 1);
                             let send_cmd = send_cmd.remove(0);
                             assert_matches!(&send_cmd, Cmd::SendMsg { msg: NetworkMsg::Node(msg), .. } => {
                                 assert_matches!(msg, NodeMsg::MembershipVotes(_));
                             });
-                            assert!(dispatcher.process_cmd(send_cmd).await?.is_empty());
+                            assert!(node.process_cmd(send_cmd).await?.is_empty());
                         }
                         // There are 2 Membership changes here, one to relocate the
                         // node and the other one to allow the node to join as adult after
                         // being relocated
                         else if let Cmd::HandleMembershipDecision(_) = &cmd {
-                            let mut send_cmds = dispatcher.process_cmd(cmd).await?;
+                            let mut send_cmds = node.process_cmd(cmd).await?;
 
                             if relocation_membership_decision_done.len() != from_section_n_elders {
                                 // the first membership change contains an extra step to send the
@@ -590,7 +601,7 @@ mod tests {
                                 assert_matches!(&send_cmd, Cmd::SendMsg { msg: NetworkMsg::Node(msg), .. } => {
                                     assert_matches!(msg, NodeMsg::Relocate(_));
                                 });
-                                assert!(dispatcher.process_cmd(send_cmd).await?.is_empty());
+                                assert!(node.process_cmd(send_cmd).await?.is_empty());
 
                                 let _ = relocation_membership_decision_done.insert(name);
                             } else {
@@ -599,7 +610,7 @@ mod tests {
                                 assert_matches!(&send_cmd, Cmd::SendMsg { msg: NetworkMsg::Node(msg), .. } => {
                                     assert_matches!(msg,  NodeMsg::JoinResponse(JoinResponse::Approved { .. }));
                                 });
-                                assert!(dispatcher.process_cmd(send_cmd).await?.is_empty());
+                                assert!(node.process_cmd(send_cmd).await?.is_empty());
                             }
 
                             // Common for both the cases
@@ -614,7 +625,7 @@ mod tests {
                                     ..
                                 }
                             );
-                            assert!(dispatcher.process_cmd(send_cmd).await?.is_empty());
+                            assert!(node.process_cmd(send_cmd).await?.is_empty());
 
                             // Skip NodeDataCmd as we don't have any data
                             let send_cmd = send_cmds.remove(0);
@@ -631,13 +642,13 @@ mod tests {
                         } = &cmd
                         {
                             // Send out the `UnderConsideration` as stream response.
-                            let _ = dispatcher.process_cmd(cmd).await?;
+                            let _ = node.process_cmd(cmd).await?;
                         } else if let Cmd::UpdateCaller {
                             kind: AntiEntropyKind::Redirect { .. },
                             ..
                         } = &cmd
                         {
-                            let mut send_cmds = dispatcher.process_cmd(cmd).await?;
+                            let mut send_cmds = node.process_cmd(cmd).await?;
 
                             let send_cmd = send_cmds.remove(0);
                             assert_matches!(
@@ -650,7 +661,7 @@ mod tests {
                                     ..
                                 }
                             );
-                            assert!(dispatcher.process_cmd(send_cmd).await?.is_empty());
+                            assert!(node.process_cmd(send_cmd).await?.is_empty());
                         } else {
                             panic!("got a different cmd {cmd:?}");
                         }

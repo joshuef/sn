@@ -160,7 +160,6 @@ impl MyNode {
             NodeMsg::TryJoin(relocation) => {
                 trace!("Handling msg {:?}: TryJoin from {}", msg_id, sender);
                 MyNode::handle_join(node, &context, sender, msg_id, relocation, send_stream)
-                    .await
                     .map(|c| c.into_iter().collect())
             }
             NodeMsg::BeginRelocating(relocation_trigger) => {
@@ -242,10 +241,7 @@ impl MyNode {
                 Ok(cmds)
             }
             NodeMsg::MembershipAE(gen) => {
-                let membership_context = {
-                    let membership = node.membership.clone();
-                    membership
-                };
+                let membership_context = { node.membership.clone() };
 
                 Ok(
                     MyNode::handle_membership_anti_entropy(membership_context, sender, gen)

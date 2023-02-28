@@ -179,7 +179,7 @@ impl ProcessAndInspectCmds {
                     | Cmd::SendDataResponse { .. }
                     | Cmd::SendAndForwardResponseToClient { .. }
             ) {
-                let new_cmds = MyNode::process_cmd(cmd, node, None).await?;
+                let new_cmds = MyNode::process_cmd(cmd, node).await?;
                 self.pending_cmds.extend(new_cmds);
 
                 if next_index < self.pending_cmds.len() {
@@ -224,23 +224,17 @@ pub(crate) fn get_client_msg_parts_for_handling(
 /// Bundles the `MyNode` along with the `TestMsgTracker` to easily track the
 /// NodeMsgs during tests
 pub(crate) struct TestNode {
-    pub(crate) node: Arc<MyNode>,
+    pub(crate) node: MyNode,
     pub(crate) msg_tracker: Arc<RwLock<TestMsgTracker>>,
 }
 
 impl TestNode {
     pub(crate) fn new(node: MyNode, msg_tracker: Arc<RwLock<TestMsgTracker>>) -> Self {
-        Self {
-            node: Arc::new(node),
-            msg_tracker,
-        }
+        Self { node, msg_tracker }
     }
 
-    pub(crate) fn node(&self) -> Arc<MyNode> {
-        self.node.clone()
-    }
     /// Tracks the cmds before executing them
-    pub(crate) async fn process_cmd(&self, cmd: Cmd) -> Result<Vec<Cmd>> {
+    pub(crate) async fn process_cmd(&mut self, cmd: Cmd) -> Result<Vec<Cmd>> {
         self.msg_tracker.write().await.track(&cmd);
         MyNode::process_cmd(cmd, &mut self.node)
             .await
@@ -250,10 +244,9 @@ impl TestNode {
     /// Handle and keep track of Msg from Peers
     /// Contains optional relocation_old_name to deal with name change during relocation
     pub(crate) async fn test_handle_msg_from_peer(
-        &self,
+        &mut self,
         msg: MsgFromPeer,
         relocation_old_name: Option<XorName>,
-        node: &mut MyNode,
     ) -> Vec<Cmd> {
         let msg_id = msg.wire_msg.msg_id();
 
@@ -262,7 +255,7 @@ impl TestNode {
         if let Some(old_name) = relocation_old_name {
             untracked = untracked || self.msg_tracker.write().await.untrack(msg_id, &old_name);
         }
-        let our_name = node.name();
+        let our_name = self.node.name();
         untracked = untracked || self.msg_tracker.write().await.untrack(msg_id, &our_name);
         assert!(untracked);
 
@@ -271,9 +264,19 @@ impl TestNode {
             wire_msg: msg.wire_msg,
             send_stream: msg.send_stream,
         };
-        MyNode::process_cmd(handle_node_msg_cmd, node)
+
+        let msg_cmds = self
+            .process_cmd(handle_node_msg_cmd)
             .await
-            .expect("Error while handling node msg")
+            .expect("Error while handling node msg");
+        let mut cmds = Vec::new();
+        for cmd in msg_cmds {
+            match self.process_cmd(cmd).await {
+                Ok(new_cmds) => cmds.extend(new_cmds),
+                Err(err) => error!("Error while handling node_msgs {err:?}"),
+            }
+        }
+        cmds
     }
 }
 
@@ -310,6 +313,11 @@ impl TestMsgTracker {
             let _ = self
                 .tracker
                 .insert(*msg_id, BTreeSet::from([recipient.name()]));
+        } else if let Cmd::UpdateCallerOnStream { caller, msg_id, .. } = cmd {
+            info!("Tracking {msg_id:?} for {caller:?}, cmd {cmd}");
+            let _ = self
+                .tracker
+                .insert(*msg_id, BTreeSet::from([caller.name()]));
         }
     }
 
