@@ -492,17 +492,20 @@ mod tests {
             .get_section_member(&relocation_node_name)
             .expect("relocation node should be present");
 
-        let elders = dispatcher
-            .node()
+        let elders = node
             .read()
             .await
+            .node
             .network_knowledge()
             .section_auth()
             .elders_vec();
         let relocation_dst = RelocationDst::new(dst_prefix.name());
         let relocation_node_state = relocation_node_state.relocate(relocation_dst);
-        let mut relocation_send_msg =
-            node.send_node_off_proposal(elders, relocation_node_state.clone())?;
+        let mut relocation_send_msg = node
+            .write()
+            .await
+            .node
+            .send_node_off_proposal(elders, relocation_node_state.clone())?;
         assert_eq!(relocation_send_msg.len(), 1);
         let relocation_send_msg = relocation_send_msg.remove(0);
         assert!(node

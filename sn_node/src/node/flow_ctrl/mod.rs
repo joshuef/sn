@@ -197,7 +197,7 @@ impl FlowCtrl {
         // let mut latest_context = node.context();
         let mut is_member = false;
         let cmd_channel = self.cmd_sender_channel.clone();
-        let mut last_join_attempt = Instant::now() - (join_retry_timeout * 2);
+        let mut last_join_attempt = Instant::now().checked_sub(join_retry_timeout * 2)?;
         loop {
             // first do any pending processing
             while let Ok((cmd, cmd_id)) = incoming_cmds_from_apis.try_recv() {
