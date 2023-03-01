@@ -93,7 +93,7 @@ impl NodeState {
         }
     }
 
-    pub fn validate(
+    pub fn validate_node_state(
         &self,
         prefix: &Prefix,
         members: &BTreeMap<XorName, Self>,
@@ -111,16 +111,20 @@ impl NodeState {
             MembershipState::Joined => {
                 if members.contains_key(&name) {
                     warn!("Rejecting join from existing member {name}");
-                    Err(Error::ExistingMemberConflict)
+                    //  TODO: AE
+                    Err(Error::ExistingMemberNameConflict)
                 } else if !section_has_room_for_node(name, prefix, members.keys().copied()) {
                     warn!("Rejecting join since we are at capacity");
                     Err(Error::TryJoinLater)
-                } else if let Some(existing_node) = members
-                    .values()
-                    .find(|n| n.peer().addr() == self.peer().addr())
-                {
+                } else if let Some(existing_node) = members.values().find(|n| {
+                    // same socket, but also still in the Joined state, we reject it
+                    n.peer().addr() == self.peer().addr()
+                        && matches!(n.state, MembershipState::Joined)
+                }) {
+                    //  TODO: AE if we're seeing this with relocated?
+
                     warn!("Rejecting join since we have an existing node with this address: {existing_node:?}");
-                    Err(Error::ExistingMemberConflict)
+                    Err(Error::ExistingMemberSocketAddrConflict)
                 } else if archived.contains(&name) {
                     Err(Error::ArchivedNodeRejoined)
                 } else {

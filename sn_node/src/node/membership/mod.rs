@@ -444,8 +444,9 @@ impl Membership {
         let archived_members = self.archived_members();
 
         for proposal in signed_vote.proposals() {
-            if let Err(err) = proposal.validate(prefix, &members, &archived_members) {
+            if let Err(err) = proposal.validate_node_state(prefix, &members, &archived_members) {
                 warn!("Failed to validate {proposal:?} with error {:?}", err);
+                // TODO: certain errors need AE?
                 warn!(
                     "Members at generation {} are: {:?}",
                     signed_vote.vote.gen - 1,

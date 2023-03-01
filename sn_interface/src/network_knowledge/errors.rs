@@ -57,9 +57,13 @@ pub enum Error {
     #[error("No matching Section")]
     NoMatchingSection,
     #[error(
-        "A JoinResponse was received after we've already joined the network. It has been ignored."
+        "A JoinResponse was received after we've already had a node on this socket join the the network. It has been ignored."
     )]
-    ExistingMemberConflict,
+    ExistingMemberSocketAddrConflict,
+    #[error(
+        "A JoinResponse was received after we've a node with this name has joined the network. It has been ignored."
+    )]
+    ExistingMemberNameConflict,
     #[error("The node in question is not a member of the section")]
     NotAMember,
     #[error("Request does not match the section prefix")]
