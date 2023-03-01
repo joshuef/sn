@@ -193,11 +193,13 @@ impl FlowCtrl {
         incoming_cmds_from_apis: &mut Receiver<(Cmd, Vec<usize>)>,
         rejoin_network_tx: &Sender<RejoinReason>,
     ) -> MyNode {
-        // starting context
-        // let mut latest_context = node.context();
         let mut is_member = false;
         let cmd_channel = self.cmd_sender_channel.clone();
-        let mut last_join_attempt = Instant::now().checked_sub(join_retry_timeout * 2)?;
+
+        // Fire cmd to join the network
+        let mut last_join_attempt = Instant::now();
+        self.send_join_network_cmd();
+
         loop {
             // first do any pending processing
             while let Ok((cmd, cmd_id)) = incoming_cmds_from_apis.try_recv() {
@@ -215,7 +217,6 @@ impl FlowCtrl {
 
             if is_member {
                 debug!("we joined; breaking join loop!!!");
-
                 break;
             }
 
@@ -223,24 +224,8 @@ impl FlowCtrl {
             // this must come _after_ clearing the cmd channel
             if last_join_attempt.elapsed() > join_retry_timeout {
                 last_join_attempt = Instant::now();
-
                 debug!("we're not joined so firing off cmd");
-
-                let cmd_channel_clone = cmd_channel.clone();
-                let _handle = tokio::spawn(async move {
-                    // send the join message...
-                    if let Err(error) = cmd_channel_clone
-                        .send((Cmd::TryJoinNetwork, vec![]))
-                        .await
-                        .map_err(|e| {
-                            error!("Failed join: {:?}", e);
-                            Error::JoinTimeout
-                        })
-                    {
-                        error!("Could not join the network: {error:?}");
-                    }
-                });
-                debug!("we'rennot joined cmd is away");
+                self.send_join_network_cmd();
             }
 
             // cheeck if we are a member
@@ -252,7 +237,25 @@ impl FlowCtrl {
         }
 
         node
-        // error!("Processing loop dead");
+    }
+
+    // Helper to send the TryJoinNetwork cmd
+    fn send_join_network_cmd(&self) {
+        let cmd_channel_clone = self.cmd_sender_channel.clone();
+        let _handle = tokio::spawn(async move {
+            // send the join message...
+            if let Err(error) = cmd_channel_clone
+                .send((Cmd::TryJoinNetwork, vec![]))
+                .await
+                .map_err(|e| {
+                    error!("Failed join: {:?}", e);
+                    Error::JoinTimeout
+                })
+            {
+                error!("Could not join the network: {error:?}");
+            }
+        });
+        debug!("Sent TryJoinNetwork command");
     }
 
     /// This is a never ending loop as long as the node is live.
