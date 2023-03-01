@@ -236,9 +236,10 @@ impl TestNode {
     /// Tracks the cmds before executing them
     pub(crate) async fn process_cmd(&mut self, cmd: Cmd) -> Result<Vec<Cmd>> {
         self.msg_tracker.write().await.track(&cmd);
+        let cmd_string = cmd.to_string();
         MyNode::process_cmd(cmd, &mut self.node)
             .await
-            .wrap_err("Failed to process {cmd}")
+            .wrap_err(format!("Failed to process {cmd_string}"))
     }
 
     /// Handle and keep track of Msg from Peers

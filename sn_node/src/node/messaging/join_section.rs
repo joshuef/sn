@@ -512,8 +512,12 @@ mod tests {
                 while let Some(msg) = get_next_msg(comm_rx).await {
                     let mut cmds = node.test_handle_msg_from_peer(msg, None).await;
                     while !cmds.is_empty() {
-                        let new_cmds = node.process_cmd(cmds.remove(0)).await?;
-                        cmds.extend(new_cmds);
+                        match node.process_cmd(cmds.remove(0)).await {
+                            Ok(new_cmds) => cmds.extend(new_cmds),
+                            Err(err) => {
+                                warn!("Error while processing cmd inside join_loop {err:?}")
+                            }
+                        }
                     }
                 }
             }
