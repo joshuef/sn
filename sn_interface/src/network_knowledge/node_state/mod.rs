@@ -96,7 +96,7 @@ impl NodeState {
     pub fn validate_node_state(
         &self,
         prefix: &Prefix,
-        members: &BTreeMap<XorName, Self>,
+        current_joined_members: &BTreeMap<XorName, Self>,
         archived: &BTreeSet<XorName>,
     ) -> Result<()> {
         let name = self.name();
@@ -109,20 +109,21 @@ impl NodeState {
 
         match self.state {
             MembershipState::Joined => {
-                if members.contains_key(&name) {
+                if current_joined_members.contains_key(&name) {
                     warn!("Rejecting join from existing member {name}");
                     //  TODO: AE
                     Err(Error::ExistingMemberNameConflict)
-                } else if !section_has_room_for_node(name, prefix, members.keys().copied()) {
+                } else if !section_has_room_for_node(
+                    name,
+                    prefix,
+                    current_joined_members.keys().copied(),
+                ) {
                     warn!("Rejecting join since we are at capacity");
                     Err(Error::TryJoinLater)
-                } else if let Some(existing_node) = members.values().find(|n| {
-                    // same socket, but also still in the Joined state, we reject it
-                    n.peer().addr() == self.peer().addr()
-                        && matches!(n.state, MembershipState::Joined)
-                }) {
-                    //  TODO: AE if we're seeing this with relocated?
-
+                } else if let Some(existing_node) = current_joined_members
+                    .values()
+                    .find(|n| n.peer().addr() == self.peer().addr())
+                {
                     warn!("Rejecting join since we have an existing node with this address: {existing_node:?}");
                     Err(Error::ExistingMemberSocketAddrConflict)
                 } else if archived.contains(&name) {
@@ -136,7 +137,7 @@ impl NodeState {
                 Ok(())
             }
             MembershipState::Left => {
-                if !members.contains_key(&name) {
+                if !current_joined_members.contains_key(&name) {
                     warn!("Rejecting leave from non-existing member");
                     Err(Error::NotAMember)
                 } else {

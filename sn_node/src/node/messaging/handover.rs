@@ -308,9 +308,10 @@ impl MyNode {
         Ok(())
     }
 
+    /// get joined members at gen
     fn get_members_at_gen(&self, gen: Generation) -> Result<BTreeMap<XorName, NodeState>> {
         if let Some(m) = self.membership.as_ref() {
-            Ok(m.section_members(gen)?)
+            Ok(m.joined_section_members_at_gen(gen)?)
         } else {
             error!("Missing membership instance when checking handover SAP candidates");
             Err(Error::MissingMembershipInstance)

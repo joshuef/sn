@@ -17,7 +17,7 @@ use sn_interface::{
         SectionAuthorityProvider,
     },
 };
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 use thiserror::Error;
 use xor_name::{Prefix, XorName};
@@ -213,7 +213,8 @@ impl Membership {
     }
 
     pub(crate) fn current_section_members(&self) -> BTreeMap<XorName, NodeState> {
-        self.section_members(self.gen).unwrap_or_default()
+        self.joined_section_members_at_gen(self.gen)
+            .unwrap_or_default()
     }
 
     pub(crate) fn archived_members(&self) -> BTreeSet<XorName> {
@@ -245,7 +246,11 @@ impl Membership {
         members
     }
 
-    pub(crate) fn section_members(&self, gen: Generation) -> Result<BTreeMap<XorName, NodeState>> {
+    /// get only section members reporting Joined at gen
+    pub(crate) fn joined_section_members_at_gen(
+        &self,
+        gen: Generation,
+    ) -> Result<BTreeMap<XorName, NodeState>> {
         let mut members = BTreeMap::from_iter(
             self.bootstrap_members
                 .iter()
@@ -268,11 +273,7 @@ impl Membership {
                         let _ = members.remove(&node_state.name());
                     }
                     MembershipState::Relocated(_) => {
-                        if let Entry::Vacant(e) = members.entry(node_state.name()) {
-                            let _ = e.insert(node_state.clone());
-                        } else {
-                            let _ = members.remove(&node_state.name());
-                        }
+                        let _ = members.remove(&node_state.name());
                     }
                 }
             }
@@ -438,8 +439,10 @@ impl Membership {
             .consensus_at_gen(signed_vote.vote.gen)
             .map_err(|_| Error::RequestAntiEntropy)?;
 
-        let members =
-            BTreeMap::from_iter(self.section_members(signed_vote.vote.gen - 1)?.into_iter());
+        let members = BTreeMap::from_iter(
+            self.joined_section_members_at_gen(signed_vote.vote.gen - 1)?
+                .into_iter(),
+        );
 
         let archived_members = self.archived_members();
 

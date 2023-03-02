@@ -354,7 +354,7 @@ mod core {
 
             // get members for membership gen
             let members: BTreeMap<XorName, NodeState> = if let Some(m) = self.membership.as_ref() {
-                m.section_members(membership_gen)
+                m.joined_section_members_at_gen(membership_gen)
                     .unwrap_or_default()
                     .iter()
                     .map(|(n, s)| (*n, s.clone()))
