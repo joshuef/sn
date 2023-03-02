@@ -162,7 +162,7 @@ impl MyNode {
             }
             NodeMsg::PrepareToRelocate(relocation_trigger) => {
                 trace!("Handling PrepareToRelocate msg from {sender}: {msg_id:?}");
-                Ok(node.prepare_to_relocate(relocation_trigger))
+                Ok(node.prepare_to_relocate(relocation_trigger, context.name))
             }
             NodeMsg::ProceedRelocation(dst) => {
                 trace!("Handling ProceedRelocation msg from {sender}: {msg_id:?}");
@@ -187,6 +187,8 @@ impl MyNode {
                         RejoinReason::from_reject_reason(reason),
                     )),
                     JoinResponse::Approved(decision) => {
+
+
                         info!("{}", LogMarker::ReceivedJoinApproval);
                         let target_sap = context.network_knowledge.signed_sap();
 

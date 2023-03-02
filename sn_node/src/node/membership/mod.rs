@@ -394,7 +394,7 @@ impl Membership {
                     "Membership - updated generation from {:?} to {:?}",
                     self.gen, vote_gen
                 );
-                info!("Membership - history is {:?}", self.history);
+                trace!("Membership - history is {:?}", self.history);
                 self.gen = vote_gen;
 
                 Some(decision)

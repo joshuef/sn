@@ -75,7 +75,6 @@ pub(crate) struct FlowCtrl {
     cmd_sender_channel: Sender<(Cmd, Vec<usize>)>,
     fault_channels: FaultChannels,
     timestamps: PeriodicChecksTimestamps,
-    started_relocating: Option<XorName>,
 }
 
 impl FlowCtrl {
@@ -119,7 +118,6 @@ impl FlowCtrl {
             cmd_sender_channel: cmd_sender_channel.clone(),
             fault_channels,
             timestamps: PeriodicChecksTimestamps::now(),
-            started_relocating: None,
         };
 
         // first start listening for msgs
@@ -309,7 +307,17 @@ impl FlowCtrl {
     ) {
         let _handle = tokio::task::spawn(async move {
             while let Some(event) = incoming_msg_events.recv().await {
-                debug!("CommEvent received: {event:?}");
+                let capacity = cmd_channel_for_msgs.capacity();
+
+                if capacity < 30 {
+                    warn!("CmdChannel capcity severely reduced");
+                }
+                if capacity == 0 {
+                    error!("CmdChannel capacity exceeded. We cannot receive messages right now!");
+                }
+
+                debug!("CmdEvent received: {event:?}. Current Cmd capacity: {:?}", capacity);
+
                 let cmd = match event {
                     CommEvent::Error { peer, error } => Cmd::HandleCommsError { peer, error },
                     CommEvent::Msg(MsgFromPeer {

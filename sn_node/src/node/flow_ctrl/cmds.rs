@@ -291,11 +291,11 @@ impl fmt::Display for Cmd {
             Cmd::HandleMsg { wire_msg, .. } => {
                 write!(f, "HandleMsg {:?}", wire_msg.msg_id())
             }
-            Cmd::ProcessNodeMsg { msg_id, .. } => {
-                write!(f, "ProcessNodeMsg {msg_id:?}")
+            Cmd::ProcessNodeMsg { msg_id, msg, .. } => {
+                write!(f, "ProcessNodeMsg {msg_id:?}: {msg}")
             }
-            Cmd::ProcessClientMsg { msg_id, .. } => {
-                write!(f, "ProcessClientMsg {msg_id:?}")
+            Cmd::ProcessClientMsg { msg_id, msg, .. } => {
+                write!(f, "ProcessClientMsg {msg_id:?}: {msg}")
             }
             Cmd::ProcessAeMsg { msg_id, .. } => {
                 write!(f, "ProcessAeMsg {msg_id:?}")

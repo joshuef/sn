@@ -11,6 +11,7 @@ use std::fmt::{self, Formatter};
 use super::NodeState;
 use crate::messaging::system::SectionSigned;
 use crate::network_knowledge::{Error, Result};
+use crate::types::utils::calc_age;
 
 use ed25519_dalek::{PublicKey, Signature, Verifier};
 use hex_fmt::HexFmt;
@@ -106,11 +107,19 @@ impl RelocationProof {
         }
     }
 
+    /// New name of the relocating node.
+    pub fn new_name(&self) -> XorName {
+        self.info.new_name
+    }
+    /// New age of the relocating node.
+    pub fn new_age(&self) -> u8 {
+        calc_age(&self.new_name())
+    }
+
     /// Previous name of the relocating node.
     pub fn previous_name(&self) -> XorName {
         self.info.signed_relocation.name()
     }
-
     /// Previous age of the relocating node.
     pub fn previous_age(&self) -> u8 {
         self.info.signed_relocation.age()

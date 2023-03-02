@@ -126,14 +126,6 @@ impl FlowCtrl {
                     dst
                 );
 
-                if self.started_relocating.is_none() {
-                    self.started_relocating = Some(context.name);
-                    debug!(
-                        "Started trying to relocate our node {:?}",
-                        self.started_relocating
-                    );
-                }
-
                 self.timestamps.request_to_relocate_check = Instant::now();
                 cmds.push(MyNode::send_to_elders(
                     context,
@@ -144,9 +136,11 @@ impl FlowCtrl {
 
         // check if we can join the dst section
         if let Some(RelocationState::ReadyToJoinNewSection(proof)) = &context.relocation_state {
+            let prev_name = proof.previous_name();
+            let new_name = proof.new_name();
             if self.timestamps.join_as_relocated_check.elapsed() > JOIN_AS_RELOCATED_TIMEOUT_SEC {
                 self.timestamps.join_as_relocated_check = Instant::now();
-                if !context.network_knowledge.is_section_member(&context.name) {
+                if !context.network_knowledge.is_section_member(&new_name) {
                     info!(
                         "Periodic check: sending request to join the section as a relocated node"
                     );
@@ -156,9 +150,12 @@ impl FlowCtrl {
                     ));
                 } else {
                     info!(
-                        "{} for node: {:?}: Age is: {:?}",
+                        "{} for previous node: {:?} of age: {:?}: The new name is: {:?}, and new age is: {:?} (and pass in context age: {:?})",
                         LogMarker::RelocateEnd,
-                        context.name,
+                        prev_name,
+                        proof.previous_age(),
+                        new_name,
+                        proof.new_age(),
                         context.info.age()
                     );
                     info!("We've joined a section, dropping the relocation proof.");
@@ -166,6 +163,7 @@ impl FlowCtrl {
                 }
             }
         }
+
         cmds
     }
 

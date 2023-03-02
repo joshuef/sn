@@ -247,7 +247,7 @@ impl MyNode {
         };
 
         let elapsed = start.elapsed();
-        trace!("Cmd {cmd_string:?} took {:?}", elapsed);
+        trace!("Cmd took {elapsed:?} {cmd_string:?} ");
 
         result
     }
