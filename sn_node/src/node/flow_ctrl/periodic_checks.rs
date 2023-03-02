@@ -110,7 +110,7 @@ impl FlowCtrl {
         // track faults for missing AE, and theerefore hopefully keep members updated...
         if self.timestamps.last_elder_health_check.elapsed() > ELDER_PROBE_INTERVAL {
             self.timestamps.last_elder_health_check = Instant::now();
-            for cmd in Self::ae_probe_to_elders_in_section(context).await {
+            for cmd in Self::ae_probe_to_elders_in_section(context) {
                 cmds.push(cmd);
             }
         }
@@ -293,7 +293,7 @@ impl FlowCtrl {
     /// Generates a probe msg, which goes to all section elders in order to
     /// passively maintain network knowledge over time and track faults.
     /// Tracking faults while awaiting a response.
-    async fn ae_probe_to_elders_in_section(context: &NodeContext) -> Vec<Cmd> {
+    fn ae_probe_to_elders_in_section(context: &NodeContext) -> Vec<Cmd> {
         let mut cmds = vec![];
 
         // Send a probe message to an elder
