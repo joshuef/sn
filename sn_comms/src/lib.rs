@@ -257,7 +257,7 @@ fn process_cmds(
     let _handle = task::spawn(async move {
         let mut sessions = BTreeMap::<Peer, PeerSession>::new();
         while let Some(cmd) = cmd_receiver.recv().await {
-            trace!("Comms cmd handling: {cmd:?}");
+            trace!("Comms cmd handling: {cmd:?}. Current sessions count: {:?}", sessions.len());
             match cmd {
                 // This is the only place that mutates `sessions`.
                 CommCmd::SetTargets(targets) => {
