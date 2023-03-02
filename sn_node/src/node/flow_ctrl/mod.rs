@@ -309,7 +309,7 @@ impl FlowCtrl {
     ) {
         let _handle = tokio::task::spawn(async move {
             while let Some(event) = incoming_msg_events.recv().await {
-                debug!("CommEvent received: {event:?}");
+                debug!("CmdEvent received: {event:?}. Current Cmd capacity: {:?}", cmd_channel_for_msgs.capacity());
                 let cmd = match event {
                     CommEvent::Error { peer, error } => Cmd::HandleCommsError { peer, error },
                     CommEvent::Msg(MsgFromPeer {
