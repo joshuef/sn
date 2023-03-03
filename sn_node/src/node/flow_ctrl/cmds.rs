@@ -283,6 +283,23 @@ impl Cmd {
             Cmd::TryJoinNetwork => State::Join,
         }
     }
+
+     /// Should this Cmd be punted off thread (is it long running or likely frequent)
+     pub(crate) fn should_go_off_thread(&self) -> bool {
+        match self {
+            Cmd::HandleMsg { .. }
+            | Cmd::TrackNodeIssue { .. }
+            | Cmd::ProcessClientMsg { .. }
+            | Cmd::SendAndForwardResponseToClient { .. }
+            | Cmd::SendDataResponse { .. }
+            | Cmd::SendMsg { .. }
+            | Cmd::HandleCommsError { .. }
+            | Cmd::EnqueueDataForReplication { .. }
+            | Cmd::SendMsgEnqueueAnyResponse { .. }
+            | Cmd::SendNodeMsgResponse { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for Cmd {
