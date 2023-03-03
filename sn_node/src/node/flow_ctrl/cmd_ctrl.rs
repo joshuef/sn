@@ -8,7 +8,7 @@
 
 use crate::node::{
     flow_ctrl::{cmds::Cmd, RejoinReason},
-    Error, MyNode,
+    Error, MyNode, STANDARD_CHANNEL_SIZE
 };
 
 use std::sync::{
@@ -21,19 +21,23 @@ use tokio::sync::mpsc;
 /// collecting resulting cmds from it, and sending it back to the calling context,
 /// all the while logging the correlation between incoming and resulting cmds.
 pub(crate) struct CmdCtrl {
-    pub(crate) dispatcher: Arc<Dispatcher>,
     id_counter: Arc<AtomicUsize>,
+    data_replication_sender: Sender<(Vec<DataAddress>, Peer)>,
 }
 
 impl CmdCtrl {
-    pub(crate) fn new(dispatcher: Dispatcher) -> Self {
+    pub(crate) fn new() -> (Self, Receiver<(Vec<DataAddress>, Peer)>) {
         #[cfg(feature = "statemap")]
         sn_interface::statemap::log_metadata();
+        let (data_replication_sender, data_replication_receiver) = channel(STANDARD_CHANNEL_SIZE);
 
-        Self {
-            dispatcher: Arc::new(dispatcher),
-            id_counter: Arc::new(AtomicUsize::new(0)),
-        }
+        (
+            Self {
+                id_counter: Arc::new(AtomicUsize::new(0)),
+                data_replication_sender,
+            },
+            data_replication_receiver,
+        )
     }
 
     /// Processes the passed in cmd on a new task
@@ -51,15 +55,13 @@ impl CmdCtrl {
             id.push(self.id_counter.fetch_add(1, Ordering::SeqCst));
         }
 
-        let dispatcher = self.dispatcher.clone();
-
         trace!("Processing for {cmd:?}, id: {id:?}");
 
         #[cfg(feature = "statemap")]
         sn_interface::statemap::log_state(node_identifier.to_string(), cmd.statemap_state());
 
         if cmd.should_go_off_thread() {
-            dispatcher.process_cmd_off_thread(
+            MyNode::process_cmd_off_thread(
                 cmd,
                 node.context(),
                 id,
@@ -70,7 +72,7 @@ impl CmdCtrl {
             return;
         }
 
-        match dispatcher.process_cmd(cmd, node).await {
+        match MyNode::process_cmd(cmd, node).await {
             Ok(cmds) => {
                 let _handle = tokio::task::spawn(async move {
                     for (child_nr, cmd) in cmds.into_iter().enumerate() {
