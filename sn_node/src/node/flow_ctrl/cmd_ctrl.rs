@@ -8,14 +8,15 @@
 
 use crate::node::{
     flow_ctrl::{cmds::Cmd, RejoinReason},
-    Error, MyNode, STANDARD_CHANNEL_SIZE
+    Error, MyNode, STANDARD_CHANNEL_SIZE,
 };
 
+use sn_interface::types::{DataAddress, Peer};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 /// Takes care of spawning a new task for the processing of a cmd,
 /// collecting resulting cmds from it, and sending it back to the calling context,
@@ -46,8 +47,8 @@ impl CmdCtrl {
         node: &mut MyNode,
         cmd: Cmd,
         mut id: Vec<usize>,
-        cmd_process_api: mpsc::Sender<(Cmd, Vec<usize>)>,
-        rejoin_network_sender: mpsc::Sender<RejoinReason>,
+        cmd_process_api: Sender<(Cmd, Vec<usize>)>,
+        rejoin_network_sender: Sender<RejoinReason>,
     ) {
         let node_identifier = node.info().name();
 
@@ -67,6 +68,7 @@ impl CmdCtrl {
                 id,
                 cmd_process_api,
                 rejoin_network_sender,
+                // self.data_replication_sender.clone()
             );
             // early return
             return;

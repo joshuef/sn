@@ -179,7 +179,7 @@ impl MyNode {
                 if context.network_knowledge.is_section_member(&context.name) {
                     // we can ignore this reponse msg
                     trace!("Join response received when we're already a member. Ignoring.");
-                    return Ok(vec![])
+                    return Ok(vec![]);
                 }
 
                 match join_response {
@@ -187,8 +187,6 @@ impl MyNode {
                         RejoinReason::from_reject_reason(reason),
                     )),
                     JoinResponse::Approved(decision) => {
-
-
                         info!("{}", LogMarker::ReceivedJoinApproval);
                         let target_sap = context.network_knowledge.signed_sap();
 

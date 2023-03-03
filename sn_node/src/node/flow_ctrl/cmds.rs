@@ -284,8 +284,8 @@ impl Cmd {
         }
     }
 
-     /// Should this Cmd be punted off thread (is it long running or likely frequent)
-     pub(crate) fn should_go_off_thread(&self) -> bool {
+    /// Should this Cmd be punted off thread (is it long running or likely frequent)
+    pub(crate) fn should_go_off_thread(&self) -> bool {
         match self {
             Cmd::HandleMsg { .. }
             | Cmd::TrackNodeIssue { .. }

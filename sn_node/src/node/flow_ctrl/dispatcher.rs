@@ -6,26 +6,27 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{messaging::Peers, Cmd, Error, MyNode, Result};
+use crate::node::{
+    core::NodeContext, flow_ctrl::RejoinReason, messaging::Peers, Cmd, Error, MyNode, Result,
+};
 
 use sn_interface::{
     messaging::{AntiEntropyMsg, NetworkMsg},
     network_knowledge::SectionTreeUpdate,
 };
-
 use std::time::Instant;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 impl MyNode {
     /// Handles a single cmd.
     pub(crate) fn process_cmd_off_thread(
-        &self,
         cmd: Cmd,
         context: NodeContext,
         id: Vec<usize>,
         cmd_process_api: Sender<(Cmd, Vec<usize>)>,
         rejoin_network_sender: Sender<RejoinReason>,
     ) {
-        let data_replication_sender = self.data_replication_sender.clone();
+        // let data_replication_sender = self.data_replication_sender.clone();
         let _handle = tokio::spawn(async move {
             trace!("Moving Cmd onto a new thread: {cmd:?}");
             let start = Instant::now();

@@ -316,7 +316,10 @@ impl FlowCtrl {
                     error!("CmdChannel capacity exceeded. We cannot receive messages right now!");
                 }
 
-                debug!("CmdEvent received: {event:?}. Current Cmd capacity: {:?}", capacity);
+                debug!(
+                    "CmdEvent received: {event:?}. Current Cmd capacity: {:?}",
+                    capacity
+                );
 
                 let cmd = match event {
                     CommEvent::Error { peer, error } => Cmd::HandleCommsError { peer, error },
