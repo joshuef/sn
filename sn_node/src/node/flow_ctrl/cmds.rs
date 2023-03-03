@@ -289,14 +289,15 @@ impl Cmd {
         match self {
             Cmd::HandleMsg { .. }
             | Cmd::TrackNodeIssue { .. }
-            | Cmd::ProcessClientMsg { .. }
-            | Cmd::SendAndForwardResponseToClient { .. }
-            | Cmd::SendDataResponse { .. }
-            | Cmd::SendMsg { .. }
+            // | Cmd::ProcessClientMsg { .. }
+            // | Cmd::SendAndForwardResponseToClient { .. }
+            // | Cmd::SendDataResponse { .. }
+            // | Cmd::SendMsg { .. }
             | Cmd::HandleCommsError { .. }
             | Cmd::EnqueueDataForReplication { .. }
-            | Cmd::SendMsgEnqueueAnyResponse { .. }
-            | Cmd::SendNodeMsgResponse { .. } => true,
+            // | Cmd::SendMsgEnqueueAnyResponse { .. }
+            // | Cmd::SendNodeMsgResponse { .. }
+            => true,
             _ => false,
         }
     }
