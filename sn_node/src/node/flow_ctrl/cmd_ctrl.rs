@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::node::{
-    flow_ctrl::{cmds::Cmd, dispatcher::Dispatcher, RejoinReason},
+    flow_ctrl::{cmds::Cmd, RejoinReason},
     Error, MyNode,
 };
 
