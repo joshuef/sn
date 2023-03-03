@@ -365,11 +365,11 @@ impl MyNode {
                 MyNode::handle_anti_entropy_msg(node, context, section_tree_update, kind, origin)
                     .await
             }
-            Cmd::HandleMsg {
-                origin,
-                wire_msg,
-                send_stream,
-            } => MyNode::handle_msg(node, origin, wire_msg, send_stream).await,
+            // Cmd::HandleMsg {
+            //     origin,
+            //     wire_msg,
+            //     send_stream,
+            // } => MyNode::handle_msg(node, origin, wire_msg, send_stream).await,
             Cmd::UpdateNetworkAndHandleValidClientMsg {
                 proof_chain,
                 signed_sap,
@@ -413,11 +413,11 @@ impl MyNode {
                 node.handle_new_sections_agreement(sap1, sig1, sap2, sig2)
                     .await
             }
-            Cmd::HandleCommsError { peer, error } => {
-                trace!("Comms error {error}");
-                node.handle_comms_error(peer, error);
-                Ok(vec![])
-            }
+            // Cmd::HandleCommsError { peer, error } => {
+            //     trace!("Comms error {error}");
+            //     node.handle_comms_error(peer, error);
+            //     Ok(vec![])
+            // }
             Cmd::HandleDkgOutcome {
                 section_auth,
                 outcome,
@@ -444,6 +444,10 @@ impl MyNode {
             Cmd::SetJoinsAllowedUntilSplit(joins_allowed_until_split) => {
                 node.joins_allowed = joins_allowed_until_split;
                 node.joins_allowed_until_split = joins_allowed_until_split;
+                Ok(vec![])
+            }
+            cmd => {
+                debug!("Cmd  should have been moved off thread...");
                 Ok(vec![])
             }
         };

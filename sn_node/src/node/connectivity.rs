@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{flow_ctrl::cmds::Cmd, MyNode, Result};
+use crate::node::{core::NodeContext, flow_ctrl::cmds::Cmd, MyNode, Result};
 
 use sn_fault_detection::IssueType;
 use sn_interface::types::Peer;
@@ -16,7 +16,7 @@ use xor_name::XorName;
 
 impl MyNode {
     /// Handle error in communication with peer.
-    pub(crate) fn handle_comms_error(&self, peer: Peer, error: sn_comms::Error) {
+    pub(crate) fn handle_comms_error(context: NodeContext, peer: Peer, error: sn_comms::Error) {
         use sn_comms::Error::*;
         match error {
             ConnectingToUnknownNode(msg_id) => {
@@ -39,8 +39,8 @@ impl MyNode {
             }
         }
         // Track comms issue if this is a peer we know and care about
-        if self.network_knowledge.is_section_member(&peer.name()) {
-            self.track_node_issue(peer.name(), IssueType::Communication);
+        if context.network_knowledge.is_section_member(&peer.name()) {
+            context.track_node_issue(peer.name(), IssueType::Communication);
         }
     }
 

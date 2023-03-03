@@ -23,7 +23,7 @@ mod signature;
 mod streams;
 mod update_section;
 
-use crate::node::{flow_ctrl::cmds::Cmd, Error, MyNode, Result};
+use crate::node::{core::NodeContext, flow_ctrl::cmds::Cmd, Error, MyNode, Result};
 
 use qp2p::SendStream;
 use sn_interface::{
@@ -64,9 +64,9 @@ impl IntoIterator for Peers {
 
 // Message handling
 impl MyNode {
-    #[instrument(skip(node, wire_msg, send_stream))]
+    #[instrument(skip(wire_msg, send_stream))]
     pub(crate) async fn handle_msg(
-        node: &MyNode,
+        context: NodeContext,
         origin: Peer,
         wire_msg: WireMsg,
         send_stream: Option<SendStream>,
@@ -75,9 +75,6 @@ impl MyNode {
         let msg_kind = wire_msg.kind();
 
         trace!("Handling msg {msg_id:?}. from {origin:?} Checking for AE first...");
-
-        let context = node.context();
-
         // alternatively we could flag in msg kind for this...
         // todo: this peer is actually client + forwarder ip....
 
