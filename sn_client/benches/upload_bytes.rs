@@ -169,6 +169,32 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
         });
     });
+
+    group.bench_with_input(
+        "concurrent upload and verify 10mb",
+        &(&seed, &client),
+        |b, (seed, client)| {
+            b.to_async(&runtime).iter(|| async {
+                let mut tasks = vec![];
+                // lets start with 10 clients
+                for _i in 0..10 {
+                    let client = client.clone();
+                    let put = async {
+                        let bytes = grows_vec_to_bytes(seed, 1024 * 1024 * 10);
+
+                        match client.upload_and_verify(bytes).await {
+                            Ok(_) => {}
+                            Err(error) => println!("10mb upload bench failed with {error:?}"),
+                        }
+                    };
+
+                    tasks.push(put);
+                }
+
+                let _res = futures::future::join_all(tasks).await;
+            });
+        },
+    );
     group.finish()
 }
 
