@@ -80,6 +80,8 @@ impl NodeLinks {
             }
         };
 
+        drop(links);
+
         if insert_new_link {
             // final double check
             let mut links = self.links.write().await;
