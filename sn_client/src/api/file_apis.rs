@@ -586,15 +586,15 @@ mod tests {
 
         let mut tasks = vec![];
 
+        let bytes = random_bytes(5 * 1024 * 1024);
         for client in clients {
             // create random file with random bytes for this client 5mb
-            let bytes = random_bytes(5 * 1024 * 1024);
-            let file = LargeFile::new(bytes)?;
+            // let file = LargeFile::new(bytes)?;
             debug!("======> Data uploaded");
-
+            let bytes = bytes.clone();
             let handle: Instrumented<tokio::task::JoinHandle<Result<()>>> =
                 tokio::spawn(async move {
-                    match client.upload_and_verify(file.bytes()).await {
+                    match client.upload_and_verify(bytes).await {
                         Ok(_data) => {
                             debug!("client #{:?} got the data", client.public_key());
                         }
