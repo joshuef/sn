@@ -20,7 +20,7 @@ use tokio::{
 };
 use tracing::{error, Level};
 
-pub(crate) const DEFAULT_MIN_CAPACITY: usize = 1024 * 1024 * 1024; // 1gb
+pub(crate) const DEFAULT_MIN_CAPACITY: usize = 50 * 1024 * 1024; // 50mb
 pub(crate) const DEFAULT_MAX_CAPACITY: usize = 2 * DEFAULT_MIN_CAPACITY;
 
 const CONFIG_FILE: &str = "node.config";
