@@ -135,6 +135,7 @@ impl FlowCtrl {
 
         // a clone for sending in updates to context
         let msg_handler_event_sender_clone = msg_handler_event_sender.clone();
+        let msg_handler_event_sender_clone_for_processing = msg_handler_event_sender.clone();
 
         // simple pipe through of CommEvents
         let _handle = tokio::spawn(async move {
@@ -170,6 +171,7 @@ impl FlowCtrl {
             cmd_ctrl,
             incoming_cmds_from_apis,
             rejoin_network_tx,
+            msg_handler_event_sender_clone_for_processing
         ));
 
         Self::send_out_data_for_replication(
@@ -264,6 +266,7 @@ impl FlowCtrl {
         cmd_ctrl: CmdCtrl,
         mut incoming_cmds_from_apis: Receiver<(Cmd, Vec<usize>)>,
         rejoin_network_tx: Sender<RejoinReason>,
+        msg_handler_event_sender : Sender<MsgHandlingEvent>
     ) {
         let cmd_channel = self.cmd_sender_channel.clone();
         // first do any pending processing
@@ -279,6 +282,10 @@ impl FlowCtrl {
                     rejoin_network_tx.clone(),
                 )
                 .await;
+
+                if let Err(e) = msg_handler_event_sender.send(MsgHandlingEvent::UpdateContext(node.context())).await {
+                    warn!("Errrrrrrrrrrrrrrrrrrr {e}");
+                };
 
             // also see if we need to do any of thissss
             self.perform_periodic_checks(&mut node).await;
