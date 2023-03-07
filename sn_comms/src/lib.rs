@@ -121,6 +121,7 @@ impl Comm {
     ) -> Result<(Self, Receiver<CommEvent>)> {
         let (our_endpoint, incoming_conns) = Endpoint::builder()
             .addr(local_addr)
+            .max_concurrent_bidi_streams(300)
             .idle_timeout(70_000)
             .server()?;
 

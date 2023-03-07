@@ -45,6 +45,7 @@ impl Session {
     pub(crate) fn new(local_addr: SocketAddr, network_contacts: SectionTree) -> Result<Self> {
         let endpoint = Endpoint::builder()
             .addr(local_addr)
+            .max_concurrent_bidi_streams(300)
             .idle_timeout(70_000)
             .client()?;
         let node_links = NodeLinks::new(endpoint.clone());
