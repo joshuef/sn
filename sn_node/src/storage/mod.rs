@@ -118,7 +118,8 @@ impl DataStorage {
     ) -> Result<StorageLevel> {
         debug!("Replicating {data:?}");
         match data {
-            ReplicatedData::Chunk(chunk) => self.chunks.store(chunk).await,
+            // TODO: remove clones
+            ReplicatedData::Chunk(chunk) => self.chunks.store(chunk.clone()).await,
             ReplicatedData::RegisterLog(data) => {
                 info!("Updating register: {:?}", data.address);
                 self.registers.update(data).await

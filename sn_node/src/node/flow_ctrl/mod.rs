@@ -417,9 +417,8 @@ impl FlowCtrl {
                                     )
                                     .await?;
 
-
                                     for cmd in results {
-                                         // this await prevents us pulling more msgs than the cmd handler can cope with...
+                                        // this await prevents us pulling more msgs than the cmd handler can cope with...
                                         // feeding back up the channels to qp2p and quinn where congestion control should
                                         // help prevent more messages incoming for the time being
                                         if let Err(error) = cmd_sender.send((cmd, vec![])).await {

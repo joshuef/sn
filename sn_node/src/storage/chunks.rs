@@ -8,6 +8,7 @@
 
 use super::{list_files_in, prefix_tree_path, used_space::StorageLevel, Error, Result, UsedSpace};
 
+use dashmap::DashMap;
 use sn_interface::{
     messaging::system::NodeQueryResponse,
     types::{log_markers::LogMarker, Chunk, ChunkAddress},
@@ -15,6 +16,7 @@ use sn_interface::{
 
 use bytes::Bytes;
 use hex::FromHex;
+use std::sync::Arc;
 use std::{
     fmt::{self, Display, Formatter},
     io::{self, ErrorKind},
@@ -34,6 +36,7 @@ const CHUNKS_STORE_DIR_NAME: &str = "chunks";
 pub(super) struct ChunkStorage {
     file_store_path: PathBuf,
     used_space: UsedSpace,
+    chunks: Arc<DashMap<ChunkAddress, Chunk>>,
 }
 
 impl ChunkStorage {
@@ -46,6 +49,7 @@ impl ChunkStorage {
         Self {
             file_store_path: path.join(CHUNKS_STORE_DIR_NAME),
             used_space,
+            chunks: Arc::new(DashMap::default()),
         }
     }
 
@@ -86,24 +90,32 @@ impl ChunkStorage {
     pub(super) async fn get_chunk(&self, address: &ChunkAddress) -> Result<Chunk> {
         trace!("Getting chunk {:?}", address);
 
-        let file_path = self.chunk_addr_to_filepath(address)?;
-        match read(file_path).await {
-            Ok(bytes) => {
-                let chunk = Chunk::new(Bytes::from(bytes));
-                if chunk.address() != address {
-                    // This can happen if the content read is empty, or incomplete,
-                    // possibly due to an issue with the OS synchronising to disk,
-                    // resulting in a mismatch with recreated address of the Chunk.
-                    Err(Error::ChunkNotFound(*address.name()))
-                } else {
-                    Ok(chunk)
-                }
-            }
-            Err(io_error @ io::Error { .. }) if io_error.kind() == ErrorKind::NotFound => {
-                Err(Error::ChunkNotFound(*address.name()))
-            }
-            Err(other) => Err(other.into()),
+        let chunk = self.chunks.get(address);
+
+        if let Some(chunk) = chunk {
+            Ok(chunk.value().clone())
         }
+        else {
+            Err(Error::ChunkNotFound(*address.name()))
+        }
+        // let file_path = self.chunk_addr_to_filepath(address)?;
+        // match read(file_path).await {
+        //     Ok(bytes) => {
+        //         let chunk = Chunk::new(Bytes::from(bytes));
+        //         if chunk.address() != address {
+        //             // This can happen if the content read is empty, or incomplete,
+        //             // possibly due to an issue with the OS synchronising to disk,
+        //             // resulting in a mismatch with recreated address of the Chunk.
+        //             Err(Error::ChunkNotFound(*address.name()))
+        //         } else {
+        //             Ok(chunk)
+        //         }
+        //     }
+        //     Err(io_error @ io::Error { .. }) if io_error.kind() == ErrorKind::NotFound => {
+        //         Err(Error::ChunkNotFound(*address.name()))
+        //     }
+        //     Err(other) => Err(other.into()),
+        // }
     }
 
     // Read chunk from local store and return NodeQueryResponse
@@ -117,18 +129,21 @@ impl ChunkStorage {
 
     /// Store a chunk in the local disk store unless it is already there
     #[instrument(skip_all)]
-    pub(super) async fn store(&self, chunk: &Chunk) -> Result<StorageLevel> {
-        let addr = chunk.address();
-        let filepath = self.chunk_addr_to_filepath(addr)?;
+    pub(super) async fn store(&self, chunk: Chunk) -> Result<StorageLevel> {
+        let addr = chunk.address().clone();
 
-        if filepath.exists() {
-            info!(
-                "{}: Chunk data already exists, not storing: {:?}",
-                self, addr
-            );
-            // Nothing more to do here
-            return Ok(StorageLevel::NoChange);
-        }
+        let space_needed = chunk.value().len();
+
+        // let filepath = self.chunk_addr_to_filepath(addr)?;
+
+        // if filepath.exists() {
+        //     info!(
+        //         "{}: Chunk data already exists, not storing: {:?}",
+        //         self, addr
+        //     );
+        //     // Nothing more to do here
+        //     return Ok(StorageLevel::NoChange);
+        // }
 
         // Cheap extra security check for space (prone to race conditions)
         // just so we don't go too much overboard
@@ -137,23 +152,27 @@ impl ChunkStorage {
             return Err(Error::NotEnoughSpace);
         }
 
-        // Store the data on disk
         trace!("{:?} {addr:?}", LogMarker::StoringChunk);
-        if let Some(dirs) = filepath.parent() {
-            create_dir_all(dirs).await?;
-        }
+        let existed = self.chunks.insert(addr, chunk);
+        // // Store the data on disk
+        // if let Some(dirs) = filepath.parent() {
+        //     create_dir_all(dirs).await?;
+        // }
 
-        let mut file = File::create(filepath).await?;
+        // let mut file = File::create(filepath).await?;
 
-        file.write_all(chunk.value()).await?;
-        // Let's sync up OS data to disk to reduce the chances of
-        // concurrent reading failing by reading an empty/incomplete file
-        file.sync_data().await?;
+        // file.write_all(chunk.value()).await?;
+        // // Let's sync up OS data to disk to reduce the chances of
+        // // concurrent reading failing by reading an empty/incomplete file
+        // file.sync_data().await?;
 
-        let storage_level = self.used_space.increase(chunk.value().len());
         trace!("{:?} {addr:?}", LogMarker::StoredNewChunk);
 
-        Ok(storage_level)
+        if existed.is_none() {
+            Ok(self.used_space.increase(space_needed))
+        } else {
+            Ok(StorageLevel::NoChange)
+        }
     }
 }
 
