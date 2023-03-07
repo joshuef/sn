@@ -407,7 +407,14 @@ impl FlowCtrl {
                                 let results =
                                     MyNode::handle_msg(context, sender, wire_msg, send_stream)
                                         .await?;
+
+                                let
                                 for cmd in results {
+                                    match cmd {
+                                        Cmd::ProcessClientMsg { msg_id, msg, auth, sender, send_stream } => {
+                                            MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, client_id, send_stream)
+                                        }
+                                    }
                                     // this await prevents us pulling more msgs than the cmd handler can cope with...
                                     // feeding back up the channels to qp2p and quinn where congestion control should
                                     // help prevent more messages incoming for the time being
