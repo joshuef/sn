@@ -136,7 +136,7 @@ impl Comm {
         // capacity of one as we limit w/ how many cmds we process in the upper layers.
         // any higher and we're not feeding back directly to incoming msgs...
         // (we may want some buffer here?)
-        let (comm_events_sender, comm_events_receiver) = mpsc::channel(1);
+        let (comm_events_sender, comm_events_receiver) = mpsc::channel(1000);
         let (cmd_sender, cmd_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         // listen for msgs/connections to our endpoint
