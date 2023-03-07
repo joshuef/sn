@@ -169,7 +169,7 @@ impl MyNode {
                 sender,
                 wire_msg,
                 send_stream,
-            } => MyNode::handle_msg(node, sender, wire_msg, send_stream).await,
+            } => MyNode::handle_msg(node.context(), sender, wire_msg, send_stream).await,
             Cmd::UpdateNetworkAndHandleValidClientMsg {
                 proof_chain,
                 signed_sap,

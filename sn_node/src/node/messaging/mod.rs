@@ -23,7 +23,7 @@ mod signature;
 mod streams;
 mod update_section;
 
-use crate::node::{flow_ctrl::cmds::Cmd, Error, MyNode, Result};
+use crate::node::{flow_ctrl::cmds::Cmd, Error, MyNode, Result, core::NodeContext};
 
 use sn_interface::{
     messaging::{AntiEntropyMsg, MsgKind, NetworkMsg, WireMsg},
@@ -63,9 +63,9 @@ impl IntoIterator for Recipients {
 
 // Message handling
 impl MyNode {
-    #[instrument(skip(node, wire_msg, send_stream))]
+    #[instrument(skip(wire_msg, send_stream))]
     pub(crate) async fn handle_msg(
-        node: &MyNode,
+        context: NodeContext,
         sender: Participant,
         wire_msg: WireMsg,
         send_stream: Option<SendStream>,
@@ -74,8 +74,6 @@ impl MyNode {
         let msg_kind = wire_msg.kind();
 
         trace!("Handling msg {msg_id:?}. from {sender:?} Checking for AE first...");
-
-        let context = node.context();
 
         // alternatively we could flag in msg kind for this...
         // todo: this sender is actually client + forwarder ip....

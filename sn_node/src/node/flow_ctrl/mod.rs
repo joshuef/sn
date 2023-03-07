@@ -16,7 +16,7 @@ mod periodic_checks;
 pub(crate) mod tests;
 pub(crate) use cmd_ctrl::CmdCtrl;
 
-use super::DataStorage;
+use super::{DataStorage, core::NodeContext};
 use periodic_checks::PeriodicChecksTimestamps;
 
 use crate::node::{
@@ -122,7 +122,7 @@ impl FlowCtrl {
 
         // first start listening for msgs
         let cmd_channel_for_msgs = cmd_sender_channel.clone();
-        Self::listen_for_comm_events(incoming_msg_events, cmd_channel_for_msgs);
+        Self::listen_for_comm_events(node_context.clone(), incoming_msg_events, cmd_channel_for_msgs);
 
         // second do this until join
         let node = flow_ctrl
@@ -301,12 +301,16 @@ impl FlowCtrl {
 
     // starts a new thread to convert comm event to cmds
     fn listen_for_comm_events(
+        context: NodeContext,
         mut incoming_msg_events: Receiver<CommEvent>,
-        cmd_channel_for_msgs: Sender<(Cmd, Vec<usize>)>,
+        cmd_channel: Sender<(Cmd, Vec<usize>)>,
     ) {
+        // we'll update this as we go
+        let mut context = context;
+
         let _handle = tokio::task::spawn(async move {
             while let Some(event) = incoming_msg_events.recv().await {
-                let capacity = cmd_channel_for_msgs.capacity();
+                let capacity = cmd_channel.capacity();
 
                 if capacity < 30 {
                     warn!("CmdChannel capacity severely reduced");
@@ -347,20 +351,41 @@ impl FlowCtrl {
                             );
                         }
 
-                        Cmd::HandleMsg {
-                            sender,
-                            wire_msg,
-                            send_stream,
-                        }
+                         /// Total concurrent msg parsing would be limited by cmd channel capacity
+                         let cmd_sender = cmd_channel.clone();
+
+                        let context = context.clone();
+                         // is msg parsing just off the feedback loop??
+                        let _handle = tokio::spawn(async move {
+                            // let cmd = Cmd::HandleMsg {
+                            //     origin: sender,
+                            //     wire_msg,
+                            //     send_stream,
+                            // };
+
+                            let results = MyNode::handle_msg(context, sender, wire_msg, send_stream).await?;
+                            for cmd in results {
+                                // this await prevents us pulling more msgs than the cmd handler can cope with...
+                                // feeding back up the channels to qp2p and quinn where congestion control should
+                                // help prevent more messages incoming for the time being
+                                if let Err(error) = cmd_sender.send((cmd, vec![])).await {
+                                    error!("Error sending msg onto cmd channel {error:?}");
+                                }
+                            }
+
+                            Ok::<(), Error>(())
+                        });
+
+                        continue;
                     }
                 };
 
-                // this await prevents us pulling more msgs than the cmd handler can cope with...
-                // feeding back up the channels to qp2p and quinn where congestion control should
-                // help prevent more messages incoming for the time being
-                if let Err(error) = cmd_channel_for_msgs.send((cmd, vec![])).await {
-                    error!("Error sending msg onto cmd channel {error:?}");
-                }
+                // // this await prevents us pulling more msgs than the cmd handler can cope with...
+                // // feeding back up the channels to qp2p and quinn where congestion control should
+                // // help prevent more messages incoming for the time being
+                // if let Err(error) = cmd_channel.send((cmd, vec![])).await {
+                //     error!("Error sending msg onto cmd channel {error:?}");
+                // }
             }
         });
     }
