@@ -23,7 +23,7 @@ mod signature;
 mod streams;
 mod update_section;
 
-use crate::node::{flow_ctrl::cmds::Cmd, Error, MyNode, Result, core::NodeContext};
+use crate::node::{core::NodeContext, flow_ctrl::cmds::Cmd, Error, MyNode, Result};
 
 use sn_interface::{
     messaging::{AntiEntropyMsg, MsgKind, NetworkMsg, WireMsg},

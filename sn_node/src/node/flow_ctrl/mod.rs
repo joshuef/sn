@@ -16,7 +16,7 @@ mod periodic_checks;
 pub(crate) mod tests;
 pub(crate) use cmd_ctrl::CmdCtrl;
 
-use super::{DataStorage, core::NodeContext};
+use super::{core::NodeContext, DataStorage};
 use periodic_checks::PeriodicChecksTimestamps;
 
 use crate::node::{
@@ -69,6 +69,14 @@ impl RejoinReason {
     }
 }
 
+/// Events for the msg handling loop
+#[derive(Debug)]
+enum MsgHandlingEvent {
+    /// A msg was received from comms
+    CommEvent(CommEvent),
+    UpdateContext(NodeContext),
+}
+
 /// Listens for incoming msgs and forms Cmds for each,
 /// Periodically triggers other Cmd Processes (eg health checks, fault detection etc)
 pub(crate) struct FlowCtrl {
@@ -84,13 +92,15 @@ impl FlowCtrl {
         node: MyNode,
         mut cmd_ctrl: CmdCtrl,
         join_retry_timeout: Duration,
-        incoming_msg_events: Receiver<CommEvent>,
+        mut incoming_msg_events: Receiver<CommEvent>,
         data_replication_receiver: Receiver<(Vec<DataAddress>, NodeId)>,
         fault_cmds_channels: (Sender<FaultsCmd>, Receiver<FaultsCmd>),
     ) -> (Sender<(Cmd, Vec<usize>)>, Receiver<RejoinReason>) {
         let node_context = node.context();
         let (cmd_sender_channel, mut incoming_cmds_from_apis) = mpsc::channel(CMD_CHANNEL_SIZE);
         let (rejoin_network_tx, rejoin_network_rx) = mpsc::channel(STANDARD_CHANNEL_SIZE);
+        let (msg_handler_event_sender, mut msg_handler_event_reciever) =
+            mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let all_members = node_context
             .network_knowledge
@@ -122,7 +132,27 @@ impl FlowCtrl {
 
         // first start listening for msgs
         let cmd_channel_for_msgs = cmd_sender_channel.clone();
-        Self::listen_for_comm_events(node_context.clone(), incoming_msg_events, cmd_channel_for_msgs);
+
+        // a clone for sending in updates to context
+        let msg_handler_event_sender_clone = msg_handler_event_sender.clone();
+
+        // simple pipe through of CommEvents
+        let _handle = tokio::spawn(async move {
+            while let Some(event) = incoming_msg_events.recv().await {
+                if let Err(e) = msg_handler_event_sender
+                    .send(MsgHandlingEvent::CommEvent(event))
+                    .await
+                {
+                    warn!("MsgHandler event channel send failed: {e:?}");
+                }
+            }
+        });
+
+        Self::listen_for_msg_handling_events(
+            node_context.clone(),
+            msg_handler_event_reciever,
+            cmd_channel_for_msgs,
+        );
 
         // second do this until join
         let node = flow_ctrl
@@ -300,9 +330,9 @@ impl FlowCtrl {
     }
 
     // starts a new thread to convert comm event to cmds
-    fn listen_for_comm_events(
+    fn listen_for_msg_handling_events(
         context: NodeContext,
-        mut incoming_msg_events: Receiver<CommEvent>,
+        mut incoming_msg_events: Receiver<MsgHandlingEvent>,
         cmd_channel: Sender<(Cmd, Vec<usize>)>,
     ) {
         // we'll update this as we go
@@ -325,67 +355,74 @@ impl FlowCtrl {
                 );
 
                 let cmd = match event {
-                    CommEvent::Error { node_id, error } => Cmd::HandleCommsError {
-                        participant: Participant::from_node(node_id),
-                        error,
-                    },
-                    CommEvent::Msg(MsgReceived {
-                        sender,
-                        wire_msg,
-                        send_stream,
-                    }) => {
-                        if let Ok((header, dst, payload)) = wire_msg.serialize() {
-                            let original_bytes_len = header.len() + dst.len() + payload.len();
-                            let span =
-                                trace_span!("handle_message", ?sender, msg_id = ?wire_msg.msg_id());
-                            let _span_guard = span.enter();
-                            trace!(
-                                "{:?} from {sender:?} length {original_bytes_len}",
-                                LogMarker::MsgReceived,
-                            );
-                        } else {
-                            // this should be unreachable
-                            trace!(
-                                "{:?} from {sender:?}, unknown length due to serialization issues.",
-                                LogMarker::MsgReceived,
-                            );
-                        }
-
-                         /// Total concurrent msg parsing would be limited by cmd channel capacity
-                         let cmd_sender = cmd_channel.clone();
-
-                        let context = context.clone();
-                         // is msg parsing just off the feedback loop??
-                        let _handle = tokio::spawn(async move {
-                            // let cmd = Cmd::HandleMsg {
-                            //     origin: sender,
-                            //     wire_msg,
-                            //     send_stream,
-                            // };
-
-                            let results = MyNode::handle_msg(context, sender, wire_msg, send_stream).await?;
-                            for cmd in results {
-                                // this await prevents us pulling more msgs than the cmd handler can cope with...
-                                // feeding back up the channels to qp2p and quinn where congestion control should
-                                // help prevent more messages incoming for the time being
-                                if let Err(error) = cmd_sender.send((cmd, vec![])).await {
-                                    error!("Error sending msg onto cmd channel {error:?}");
-                                }
-                            }
-
-                            Ok::<(), Error>(())
-                        });
-
+                    MsgHandlingEvent::UpdateContext(new_context) => {
+                        context = new_context;
                         continue;
                     }
+                    MsgHandlingEvent::CommEvent(comm_event) => match comm_event {
+                        CommEvent::Error { node_id, error } => Cmd::HandleCommsError {
+                            participant: Participant::from_node(node_id),
+                            error,
+                        },
+                        CommEvent::Msg(MsgReceived {
+                            sender,
+                            wire_msg,
+                            send_stream,
+                        }) => {
+                            if let Ok((header, dst, payload)) = wire_msg.serialize() {
+                                let original_bytes_len = header.len() + dst.len() + payload.len();
+                                let span = trace_span!("handle_message", ?sender, msg_id = ?wire_msg.msg_id());
+                                let _span_guard = span.enter();
+                                trace!(
+                                    "{:?} from {sender:?} length {original_bytes_len}",
+                                    LogMarker::MsgReceived,
+                                );
+                            } else {
+                                // this should be unreachable
+                                trace!(
+                                    "{:?} from {sender:?}, unknown length due to serialization issues.",
+                                    LogMarker::MsgReceived,
+                                );
+                            }
+
+                            /// Total concurrent msg parsing would be limited by cmd channel capacity
+                            let cmd_sender = cmd_channel.clone();
+
+                            let context = context.clone();
+                            // is msg parsing just off the feedback loop??
+                            let _handle = tokio::spawn(async move {
+                                // let cmd = Cmd::HandleMsg {
+                                //     origin: sender,
+                                //     wire_msg,
+                                //     send_stream,
+                                // };
+
+                                let results =
+                                    MyNode::handle_msg(context, sender, wire_msg, send_stream)
+                                        .await?;
+                                for cmd in results {
+                                    // this await prevents us pulling more msgs than the cmd handler can cope with...
+                                    // feeding back up the channels to qp2p and quinn where congestion control should
+                                    // help prevent more messages incoming for the time being
+                                    if let Err(error) = cmd_sender.send((cmd, vec![])).await {
+                                        error!("Error sending msg onto cmd channel {error:?}");
+                                    }
+                                }
+
+                                Ok::<(), Error>(())
+                            });
+
+                            continue;
+                        }
+                    },
                 };
 
-                // // this await prevents us pulling more msgs than the cmd handler can cope with...
-                // // feeding back up the channels to qp2p and quinn where congestion control should
-                // // help prevent more messages incoming for the time being
-                // if let Err(error) = cmd_channel.send((cmd, vec![])).await {
-                //     error!("Error sending msg onto cmd channel {error:?}");
-                // }
+                // this await prevents us pulling more msgs than the cmd handler can cope with...
+                // feeding back up the channels to qp2p and quinn where congestion control should
+                // help prevent more messages incoming for the time being
+                if let Err(error) = cmd_channel.send((cmd, vec![])).await {
+                    error!("Error sending msg onto cmd channel {error:?}");
+                }
             }
         });
     }
