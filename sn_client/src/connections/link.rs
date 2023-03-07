@@ -111,7 +111,19 @@ impl Link {
     ) -> Result<Arc<Connection>, LinkError> {
         let node_id = self.node_id;
         // grab write lock to prevent many many conns being opened at once
+        let conns_read_lock = self.connections.read().await;
+
+        // let's double check we havent got a connection meanwhile
+        if let Some(conn) = conns_read_lock.iter().next().map(|(_, c)| c.clone()) {
+            debug!(
+                "{msg_id:?} Connection already exists in Link to {node_id:?}, using that, conn_id={}",
+                conn.id()
+            );
+            return Ok(conn);
+        }
+
         debug!("[CONN WRITE]: {msg_id:?} to {node_id:?}");
+        drop(conns_read_lock);
         let mut conns_write_lock = self.connections.write().await;
         debug!("[CONN WRITE]: lock obtained {msg_id:?} to {node_id:?}");
 

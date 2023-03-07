@@ -57,10 +57,14 @@ impl NodeLinks {
         // i.e. first comms to any node, will impact all sending at that instant..
         // however, first comms should be a minor part of total time spent using link,
         // so that is ok
-        let mut links = self.links.write().await;
-        match links.get(node_id).cloned() {
+        let links = self.links.read().await;
+        let mut insert_new_link = false;
+        let a_link = match links.get(node_id).cloned() {
             // someone else inserted in the meanwhile, so use that
-            Some(link) => link,
+            Some(link) => {
+
+                return link
+            },
             // still not in list, go ahead and create + insert
             None => {
                 let link = Link::new(*node_id, self.endpoint.clone());
@@ -69,9 +73,22 @@ impl NodeLinks {
                         error!("Error during create connection attempt for link to {node_id:?}: {error:?}");
                     }
                 }
-                let _ = links.insert(*node_id, link.clone());
+                // let _ = links.insert(*node_id, link.clone());
+                // link
+                insert_new_link = true;
                 link
             }
+        };
+
+        if insert_new_link {
+            // final double check
+            let mut links = self.links.write().await;
+            links.entry(*node_id).or_insert(a_link.clone());
+            a_link
+            // .insert(key, value)
+        }
+        else {
+            a_link
         }
     }
 

@@ -604,9 +604,10 @@ impl Session {
                 debug!("Trying to send msg {msg_id:?} to {node_id:?}");
                 loop {
                     let link = session
-                        .node_links
-                        .get_or_create_link(&node_id, connect_now, Some(msg_id))
-                        .await;
+                    .node_links
+                    .get_or_create_link(&node_id, connect_now, Some(msg_id))
+                    .await;
+                    debug!("Link ready to send {msg_id:?} to {node_id:?}");
                     match link.send_bi(bytes.clone(), msg_id).await {
                         Ok(recv_stream) => {
                             debug!(
