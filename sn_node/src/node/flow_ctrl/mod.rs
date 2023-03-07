@@ -364,188 +364,201 @@ impl FlowCtrl {
                     capacity
                 );
 
-                let cmd = match event {
+
+                match event {
                     MsgHandlingEvent::UpdateContext(new_context) => {
                         context = new_context;
                         continue;
                     }
                     MsgHandlingEvent::CommEvent(comm_event) => {
-                        match comm_event {
-                            CommEvent::Error { node_id, error } => Cmd::HandleCommsError {
-                                participant: Participant::from_node(node_id),
-                                error,
-                            },
-                            CommEvent::Msg(MsgReceived {
-                                sender,
-                                wire_msg,
-                                send_stream,
-                            }) => {
-                                if let Ok((header, dst, payload)) = wire_msg.serialize() {
-                                    let original_bytes_len =
-                                        header.len() + dst.len() + payload.len();
-                                    let span = trace_span!("handle_message", ?sender, msg_id = ?wire_msg.msg_id());
-                                    let _span_guard = span.enter();
-                                    trace!(
-                                        "{:?} from {sender:?} length {original_bytes_len}",
+                        let _handle = tokio::spawn(async move{
+                            match comm_event {
+                                CommEvent::Error { node_id, error } => {
+                                let cmd = Cmd::HandleCommsError {
+                                    participant: Participant::from_node(node_id),
+                                    error,
+                                    };
+
+                                            // this await prevents us pulling more msgs than the cmd handler can cope with...
+                                    // feeding back up the channels to qp2p and quinn where congestion control should
+                                    // help prevent more messages incoming for the time being
+                                    if let Err(error) = cmd_channel.send((cmd, vec![])).await {
+                                        error!("Error sending msg onto cmd channel {error:?}");
+                                    }
+                                }
+                                CommEvent::Msg(MsgReceived {
+                                    sender,
+                                    wire_msg,
+                                    send_stream,
+                                }) => {
+                                    if let Ok((header, dst, payload)) = wire_msg.serialize() {
+                                        let original_bytes_len =
+                                            header.len() + dst.len() + payload.len();
+                                        let span = trace_span!("handle_message", ?sender, msg_id = ?wire_msg.msg_id());
+                                        let _span_guard = span.enter();
+                                        trace!(
+                                            "{:?} from {sender:?} length {original_bytes_len}",
+                                            LogMarker::MsgReceived,
+                                        );
+                                    } else {
+                                        // this should be unreachable
+                                        trace!(
+                                        "{:?} from {sender:?}, unknown length due to serialization issues.",
                                         LogMarker::MsgReceived,
                                     );
-                                } else {
-                                    // this should be unreachable
-                                    trace!(
-                                    "{:?} from {sender:?}, unknown length due to serialization issues.",
-                                    LogMarker::MsgReceived,
-                                );
-                                }
-
-                                /// Total concurrent msg parsing would be limited by cmd channel capacity
-                                let cmd_sender = cmd_channel.clone();
-
-                                let context = context.clone();
-                                // is msg parsing just off the feedback loop??
-                                let _handle = tokio::spawn(async move {
-                                    // let cmd = Cmd::HandleMsg {
-                                    //     origin: sender,
-                                    //     wire_msg,
-                                    //     send_stream,
-                                    // };
-
-                                    let results = MyNode::handle_msg(
-                                        context.clone(),
-                                        sender,
-                                        wire_msg,
-                                        send_stream,
-                                    )
-                                    .await?;
-
-                                    let mut offspring = results;
-
-                                    while !offspring.is_empty() {
-                                        let mut new_cmds = vec![];
-                                        for cmd in offspring {
-                                            match cmd {
-                                                Cmd::ProcessClientMsg {
-                                                    msg_id,
-                                                    msg,
-                                                    auth,
-                                                    sender,
-                                                    send_stream,
-                                                } => {
-                                                    if let Some(stream) = send_stream {
-                                                        let fresh =
-                                                            MyNode::handle_client_msg_for_us(
-                                                                context.clone(),
-                                                                msg_id,
-                                                                msg,
-                                                                auth,
-                                                                sender,
-                                                                stream,
-                                                            )
-                                                            .await?;
-                                                        // let fresh = MyNode::process_cmd_with_context(cmd, context.clone()).await?;
-                                                        new_cmds.extend(fresh);
-                                                    } else {
-                                                        debug!("dropping client cmd w/ no response stream")
-                                                    }
-                                                }
-                                                Cmd::SendMsg {
-                                                    msg,
-                                                    msg_id,
-                                                    recipients,
-                                                } => {
-                                                    let recipients = recipients
-                                                        .into_iter()
-                                                        .map(NodeId::from)
-                                                        .collect();
-
-                                                    MyNode::send_msg(
-                                                        msg,
-                                                        msg_id,
-                                                        recipients,
-                                                        context.clone(),
-                                                    )?;
-                                                }
-                                                Cmd::SendDataResponse {
-                                                    msg,
-                                                    msg_id,
-                                                    correlation_id,
-                                                    send_stream,
-                                                    client_id,
-                                                } => {
-                                                    if let Some(x) = MyNode::send_data_response(
-                                                        msg,
-                                                        msg_id,
-                                                        correlation_id,
-                                                        send_stream,
-                                                        context.clone(),
-                                                        client_id,
-                                                    )
-                                                    .await? {
-                                                        new_cmds.push(x);
-                                                    }
-                                                }
-                                                Cmd::SendAndForwardResponseToClient {
-                                                    wire_msg,
-                                                    targets,
-                                                    client_stream,
-                                                    client_id,
-                                                } => {
-                                                    MyNode::send_and_forward_response_to_client(
-                                                        wire_msg,
-                                                        context.clone(),
-                                                        targets,
-                                                        client_stream,
-                                                        client_id,
-                                                    )?;
-                                                }
-
-                                                _ => {
-                                                    debug!("child process not handled in thread: {cmd:?}");
-                                                    if let Err(error) =
-                                                        cmd_sender.send((cmd, vec![])).await
-                                                    {
-                                                        error!(
-                                                        "Error sending msg onto cmd channel {error:?}"
-                                                    );
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        offspring = new_cmds;
                                     }
 
-                                    // let mut all_cmds = results;
+                                    /// Total concurrent msg parsing would be limited by cmd channel capacity
+                                    let cmd_sender = cmd_channel.clone();
 
-                                    // while cmd in all_cmds {
-                                    // // for cmd in results {
-                                    //     match cmd {
-                                    //         Cmd::ProcessClientMsg { msg_id, msg, auth, sender, send_stream } => {
-                                    //             MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, client_id, send_stream)
-                                    //         }
-                                    //     }
-                                    //     // this await prevents us pulling more msgs than the cmd handler can cope with...
-                                    //     // feeding back up the channels to qp2p and quinn where congestion control should
-                                    //     // help prevent more messages incoming for the time being
-                                    //     if let Err(error) = cmd_sender.send((cmd, vec![])).await {
-                                    //         error!("Error sending msg onto cmd channel {error:?}");
-                                    //     }
-                                    // }
+                                    let context = context.clone();
+                                    // is msg parsing just off the feedback loop??
+                                    let _handle = tokio::spawn(async move {
+                                        // let cmd = Cmd::HandleMsg {
+                                        //     origin: sender,
+                                        //     wire_msg,
+                                        //     send_stream,
+                                        // };
 
-                                    Ok::<(), Error>(())
-                                });
+                                        let results = MyNode::handle_msg(
+                                            context.clone(),
+                                            sender,
+                                            wire_msg,
+                                            send_stream,
+                                        )
+                                        .await?;
 
-                                continue;
-                            }
-                        }
+                                        let mut offspring = results;
+
+                                        // while !offspring.is_empty() {
+                                        //     let mut new_cmds = vec![];
+                                        //     for cmd in offspring {
+                                        //         match cmd {
+                                        //             Cmd::ProcessClientMsg {
+                                        //                 msg_id,
+                                        //                 msg,
+                                        //                 auth,
+                                        //                 sender,
+                                        //                 send_stream,
+                                        //             } => {
+                                        //                 if let Some(stream) = send_stream {
+                                        //                     let fresh =
+                                        //                         MyNode::handle_client_msg_for_us(
+                                        //                             context.clone(),
+                                        //                             msg_id,
+                                        //                             msg,
+                                        //                             auth,
+                                        //                             sender,
+                                        //                             stream,
+                                        //                         )
+                                        //                         .await?;
+                                        //                     // let fresh = MyNode::process_cmd_with_context(cmd, context.clone()).await?;
+                                        //                     new_cmds.extend(fresh);
+                                        //                 } else {
+                                        //                     debug!("dropping client cmd w/ no response stream")
+                                        //                 }
+                                        //             }
+                                        //             Cmd::SendMsg {
+                                        //                 msg,
+                                        //                 msg_id,
+                                        //                 recipients,
+                                        //             } => {
+                                        //                 let recipients = recipients
+                                        //                     .into_iter()
+                                        //                     .map(NodeId::from)
+                                        //                     .collect();
+
+                                        //                 MyNode::send_msg(
+                                        //                     msg,
+                                        //                     msg_id,
+                                        //                     recipients,
+                                        //                     context.clone(),
+                                        //                 )?;
+                                        //             }
+                                        //             Cmd::SendDataResponse {
+                                        //                 msg,
+                                        //                 msg_id,
+                                        //                 correlation_id,
+                                        //                 send_stream,
+                                        //                 client_id,
+                                        //             } => {
+                                        //                 if let Some(x) = MyNode::send_data_response(
+                                        //                     msg,
+                                        //                     msg_id,
+                                        //                     correlation_id,
+                                        //                     send_stream,
+                                        //                     context.clone(),
+                                        //                     client_id,
+                                        //                 )
+                                        //                 .await? {
+                                        //                     new_cmds.push(x);
+                                        //                 }
+                                        //             }
+                                        //             Cmd::SendAndForwardResponseToClient {
+                                        //                 wire_msg,
+                                        //                 targets,
+                                        //                 client_stream,
+                                        //                 client_id,
+                                        //             } => {
+                                        //                 MyNode::send_and_forward_response_to_client(
+                                        //                     wire_msg,
+                                        //                     context.clone(),
+                                        //                     targets,
+                                        //                     client_stream,
+                                        //                     client_id,
+                                        //                 )?;
+                                        //             }
+
+                                        //             _ => {
+                                        //                 debug!("child process not handled in thread: {cmd:?}");
+                                        //                 if let Err(error) =
+                                        //                     cmd_sender.send((cmd, vec![])).await
+                                        //                 {
+                                        //                     error!(
+                                        //                     "Error sending msg onto cmd channel {error:?}"
+                                        //                 );
+                                        //                 }
+                                        //             }
+                                        //         }
+                                        //     }
+
+                                        //     offspring = new_cmds;
+                                        // }
+
+                                        // let mut all_cmds = results;
+
+                                        // while cmd in all_cmds {
+                                        // // for cmd in results {
+                                        //     match cmd {
+                                        //         Cmd::ProcessClientMsg { msg_id, msg, auth, sender, send_stream } => {
+                                        //             MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, client_id, send_stream)
+                                        //         }
+                                        //     }
+                                        //     // this await prevents us pulling more msgs than the cmd handler can cope with...
+                                        //     // feeding back up the channels to qp2p and quinn where congestion control should
+                                        //     // help prevent more messages incoming for the time being
+                                        //     if let Err(error) = cmd_sender.send((cmd, vec![])).await {
+                                        //         error!("Error sending msg onto cmd channel {error:?}");
+                                        //     }
+                                        // }
+
+                                        Ok::<(), Error>(())
+                                    });
+
+                                }
+                            };
+                            // // this await prevents us pulling more msgs than the cmd handler can cope with...
+                            // // feeding back up the channels to qp2p and quinn where congestion control should
+                            // // help prevent more messages incoming for the time being
+                            // if let Err(error) = cmd_channel.send((cmd, vec![])).await {
+                            //     error!("Error sending msg onto cmd channel {error:?}");
+                            // }
+                        });
+
                     }
                 };
 
-                // this await prevents us pulling more msgs than the cmd handler can cope with...
-                // feeding back up the channels to qp2p and quinn where congestion control should
-                // help prevent more messages incoming for the time being
-                if let Err(error) = cmd_channel.send((cmd, vec![])).await {
-                    error!("Error sending msg onto cmd channel {error:?}");
-                }
+
             }
         });
     }
