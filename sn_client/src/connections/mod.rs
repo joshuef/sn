@@ -14,7 +14,7 @@ pub use link::LinkError;
 use sn_interface::{messaging::MsgId, types::NodeId};
 
 use qp2p::Endpoint;
-use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, sync::Arc, time::Instant};
 use tokio::sync::RwLock;
 
 /// This is tailored to the use-case of connecting on send.
@@ -42,6 +42,7 @@ impl NodeLinks {
         connect_now: bool,
         msg_id: Option<MsgId>,
     ) -> Link {
+        let start = Instant::now();
         if let Some(link) = self.get(node_id).await {
             if connect_now {
                 if let Err(error) = link.create_connection_if_none_exist(msg_id).await {
@@ -86,10 +87,14 @@ impl NodeLinks {
             // final double check
             let mut links = self.links.write().await;
             links.entry(*node_id).or_insert(a_link.clone());
-            a_link
             // .insert(key, value)
+
+
+            debug!("Time to get link (after write lock) was: {:?}", start.elapsed());
+            a_link
         }
         else {
+            debug!("Time to get link was: {:?}", start.elapsed());
             a_link
         }
     }

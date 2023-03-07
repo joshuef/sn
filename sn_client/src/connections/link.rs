@@ -62,16 +62,20 @@ impl Link {
             .map_err(LinkError::Send)?;
         debug!("{msg_id:?} bidi msg sent to {node_id:?}");
 
-        // Attempt to gracefully terminate the stream.
-        match send_stream.finish().await {
-            Ok(_) => Ok(()),
-            // In case we get a `Stopped(0)` error, the other side is signalling it
-            // already succesfully received all bytes. This might happen if we are calling finish late.
-            Err(qp2p::SendError::StreamLost(StreamError::Stopped(0))) => Ok(()),
-            // Propagate any other error, which means we should probably retry on a higher level.
-            Err(err) => Err(LinkError::Send(err)),
-        }?;
-        debug!("{msg_id:?} to {node_id:?} bidi finished");
+        // move this off thread
+        let _handle = tokio::spawn(async move {
+            // Attempt to gracefully terminate the stream.
+            let result = match send_stream.finish().await {
+                Ok(_) => Ok(()),
+                // In case we get a `Stopped(0)` error, the other side is signalling it
+                // already succesfully received all bytes. This might happen if we are calling finish late.
+                Err(qp2p::SendError::StreamLost(StreamError::Stopped(0))) => Ok(()),
+                // Propagate any other error, which means we should probably retry on a higher level.
+                Err(err) => Err(LinkError::Send(err)),
+            };
+            debug!("{msg_id:?} to {node_id:?} bidi finished: {:?}", result);
+
+        });
 
         Ok(recv_stream)
     }

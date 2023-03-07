@@ -20,7 +20,7 @@ use sn_interface::{
 
 use bytes::Bytes;
 use rand::{rngs::OsRng, seq::SliceRandom};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, time::Instant};
 use tokio::task::JoinSet;
 use tracing::{debug, error, trace, warn};
 use xor_name::XorName;
@@ -230,6 +230,7 @@ impl Session {
         expected_acks: usize,
         mut send_cmd_tasks: JoinSet<MsgResponse>,
     ) -> Result<()> {
+        let start = Instant::now();
         debug!("----> Init of check for acks for {msg_id:?}");
         let mut received_acks = BTreeSet::default();
         let mut received_errors = BTreeSet::default();
@@ -263,6 +264,8 @@ impl Session {
                     }
 
                     if received_acks.len() >= expected_acks {
+                        debug!("{msg_id:?} Time to finish Cmd was: {:?}", start.elapsed());
+
                         trace!("{msg_id:?} Good! We're at or above {expected_acks} expected_acks");
                         return Ok(());
                     }
@@ -276,6 +279,7 @@ impl Session {
 
                     // exit if too many errors:
                     if failures.len() + received_errors.len() >= expected_acks {
+                        debug!("{msg_id:?} Time to finish Cmd was: {:?}", start.elapsed());
                         error!("Received majority of error response for cmd {msg_id:?}: {error:?}");
                         return Err(Error::CmdError {
                             source: error,
@@ -329,7 +333,7 @@ impl Session {
         dst_section_info: Option<(bls::PublicKey, Vec<NodeId>)>,
     ) -> Result<QueryResponse> {
         let endpoint = self.endpoint.clone();
-
+        let start = Instant::now();
         let chunk_addr = if let DataQuery::GetChunk(address) = query {
             Some(address)
         } else {
@@ -376,8 +380,11 @@ impl Session {
         // so we don't need more than one valid response to prevent from accepting invalid responses
         // from byzantine nodes, however for mutable data (non-Chunk responses) we will
         // have to review the approach.
-        self.check_query_responses(msg_id, elders.clone(), chunk_addr, send_query_tasks)
-            .await
+        let r = self.check_query_responses(msg_id, elders.clone(), chunk_addr, send_query_tasks)
+            .await;
+        debug!("{msg_id:?} Time to finish query was: {:?}", start.elapsed());
+
+        r
     }
 
     async fn check_query_responses(
