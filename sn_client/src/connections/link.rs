@@ -74,7 +74,6 @@ impl Link {
                 Err(err) => Err(LinkError::Send(err)),
             };
             debug!("{msg_id:?} to {node_id:?} bidi finished: {:?}", result);
-
         });
 
         Ok(recv_stream)

@@ -380,7 +380,8 @@ impl Session {
         // so we don't need more than one valid response to prevent from accepting invalid responses
         // from byzantine nodes, however for mutable data (non-Chunk responses) we will
         // have to review the approach.
-        let r = self.check_query_responses(msg_id, elders.clone(), chunk_addr, send_query_tasks)
+        let r = self
+            .check_query_responses(msg_id, elders.clone(), chunk_addr, send_query_tasks)
             .await;
         debug!("{msg_id:?} Time to finish query was: {:?}", start.elapsed());
 
@@ -611,9 +612,9 @@ impl Session {
                 debug!("Trying to send msg {msg_id:?} to {node_id:?}");
                 loop {
                     let link = session
-                    .node_links
-                    .get_or_create_link(&node_id, connect_now, Some(msg_id))
-                    .await;
+                        .node_links
+                        .get_or_create_link(&node_id, connect_now, Some(msg_id))
+                        .await;
                     debug!("Link ready to send {msg_id:?} to {node_id:?}");
                     match link.send_bi(bytes.clone(), msg_id).await {
                         Ok(recv_stream) => {

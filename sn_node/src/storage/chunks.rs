@@ -94,8 +94,7 @@ impl ChunkStorage {
 
         if let Some(chunk) = chunk {
             Ok(chunk.value().clone())
-        }
-        else {
+        } else {
             Err(Error::ChunkNotFound(*address.name()))
         }
         // let file_path = self.chunk_addr_to_filepath(address)?;

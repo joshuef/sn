@@ -62,10 +62,7 @@ impl NodeLinks {
         let mut insert_new_link = false;
         let a_link = match links.get(node_id).cloned() {
             // someone else inserted in the meanwhile, so use that
-            Some(link) => {
-
-                return link
-            },
+            Some(link) => return link,
             // still not in list, go ahead and create + insert
             None => {
                 let link = Link::new(*node_id, self.endpoint.clone());
@@ -89,11 +86,12 @@ impl NodeLinks {
             links.entry(*node_id).or_insert(a_link.clone());
             // .insert(key, value)
 
-
-            debug!("Time to get link (after write lock) was: {:?}", start.elapsed());
+            debug!(
+                "Time to get link (after write lock) was: {:?}",
+                start.elapsed()
+            );
             a_link
-        }
-        else {
+        } else {
             debug!("Time to get link was: {:?}", start.elapsed());
             a_link
         }
