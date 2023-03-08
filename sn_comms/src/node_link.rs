@@ -124,7 +124,7 @@ impl NodeLink {
 
             let stream_id = send_stream.id();
             trace!("bidi {stream_id} opened for {msg_id:?} to {node_id:?}");
-            send_stream.set_priority(10);
+            // send_stream.set_priority(10);
             if let Err(err) = send_stream.send_user_msg(bytes.clone()).await {
                 error!("Error sending bytes for {msg_id:?} over {stream_id}: {err:?}");
                 // remove that broken conn
@@ -167,7 +167,7 @@ impl NodeLink {
     }
 
     #[instrument(skip(self, bytes))]
-    pub(crate) async fn send(
+    pub(crate) async fn node_link_send(
         &mut self,
         msg_id: MsgId,
         bytes: UsrMsgBytes,

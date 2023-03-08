@@ -190,8 +190,8 @@ async fn send_msg_on_stream(
         "Sending response {msg_id:?} of msg {correlation_id:?}, to {recipient:?} over {stream_id}"
     );
 
-    let stream_prio = 10;
-    send_stream.set_priority(stream_prio);
+    // let stream_prio = 10;
+    // send_stream.set_priority(stream_prio);
     trace!("Prio set on stream {stream_id}, response {msg_id:?} of msg {correlation_id:?}, to {recipient:?}");
 
     if let Err(error) = send_stream.send_user_msg(bytes).await {

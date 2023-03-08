@@ -353,7 +353,7 @@ fn send(msg_id: MsgId, mut link: NodeLink, bytes: UsrMsgBytes, comm_events: Send
         let bytes_len = h.len() + d.len() + p.len();
         let node_id = link.node_id();
         trace!("Sending message bytes ({bytes_len} bytes) w/ {msg_id:?} to {node_id:?}");
-        match link.send(msg_id, bytes).await {
+        match link.node_link_send(msg_id, bytes).await {
             Ok(()) => {
                 trace!("Msg {msg_id:?} sent to {node_id:?} and took: {:?}", start.elapsed());
             }
