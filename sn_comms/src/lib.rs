@@ -502,6 +502,7 @@ fn send_error(node_id: NodeId, error: Error, comm_events: Sender<CommEvent>) {
 
 #[tracing::instrument(skip_all)]
 async fn send_on_stream(msg_id: MsgId, bytes: UsrMsgBytes, mut stream: SendStream) {
+    debug!("Sarting Writing to {:?}", stream.id());
     match stream.send_user_msg(bytes).await {
         Ok(()) => trace!("Response to {msg_id:?} sent to client."),
         Err(error) => error!("Could not send the response to {msg_id:?} to client due to {error}!"),
