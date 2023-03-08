@@ -432,23 +432,27 @@ impl FlowCtrl {
                                     )
                                     .await?;
 
-                                    let mut offspring = results;
+                                    let _handle = tokio::spawn(async move {
+                                        let mut offspring = results;
 
-                                    while !offspring.is_empty() {
-                                        let mut new_cmds = vec![];
+                                        while !offspring.is_empty() {
+                                            let mut new_cmds = vec![];
 
-                                        for cmd in offspring {
-                                            let cmds = process_a_non_mutating_cmd(
-                                                cmd,
-                                                context.clone(),
-                                                cmd_sender.clone(),
-                                            )
-                                            .await;
+                                            for cmd in offspring {
+                                                let cmds = process_a_non_mutating_cmd(
+                                                    cmd,
+                                                    context.clone(),
+                                                    cmd_sender.clone(),
+                                                )
+                                                .await?;
+                                                new_cmds.extend(cmds);
+                                                // TODO: extract this out into two cmd handler channels
+                                            }
+
+                                            offspring = new_cmds;
                                         }
-
-                                        offspring = new_cmds;
-                                    }
-
+                                        Ok::<(), Error>(())
+                                    });
                                     // let mut all_cmds = results;
 
                                     // while cmd in all_cmds {
