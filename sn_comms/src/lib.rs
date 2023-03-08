@@ -123,8 +123,8 @@ impl Comm {
         let (our_endpoint, incoming_conns) = Endpoint::builder()
             .addr(local_addr)
             .keep_alive_interval(Some(Duration::from_secs(3)))
-            .max_concurrent_bidi_streams(10)
-            .max_concurrent_uni_streams(10)
+            .max_concurrent_bidi_streams(20)
+            // .max_concurrent_uni_streams(10)
             .idle_timeout(70_000)
             .server()?;
 
@@ -140,7 +140,7 @@ impl Comm {
         // capacity of one as we limit w/ how many cmds we process in the upper layers.
         // any higher and we're not feeding back directly to incoming msgs...
         // (we may want some buffer here?)
-        let (comm_events_sender, comm_events_receiver) = mpsc::channel(1000);
+        let (comm_events_sender, comm_events_receiver) = mpsc::channel(1);
         let (cmd_sender, cmd_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         // listen for msgs/connections to our endpoint
