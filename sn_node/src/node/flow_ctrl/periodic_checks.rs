@@ -89,10 +89,10 @@ impl FlowCtrl {
         }
 
         // move cmd spawn off thread to not block
-        let sender_channel = self.cmd_sender_channel.clone();
+        let sender_channel = self.preprocess_cmd_sender_channel.clone();
         let _handle = tokio::spawn(async move {
             for cmd in cmds {
-                if let Err(error) = sender_channel.send((cmd, vec![])).await {
+                if let Err(error) = sender_channel.send(ReadOnlyProcessingEvent::Cmd(cmd)).await {
                     error!("Error queuing periodic check: {error:?}");
                 }
             }
