@@ -32,6 +32,7 @@ use sn_comms::{CommEvent, MsgReceived};
 use sn_fault_detection::FaultDetection;
 use sn_interface::{
     messaging::system::{JoinRejectReason, NodeDataCmd, NodeMsg},
+    messaging::{AntiEntropyMsg, NetworkMsg},
     types::{log_markers::LogMarker, DataAddress, NodeId, Participant},
 };
 
@@ -507,6 +508,34 @@ async fn handle_cmd_off_thread_or_pass_to_mutating_channel(
 
             MyNode::send_msg(msg, msg_id, recipients, context.clone())?;
         }
+        Cmd::SendMsgEnqueueAnyResponse {
+            msg,
+            msg_id,
+            recipients,
+        } => {
+            debug!("send msg enque cmd...?");
+            MyNode::send_and_enqueue_any_response(msg, msg_id, context, recipients)?;
+        }
+        Cmd::SendNodeMsgResponse {
+            msg,
+            msg_id,
+            correlation_id,
+            node_id,
+            send_stream,
+        } => {
+            if let Some(cmd) = MyNode::send_node_msg_response(
+                msg,
+                msg_id,
+                correlation_id,
+                node_id,
+                context,
+                send_stream,
+            )
+            .await?
+            {
+                new_cmds.push(cmd)
+            }
+        }
         Cmd::SendDataResponse {
             msg,
             msg_id,
@@ -527,6 +556,9 @@ async fn handle_cmd_off_thread_or_pass_to_mutating_channel(
                 new_cmds.push(x);
             }
         }
+        Cmd::TrackNodeIssue { name, issue } => {
+            context.track_node_issue(name, issue);
+        }
         Cmd::SendAndForwardResponseToClient {
             wire_msg,
             targets,
@@ -541,7 +573,53 @@ async fn handle_cmd_off_thread_or_pass_to_mutating_channel(
                 client_id,
             )?;
         }
+        Cmd::UpdateCaller {
+            caller,
+            correlation_id,
+            kind,
+            section_tree_update,
+        } => {
+            info!("Sending ae response msg for {correlation_id:?}");
 
+            new_cmds.push(Cmd::send_network_msg(
+                NetworkMsg::AntiEntropy(AntiEntropyMsg::AntiEntropy {
+                    section_tree_update,
+                    kind,
+                }),
+                Recipients::Single(Participant::from_node(caller)), // we're doing a mapping again here.. but this is a necessary evil while transitioning to more clarity and type safety, i.e. TO BE FIXED
+            ));
+            // Ok(vec![Cmd::send_network_msg(
+            //     NetworkMsg::AntiEntropy(AntiEntropyMsg::AntiEntropy {
+            //         section_tree_update,
+            //         kind,
+            //     }),
+            //     Recipients::Single(Participant::from_node(caller)), // we're doing a mapping again here.. but this is a necessary evil while transitioning to more clarity and type safety, i.e. TO BE FIXED
+            // )])
+        }
+        Cmd::UpdateCallerOnStream {
+            caller,
+            msg_id,
+            kind,
+            section_tree_update,
+            correlation_id,
+            stream,
+        } => {
+            if let Some(cmd) = MyNode::send_ae_response(
+                AntiEntropyMsg::AntiEntropy {
+                    kind,
+                    section_tree_update,
+                },
+                msg_id,
+                caller,
+                correlation_id,
+                stream,
+                context,
+            )
+            .await?
+            {
+                new_cmds.push(cmd);
+            }
+        }
         _ => {
             debug!("child process not handled in thread: {cmd:?}");
             if let Err(error) = mutating_cmd_channel.send((cmd, vec![])).await {
