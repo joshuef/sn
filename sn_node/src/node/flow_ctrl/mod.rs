@@ -71,9 +71,9 @@ impl RejoinReason {
 
 /// Events for the msg handling loop
 #[derive(Debug)]
-enum MsgHandlingEvent {
+enum ReadOnlyProcessingEvent {
     /// A msg was received from comms
-    CommEvent(CommEvent),
+    Cmd(Cmd),
     UpdateContext(NodeContext),
 }
 
@@ -137,15 +137,63 @@ impl FlowCtrl {
         let msg_handler_event_sender_clone = msg_handler_event_sender.clone();
         let msg_handler_event_sender_clone_for_processing = msg_handler_event_sender.clone();
 
-        // simple pipe through of CommEvents
+        // simple pipe through of CommEvents - > ReadOnlyProcessingEvent
         let _handle = tokio::spawn(async move {
             while let Some(event) = incoming_msg_events.recv().await {
-                if let Err(e) = msg_handler_event_sender
-                    .send(MsgHandlingEvent::CommEvent(event))
-                    .await
-                {
-                    warn!("MsgHandler event channel send failed: {e:?}");
-                }
+                let cmd = match event {
+                    CommEvent::Error { node_id, error } => Cmd::HandleCommsError {
+                        participant: Participant::from_node(node_id),
+                        error,
+                    },
+                    CommEvent::Msg(MsgReceived {
+                        sender,
+                        wire_msg,
+                        send_stream,
+                    }) => {
+                        let start = Instant::now();
+                        if let Ok((header, dst, payload)) = wire_msg.serialize() {
+                            let original_bytes_len = header.len() + dst.len() + payload.len();
+                            let span =
+                                trace_span!("handle_message", ?sender, msg_id = ?wire_msg.msg_id());
+                            let _span_guard = span.enter();
+                            trace!(
+                                "{:?} from {sender:?} length {original_bytes_len}",
+                                LogMarker::MsgReceived,
+                            );
+                        } else {
+                            // this should be unreachable
+                            trace!(
+                                "{:?} from {sender:?}, unknown length due to serialization issues.",
+                                LogMarker::MsgReceived,
+                            );
+                        }
+
+                        debug!("Receiving msg parsing tooook: {:?}", start.elapsed());
+                        /// Total concurrent msg parsing would be limited by cmd channel capacity
+                        // let cmd_sender = cmd_channel.clone();
+
+                        // let context = context.clone();
+                        // is msg parsing just off the feedback loop??
+                        Cmd::HandleMsg {
+                            sender,
+                            wire_msg,
+                            send_stream,
+                        }
+                    }
+                };
+
+                // TODO: does this processing need to go off thread
+
+                let msg_handler_event_sender_clone = msg_handler_event_sender.clone();
+
+                let _handle = tokio::spawn(async move {
+                    if let Err(e) = msg_handler_event_sender_clone
+                        .send(ReadOnlyProcessingEvent::Cmd(cmd))
+                        .await
+                    {
+                        warn!("MsgHandler event channel send failed: {e:?}");
+                    }
+                });
             }
         });
 
@@ -266,7 +314,7 @@ impl FlowCtrl {
         cmd_ctrl: CmdCtrl,
         mut incoming_cmds_from_apis: Receiver<(Cmd, Vec<usize>)>,
         rejoin_network_tx: Sender<RejoinReason>,
-        msg_handler_event_sender: Sender<MsgHandlingEvent>,
+        read_only_processing: Sender<ReadOnlyProcessingEvent>,
     ) {
         let cmd_channel = self.cmd_sender_channel.clone();
         // first do any pending processing
@@ -283,8 +331,8 @@ impl FlowCtrl {
                 )
                 .await;
 
-            if let Err(e) = msg_handler_event_sender
-                .send(MsgHandlingEvent::UpdateContext(node.context()))
+            if let Err(e) = read_only_processing
+                .send(ReadOnlyProcessingEvent::UpdateContext(node.context()))
                 .await
             {
                 warn!("Errrrrrrrrrrrrrrrrrrr {e}");
@@ -342,8 +390,8 @@ impl FlowCtrl {
     // starts a new thread to convert comm event to cmds
     fn listen_for_msg_handling_events(
         context: NodeContext,
-        mut incoming_msg_events: Receiver<MsgHandlingEvent>,
-        cmd_channel: Sender<(Cmd, Vec<usize>)>,
+        mut incoming_msg_events: Receiver<ReadOnlyProcessingEvent>,
+        mutating_cmd_channel: CmdChannel,
     ) {
         // we'll update this as we go
         let mut context = context;
@@ -352,7 +400,7 @@ impl FlowCtrl {
         // or here...
         let _handle = tokio::task::spawn(async move {
             while let Some(event) = incoming_msg_events.recv().await {
-                let capacity = cmd_channel.capacity();
+                let capacity = mutating_cmd_channel.capacity();
 
                 if capacity < 30 {
                     warn!("CmdChannel capacity severely reduced");
@@ -367,120 +415,41 @@ impl FlowCtrl {
                 );
 
                 match event {
-                    MsgHandlingEvent::UpdateContext(new_context) => {
+                    ReadOnlyProcessingEvent::UpdateContext(new_context) => {
                         context = new_context;
                         continue;
                     }
-                    MsgHandlingEvent::CommEvent(comm_event) => {
+                    ReadOnlyProcessingEvent::Cmd(incoming_cmd) => {
                         let context = context.clone();
-                        let cmd_channel = cmd_channel.clone();
+                        let mutating_cmd_channel = mutating_cmd_channel.clone();
+
+                        // Go off thread for parsing and handling by default
+                        // we only punt certain cmds back into the mutating channel
                         let _handle = tokio::spawn(async move {
-                            match comm_event {
-                                CommEvent::Error { node_id, error } => {
-                                    let cmd = Cmd::HandleCommsError {
-                                        participant: Participant::from_node(node_id),
-                                        error,
-                                    };
+                            let results = handle_cmd_off_thread_or_pass_to_mutating_channel(
+                                incoming_cmd,
+                                context.clone(),
+                                mutating_cmd_channel.clone(),
+                            )
+                            .await?;
+                            let mut offspring = results;
 
-                                    // this await prevents us pulling more msgs than the cmd handler can cope with...
-                                    // feeding back up the channels to qp2p and quinn where congestion control should
-                                    // help prevent more messages incoming for the time being
-                                    if let Err(error) = cmd_channel.send((cmd, vec![])).await {
-                                        error!("Error sending msg onto cmd channel {error:?}");
-                                    }
-                                }
-                                CommEvent::Msg(MsgReceived {
-                                    sender,
-                                    wire_msg,
-                                    send_stream,
-                                }) => {
-                                    let start = Instant::now();
-                                    if let Ok((header, dst, payload)) = wire_msg.serialize() {
-                                        let original_bytes_len =
-                                            header.len() + dst.len() + payload.len();
-                                        let span = trace_span!("handle_message", ?sender, msg_id = ?wire_msg.msg_id());
-                                        let _span_guard = span.enter();
-                                        trace!(
-                                            "{:?} from {sender:?} length {original_bytes_len}",
-                                            LogMarker::MsgReceived,
-                                        );
-                                    } else {
-                                        // this should be unreachable
-                                        trace!(
-                                        "{:?} from {sender:?}, unknown length due to serialization issues.",
-                                        LogMarker::MsgReceived,
-                                    );
-                                    }
+                            while !offspring.is_empty() {
+                                let mut new_cmds = vec![];
 
-                                    /// Total concurrent msg parsing would be limited by cmd channel capacity
-                                    let cmd_sender = cmd_channel.clone();
-
-                                    let context = context.clone();
-                                    // is msg parsing just off the feedback loop??
-                                    // let _handle = tokio::spawn(async move {
-                                    // let cmd = Cmd::HandleMsg {
-                                    //     origin: sender,
-                                    //     wire_msg,
-                                    //     send_stream,
-                                    // };
-
-                                    let results = MyNode::handle_msg(
+                                for cmd in offspring {
+                                    let cmds = handle_cmd_off_thread_or_pass_to_mutating_channel(
+                                        cmd,
                                         context.clone(),
-                                        sender,
-                                        wire_msg,
-                                        send_stream,
+                                        mutating_cmd_channel.clone(),
                                     )
                                     .await?;
-
-                                    let _handle = tokio::spawn(async move {
-                                        let mut offspring = results;
-
-                                        while !offspring.is_empty() {
-                                            let mut new_cmds = vec![];
-
-                                            for cmd in offspring {
-                                                let cmds = process_a_non_mutating_cmd(
-                                                    cmd,
-                                                    context.clone(),
-                                                    cmd_sender.clone(),
-                                                )
-                                                .await?;
-                                                new_cmds.extend(cmds);
-                                                // TODO: extract this out into two cmd handler channels
-                                            }
-
-                                            offspring = new_cmds;
-                                        }
-                                        Ok::<(), Error>(())
-                                    });
-                                    // let mut all_cmds = results;
-
-                                    // while cmd in all_cmds {
-                                    // // for cmd in results {
-                                    //     match cmd {
-                                    //         Cmd::ProcessClientMsg { msg_id, msg, auth, sender, send_stream } => {
-                                    //             MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, client_id, send_stream)
-                                    //         }
-                                    //     }
-                                    //     // this await prevents us pulling more msgs than the cmd handler can cope with...
-                                    //     // feeding back up the channels to qp2p and quinn where congestion control should
-                                    //     // help prevent more messages incoming for the time being
-                                    //     if let Err(error) = cmd_sender.send((cmd, vec![])).await {
-                                    //         error!("Error sending msg onto cmd channel {error:?}");
-                                    //     }
-                                    // }
-
-                                    // Ok::<(), Error>(())
-                                    // });
+                                    new_cmds.extend(cmds);
+                                    // TODO: extract this out into two cmd handler channels
                                 }
-                            };
-                            // // this await prevents us pulling more msgs than the cmd handler can cope with...
-                            // // feeding back up the channels to qp2p and quinn where congestion control should
-                            // // help prevent more messages incoming for the time being
-                            // if let Err(error) = cmd_channel.send((cmd, vec![])).await {
-                            //     error!("Error sending msg onto cmd channel {error:?}");
-                            // }
 
+                                offspring = new_cmds;
+                            }
                             Ok::<(), Error>(())
                         });
                     }
@@ -490,10 +459,10 @@ impl FlowCtrl {
     }
 }
 
-async fn process_a_non_mutating_cmd(
+async fn handle_cmd_off_thread_or_pass_to_mutating_channel(
     cmd: Cmd,
     context: NodeContext,
-    cmd_sender: CmdChannel,
+    mutating_cmd_channel: CmdChannel,
 ) -> Result<Vec<Cmd>, Error> {
     let mut new_cmds = vec![];
     match cmd {
@@ -566,7 +535,7 @@ async fn process_a_non_mutating_cmd(
 
         _ => {
             debug!("child process not handled in thread: {cmd:?}");
-            if let Err(error) = cmd_sender.send((cmd, vec![])).await {
+            if let Err(error) = mutating_cmd_channel.send((cmd, vec![])).await {
                 error!("Error sending msg onto cmd channel {error:?}");
             }
         }

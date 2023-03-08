@@ -355,7 +355,10 @@ fn send(msg_id: MsgId, mut link: NodeLink, bytes: UsrMsgBytes, comm_events: Send
         trace!("Sending message bytes ({bytes_len} bytes) w/ {msg_id:?} to {node_id:?}");
         match link.node_link_send(msg_id, bytes).await {
             Ok(()) => {
-                trace!("Msg {msg_id:?} sent to {node_id:?} and took: {:?}", start.elapsed());
+                trace!(
+                    "Msg {msg_id:?} sent to {node_id:?} and took: {:?}",
+                    start.elapsed()
+                );
             }
             Err(error) => {
                 error!("Sending message (msg_id: {msg_id:?}) to {node_id:?} failed: {error} and took: {:?}",  start.elapsed());
