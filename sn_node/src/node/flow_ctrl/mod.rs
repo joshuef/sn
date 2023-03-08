@@ -348,6 +348,8 @@ impl FlowCtrl {
         // we'll update this as we go
         let mut context = context;
 
+        // TODO: make this handle cmds itself... and we weither send to modifying loop
+        // or here...
         let _handle = tokio::task::spawn(async move {
             while let Some(event) = incoming_msg_events.recv().await {
                 let capacity = cmd_channel.capacity();
@@ -392,6 +394,8 @@ impl FlowCtrl {
                                     wire_msg,
                                     send_stream,
                                 }) => {
+
+                                    let start = Instant::now();
                                     if let Ok((header, dst, payload)) = wire_msg.serialize() {
                                         let original_bytes_len =
                                             header.len() + dst.len() + payload.len();
