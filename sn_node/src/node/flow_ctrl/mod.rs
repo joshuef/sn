@@ -16,7 +16,7 @@ mod periodic_checks;
 pub(crate) mod tests;
 pub(crate) use cmd_ctrl::CmdCtrl;
 
-use super::{core::NodeContext, DataStorage};
+use super::{core::NodeContext, node_starter::CmdChannel, DataStorage};
 use periodic_checks::PeriodicChecksTimestamps;
 
 use crate::node::{
@@ -394,7 +394,6 @@ impl FlowCtrl {
                                     wire_msg,
                                     send_stream,
                                 }) => {
-
                                     let start = Instant::now();
                                     if let Ok((header, dst, payload)) = wire_msg.serialize() {
                                         let original_bytes_len =
@@ -437,94 +436,14 @@ impl FlowCtrl {
 
                                     while !offspring.is_empty() {
                                         let mut new_cmds = vec![];
+
                                         for cmd in offspring {
-                                            match cmd {
-                                                Cmd::ProcessClientMsg {
-                                                    msg_id,
-                                                    msg,
-                                                    auth,
-                                                    sender,
-                                                    send_stream,
-                                                } => {
-                                                    if let Some(stream) = send_stream {
-                                                        let fresh =
-                                                            MyNode::handle_client_msg_for_us(
-                                                                context.clone(),
-                                                                msg_id,
-                                                                msg,
-                                                                auth,
-                                                                sender,
-                                                                stream,
-                                                            )
-                                                            .await?;
-                                                        // let fresh = MyNode::process_cmd_with_context(cmd, context.clone()).await?;
-                                                        new_cmds.extend(fresh);
-                                                    } else {
-                                                        debug!("dropping client cmd w/ no response stream")
-                                                    }
-                                                }
-                                                Cmd::SendMsg {
-                                                    msg,
-                                                    msg_id,
-                                                    recipients,
-                                                } => {
-                                                    let recipients = recipients
-                                                        .into_iter()
-                                                        .map(NodeId::from)
-                                                        .collect();
-
-                                                    MyNode::send_msg(
-                                                        msg,
-                                                        msg_id,
-                                                        recipients,
-                                                        context.clone(),
-                                                    )?;
-                                                }
-                                                Cmd::SendDataResponse {
-                                                    msg,
-                                                    msg_id,
-                                                    correlation_id,
-                                                    send_stream,
-                                                    client_id,
-                                                } => {
-                                                    if let Some(x) = MyNode::send_data_response(
-                                                        msg,
-                                                        msg_id,
-                                                        correlation_id,
-                                                        send_stream,
-                                                        context.clone(),
-                                                        client_id,
-                                                    )
-                                                    .await? {
-                                                        new_cmds.push(x);
-                                                    }
-                                                }
-                                                Cmd::SendAndForwardResponseToClient {
-                                                    wire_msg,
-                                                    targets,
-                                                    client_stream,
-                                                    client_id,
-                                                } => {
-                                                    MyNode::send_and_forward_response_to_client(
-                                                        wire_msg,
-                                                        context.clone(),
-                                                        targets,
-                                                        client_stream,
-                                                        client_id,
-                                                    )?;
-                                                }
-
-                                                _ => {
-                                                    debug!("child process not handled in thread: {cmd:?}");
-                                                    if let Err(error) =
-                                                        cmd_sender.send((cmd, vec![])).await
-                                                    {
-                                                        error!(
-                                                        "Error sending msg onto cmd channel {error:?}"
-                                                    );
-                                                    }
-                                                }
-                                            }
+                                            let cmds = process_a_non_mutating_cmd(
+                                                cmd,
+                                                context.clone(),
+                                                cmd_sender.clone(),
+                                            )
+                                            .await;
                                         }
 
                                         offspring = new_cmds;
@@ -565,4 +484,89 @@ impl FlowCtrl {
             }
         });
     }
+}
+
+async fn process_a_non_mutating_cmd(
+    cmd: Cmd,
+    context: NodeContext,
+    cmd_sender: CmdChannel,
+) -> Result<Vec<Cmd>, Error> {
+    let mut new_cmds = vec![];
+    match cmd {
+        Cmd::ProcessClientMsg {
+            msg_id,
+            msg,
+            auth,
+            sender,
+            send_stream,
+        } => {
+            if let Some(stream) = send_stream {
+                let fresh = MyNode::handle_client_msg_for_us(
+                    context.clone(),
+                    msg_id,
+                    msg,
+                    auth,
+                    sender,
+                    stream,
+                )
+                .await?;
+                // let fresh = MyNode::process_cmd_with_context(cmd, context.clone()).await?;
+                new_cmds.extend(fresh);
+            } else {
+                debug!("dropping client cmd w/ no response stream")
+            }
+        }
+        Cmd::SendMsg {
+            msg,
+            msg_id,
+            recipients,
+        } => {
+            let recipients = recipients.into_iter().map(NodeId::from).collect();
+
+            MyNode::send_msg(msg, msg_id, recipients, context.clone())?;
+        }
+        Cmd::SendDataResponse {
+            msg,
+            msg_id,
+            correlation_id,
+            send_stream,
+            client_id,
+        } => {
+            if let Some(x) = MyNode::send_data_response(
+                msg,
+                msg_id,
+                correlation_id,
+                send_stream,
+                context.clone(),
+                client_id,
+            )
+            .await?
+            {
+                new_cmds.push(x);
+            }
+        }
+        Cmd::SendAndForwardResponseToClient {
+            wire_msg,
+            targets,
+            client_stream,
+            client_id,
+        } => {
+            MyNode::send_and_forward_response_to_client(
+                wire_msg,
+                context.clone(),
+                targets,
+                client_stream,
+                client_id,
+            )?;
+        }
+
+        _ => {
+            debug!("child process not handled in thread: {cmd:?}");
+            if let Err(error) = cmd_sender.send((cmd, vec![])).await {
+                error!("Error sending msg onto cmd channel {error:?}");
+            }
+        }
+    }
+
+    Ok(new_cmds)
 }
