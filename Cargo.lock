@@ -3558,8 +3558,6 @@ dependencies = [
 [[package]]
 name = "self_encryption"
 version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1010ea71bdf29522bd1940b645c79b805d83f1f9f07f194ed1132348fe448043"
 dependencies = [
  "aes",
  "bincode",

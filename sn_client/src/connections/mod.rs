@@ -84,13 +84,17 @@ impl NodeLinks {
             // final double check
             let mut links = self.links.write().await;
             links.entry(*node_id).or_insert(a_link.clone());
+
             // .insert(key, value)
 
             debug!(
                 "Time to get link (after write lock) was: {:?}",
                 start.elapsed()
             );
-            a_link
+            match links.get(node_id).cloned() {
+                Some(link) => link,
+                None => a_link
+            }
         } else {
             debug!("Time to get link was: {:?}", start.elapsed());
             a_link

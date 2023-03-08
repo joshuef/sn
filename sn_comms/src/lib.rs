@@ -65,7 +65,7 @@ use qp2p::{Endpoint, SendStream, UsrMsgBytes};
 use std::{
     collections::{BTreeMap, BTreeSet},
     net::SocketAddr,
-    time::Instant,
+    time::{Instant, Duration},
 };
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
@@ -122,6 +122,7 @@ impl Comm {
     ) -> Result<(Self, Receiver<CommEvent>)> {
         let (our_endpoint, incoming_conns) = Endpoint::builder()
             .addr(local_addr)
+            .keep_alive_interval(Some(Duration::from_secs(3)))
             .max_concurrent_bidi_streams(3000)
             .max_concurrent_uni_streams(3000)
             .idle_timeout(70_000)

@@ -28,7 +28,7 @@ use tracing::trace;
 use xor_name::XorName;
 
 // Maximum number of concurrent chunks to be uploaded/retrieved for a file
-const CHUNKS_BATCH_MAX_SIZE: usize = 500;
+const CHUNKS_BATCH_MAX_SIZE: usize = 25;
 
 /// List of results obtained when querying a chunk to several replicas.
 // TODO: expand this definition to support other types of data like Registers.

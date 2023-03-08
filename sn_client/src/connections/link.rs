@@ -54,7 +54,7 @@ impl Link {
         );
         let (mut send_stream, recv_stream) = conn.open_bi().await.map_err(LinkError::Connection)?;
 
-        debug!("{msg_id:?} to {node_id:?} bidi opened");
+        debug!("Writing {msg_id:?} to {node_id:?} bidi opened");
         // send_stream.set_priority(10);
         send_stream
             .send_user_msg(bytes.clone())

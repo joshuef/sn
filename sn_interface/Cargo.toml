@@ -36,7 +36,7 @@ rand = "~0.8.5"
 rand-07 = { package = "rand", version = "0.7.3" }                                    # required till ed25519-dalek upgrades to rand v0.8
 rayon = "1.5.1"
 rmp-serde = "1.0.0"
-self_encryption = "~0.28.0"
+self_encryption = {path="../../self_encryption"}
 serde = { version = "1.0.111", features = ["derive", "rc"] }
 serde_bytes = "~0.11.5"
 serde_json = "1.0.53"
