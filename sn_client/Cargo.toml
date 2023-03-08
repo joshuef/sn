@@ -62,7 +62,7 @@ itertools = "~0.10.0"
 lazy_static = "1"
 multibase = "~0.9.1"
 num_cpus = "1.13.0"
-qp2p = "~0.36.2"
+qp2p = { path="../../qp2p"}
 rand = "~0.8.5"
 rayon = "1.5.1"
 rmp-serde = "1.0.0"
