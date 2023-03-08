@@ -585,8 +585,8 @@ mod tests {
         assert_eq!(concurrent_client_count, clients.len());
 
         let mut tasks = vec![];
-
         let bytes = random_bytes(5 * 1024 * 1024);
+
         for client in clients {
             // create random file with random bytes for this client 5mb
             // let file = LargeFile::new(bytes)?;
