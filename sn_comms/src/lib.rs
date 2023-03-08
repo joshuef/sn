@@ -65,6 +65,7 @@ use qp2p::{Endpoint, SendStream, UsrMsgBytes};
 use std::{
     collections::{BTreeMap, BTreeSet},
     net::SocketAddr,
+    time::Instant,
 };
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
@@ -216,6 +217,14 @@ impl Comm {
     fn send_cmd(&self, cmd: CommCmd) {
         let sender = self.cmd_sender.clone();
         let _handle = task::spawn(async move {
+            let capacity = sender.capacity();
+
+            warn!("CommCmdCap: {capacity:?}");
+
+            if capacity == 0 {
+                warn!("NooooooooooooooooooCommCmdCap: {capacity:?}");
+            }
+
             let error_msg = format!("Failed to send {cmd:?} on comm cmd channel ");
             if let Err(error) = sender.send(cmd).await {
                 error!("{error_msg} due to {error}.");
@@ -257,6 +266,7 @@ fn process_cmds(
     let _handle = task::spawn(async move {
         let mut links = BTreeMap::<NodeId, NodeLink>::new();
         while let Some(cmd) = cmd_receiver.recv().await {
+            let start = Instant::now();
             trace!("Comms cmd handling: {cmd:?}");
             match cmd {
                 // This is the only place that mutates `links`.
@@ -312,6 +322,8 @@ fn process_cmds(
                     )
                 }
             }
+
+            trace!("Comms cmd handling took: {:?}", start.elapsed());
         }
     });
 }
