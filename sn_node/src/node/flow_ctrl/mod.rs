@@ -71,7 +71,7 @@ impl RejoinReason {
 
 /// Events for the msg handling loop
 #[derive(Debug)]
-enum ReadOnlyProcessingEvent {
+pub(crate) enum ReadOnlyProcessingEvent {
     /// A msg was received from comms
     Cmd(Cmd),
     UpdateContext(NodeContext),
@@ -80,7 +80,8 @@ enum ReadOnlyProcessingEvent {
 /// Listens for incoming msgs and forms Cmds for each,
 /// Periodically triggers other Cmd Processes (eg health checks, fault detection etc)
 pub(crate) struct FlowCtrl {
-    cmd_sender_channel: Sender<(Cmd, Vec<usize>)>,
+    cmd_sender_channel: CmdChannel,
+    preprocess_cmd_sender_channel: Sender<ReadOnlyProcessingEvent>,
     fault_channels: FaultChannels,
     timestamps: PeriodicChecksTimestamps,
 }
@@ -95,11 +96,12 @@ impl FlowCtrl {
         mut incoming_msg_events: Receiver<CommEvent>,
         data_replication_receiver: Receiver<(Vec<DataAddress>, NodeId)>,
         fault_cmds_channels: (Sender<FaultsCmd>, Receiver<FaultsCmd>),
-    ) -> (Sender<(Cmd, Vec<usize>)>, Receiver<RejoinReason>) {
+    ) -> (CmdChannel, Receiver<RejoinReason>) {
         let node_context = node.context();
-        let (cmd_sender_channel, mut incoming_cmds_from_apis) = mpsc::channel(CMD_CHANNEL_SIZE);
+        let (mutating_cmd_sender_channel, mut incoming_mutating_cmds_from_apis) =
+            mpsc::channel(CMD_CHANNEL_SIZE);
         let (rejoin_network_tx, rejoin_network_rx) = mpsc::channel(STANDARD_CHANNEL_SIZE);
-        let (msg_handler_event_sender, mut msg_handler_event_reciever) =
+        let (read_only_event_sender, mut read_only_cmd_event_reciever) =
             mpsc::channel(STANDARD_CHANNEL_SIZE);
 
         let all_members = node_context
@@ -125,17 +127,18 @@ impl FlowCtrl {
         };
 
         let flow_ctrl = Self {
-            cmd_sender_channel: cmd_sender_channel.clone(),
+            cmd_sender_channel: mutating_cmd_sender_channel.clone(),
+            preprocess_cmd_sender_channel: read_only_event_sender.clone(),
             fault_channels,
             timestamps: PeriodicChecksTimestamps::now(),
         };
 
         // first start listening for msgs
-        let cmd_channel_for_msgs = cmd_sender_channel.clone();
+        let cmd_channel_for_msgs = mutating_cmd_sender_channel.clone();
 
         // a clone for sending in updates to context
-        let msg_handler_event_sender_clone = msg_handler_event_sender.clone();
-        let msg_handler_event_sender_clone_for_processing = msg_handler_event_sender.clone();
+        let msg_handler_event_sender_clone = read_only_event_sender.clone();
+        let read_only_event_sender_clone_for_processing = read_only_event_sender.clone();
 
         // simple pipe through of CommEvents - > ReadOnlyProcessingEvent
         let _handle = tokio::spawn(async move {
@@ -184,7 +187,7 @@ impl FlowCtrl {
 
                 // TODO: does this processing need to go off thread
 
-                let msg_handler_event_sender_clone = msg_handler_event_sender.clone();
+                let msg_handler_event_sender_clone = read_only_event_sender.clone();
 
                 let _handle = tokio::spawn(async move {
                     if let Err(e) = msg_handler_event_sender_clone
@@ -199,8 +202,8 @@ impl FlowCtrl {
 
         Self::listen_for_msg_handling_events(
             node_context.clone(),
-            msg_handler_event_reciever,
-            cmd_channel_for_msgs,
+            read_only_cmd_event_reciever,
+            cmd_channel_for_msgs.clone(),
         );
 
         // second do this until join
@@ -209,7 +212,7 @@ impl FlowCtrl {
                 node,
                 &mut cmd_ctrl,
                 join_retry_timeout,
-                &mut incoming_cmds_from_apis,
+                &mut incoming_mutating_cmds_from_apis,
                 &rejoin_network_tx,
             )
             .await;
@@ -217,19 +220,19 @@ impl FlowCtrl {
         let _handle = tokio::task::spawn(flow_ctrl.process_cmds_and_periodic_checks(
             node,
             cmd_ctrl,
-            incoming_cmds_from_apis,
+            incoming_mutating_cmds_from_apis,
             rejoin_network_tx,
-            msg_handler_event_sender_clone_for_processing,
+            read_only_event_sender_clone_for_processing,
         ));
 
         Self::send_out_data_for_replication(
             node_context.data_storage,
             data_replication_receiver,
-            cmd_sender_channel.clone(),
+            mutating_cmd_sender_channel.clone(),
         )
         .await;
 
-        (cmd_sender_channel, rejoin_network_rx)
+        (cmd_channel_for_msgs, rejoin_network_rx)
     }
 
     /// This runs the join process until we detect we are a network node
@@ -243,7 +246,7 @@ impl FlowCtrl {
         rejoin_network_tx: &Sender<RejoinReason>,
     ) -> MyNode {
         let mut is_member = false;
-        let cmd_channel = self.cmd_sender_channel.clone();
+        let preprocess_cmd_channel = self.preprocess_cmd_sender_channel.clone();
 
         // Fire cmd to join the network
         let mut last_join_attempt = Instant::now();
@@ -258,7 +261,7 @@ impl FlowCtrl {
                         &mut node,
                         cmd,
                         cmd_id,
-                        cmd_channel.clone(),
+                        preprocess_cmd_channel.clone(),
                         rejoin_network_tx.clone(),
                     )
                     .await;
@@ -290,10 +293,11 @@ impl FlowCtrl {
 
     // Helper to send the TryJoinNetwork cmd
     async fn send_join_network_cmd(&self) {
-        let cmd_channel_clone = self.cmd_sender_channel.clone();
+        let cmd_channel_clone = self.preprocess_cmd_sender_channel.clone();
         // send the join message...
         if let Err(error) = cmd_channel_clone
-            .send((Cmd::TryJoinNetwork, vec![]))
+            .send(ReadOnlyProcessingEvent::Cmd(Cmd::TryJoinNetwork))
+            // .send((Cmd::TryJoinNetwork, vec![]))
             .await
             .map_err(|e| {
                 error!("Failed join: {:?}", e);
@@ -316,7 +320,7 @@ impl FlowCtrl {
         rejoin_network_tx: Sender<RejoinReason>,
         read_only_processing: Sender<ReadOnlyProcessingEvent>,
     ) {
-        let cmd_channel = self.cmd_sender_channel.clone();
+        // let cmd_channel = self.cmd_sender_channel.clone();
         // first do any pending processing
         while let Some((cmd, cmd_id)) = incoming_cmds_from_apis.recv().await {
             trace!("Taking cmd off stack: {cmd:?}");
@@ -326,7 +330,7 @@ impl FlowCtrl {
                     &mut node,
                     cmd,
                     cmd_id,
-                    cmd_channel.clone(),
+                    read_only_processing.clone(),
                     rejoin_network_tx.clone(),
                 )
                 .await;
@@ -466,6 +470,11 @@ async fn handle_cmd_off_thread_or_pass_to_mutating_channel(
 ) -> Result<Vec<Cmd>, Error> {
     let mut new_cmds = vec![];
     match cmd {
+        Cmd::HandleMsg {
+            sender,
+            wire_msg,
+            send_stream,
+        } => new_cmds.extend(MyNode::handle_msg(context, sender, wire_msg, send_stream).await?),
         Cmd::ProcessClientMsg {
             msg_id,
             msg,

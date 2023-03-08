@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::FlowCtrl;
+use super::{FlowCtrl, ReadOnlyProcessingEvent};
 
 use crate::node::{
     core::NodeContext, flow_ctrl::cmds::Cmd, membership::Membership, node_starter::CmdChannel,
@@ -18,6 +18,7 @@ use sn_interface::{
 };
 
 use std::{collections::BTreeSet, time::Duration};
+use tokio::sync::mpsc::Sender;
 use tokio::time::Instant;
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(300);
@@ -223,7 +224,7 @@ impl FlowCtrl {
         if self.timestamps.last_dkg_msg_check.elapsed() > MISSING_DKG_MSG_INTERVAL {
             trace!(" ----> dkg msg periodics start");
             self.timestamps.last_dkg_msg_check = now;
-            Self::check_for_missed_dkg_messages(node, self.cmd_sender_channel.clone());
+            Self::check_for_missed_dkg_messages(node, self.preprocess_cmd_sender_channel.clone());
             trace!(" ----> dkg msg periodics done");
         }
 
@@ -344,7 +345,10 @@ impl FlowCtrl {
     }
 
     /// Checks the interval since last dkg vote received
-    fn check_for_missed_dkg_messages(node: &MyNode, sender_channel: CmdChannel) {
+    fn check_for_missed_dkg_messages(
+        node: &MyNode,
+        sender_channel: Sender<ReadOnlyProcessingEvent>,
+    ) {
         info!("Checking for DKG missed messages");
 
         let dkg_voter = &node.dkg_voter;
@@ -360,7 +364,10 @@ impl FlowCtrl {
                 // move cmd spawn off thread to not block
                 let _handle = tokio::spawn(async move {
                     for cmd in cmds {
-                        if let Err(error) = sender_channel.send((cmd, vec![])).await {
+                        // if let Err(error) = sender_channel.send((cmd, vec![])).await {
+                        if let Err(error) =
+                            sender_channel.send(ReadOnlyProcessingEvent::Cmd(cmd)).await
+                        {
                             error!("Error sending DKG gossip msgs {error:?}");
                         }
                     }
