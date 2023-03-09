@@ -123,7 +123,7 @@ impl Comm {
         let (our_endpoint, incoming_conns) = Endpoint::builder()
             .addr(local_addr)
             .keep_alive_interval(Some(Duration::from_secs(3)))
-            .max_concurrent_bidi_streams(20)
+            // .max_concurrent_bidi_streams(20)
             // .max_concurrent_uni_streams(10)
             .idle_timeout(70_000)
             .server()?;

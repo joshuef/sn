@@ -102,7 +102,7 @@ features = [
 
 [dependencies.tokio]
 version = "1.17.0"
-features = ["fs", "io-util", "macros", "rt", "sync", "parking_lot"]
+features = ["fs", "io-util", "macros", "rt-multi-thread", "sync", "parking_lot"]
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["async_tokio"] }

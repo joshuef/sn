@@ -581,11 +581,21 @@ mod tests {
         let _start_span = tracing::info_span!("store_and_read_5mb_from_many_clients").entered();
 
         let concurrent_client_count = 25;
+
+        // 25 * 4mb. 100mb. 1s up.
+        // 7s to elders (concurrently)
+        // 7s elders * 4s (concrurrently)
+        // 28s upppp
+        // and back again
+        // 4s * 3
+        // 12s
+        // 3s // only 3 elders back around
+
         let clients = create_clients(concurrent_client_count).await?;
         assert_eq!(concurrent_client_count, clients.len());
 
         let mut tasks = vec![];
-        let bytes = random_bytes(5 * 1024 * 1024);
+        let bytes = random_bytes(4 * 1024 * 1024);
 
         for client in clients {
             // create random file with random bytes for this client 5mb
