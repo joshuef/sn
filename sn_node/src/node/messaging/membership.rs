@@ -139,8 +139,8 @@ impl MyNode {
         Ok(cmds)
     }
 
-    pub(crate) fn handle_membership_anti_entropy(
-        membership_context: Option<Membership>,
+    pub(crate) fn handle_membership_anti_entropy_request(
+        membership_context: &Option<Membership>,
         node_id: NodeId,
         gen: Generation,
     ) -> Option<Cmd> {
@@ -149,7 +149,7 @@ impl MyNode {
             LogMarker::MembershipAeRequestReceived,
         );
 
-        if let Some(membership) = membership_context.as_ref() {
+        if let Some(membership) = membership_context {
             match membership.anti_entropy(gen) {
                 Ok(catchup_votes) => {
                     trace!("Sending catchup votes to {node_id:?}");

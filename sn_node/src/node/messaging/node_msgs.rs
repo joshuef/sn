@@ -235,10 +235,8 @@ impl MyNode {
                 Ok(cmds)
             }
             NodeMsg::MembershipAE(gen) => {
-                let membership_context = { node.membership.clone() };
-
                 Ok(
-                    MyNode::handle_membership_anti_entropy(membership_context, node_id, gen)
+                    MyNode::handle_membership_anti_entropy_request(&node.membership, node_id, gen)
                         .into_iter()
                         .collect(),
                 )
