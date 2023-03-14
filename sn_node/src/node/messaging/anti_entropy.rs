@@ -255,13 +255,6 @@ impl MyNode {
         let wire_msg = WireMsg::from(bounced_msg)?;
         let dst = wire_msg.dst;
         let msg_id = wire_msg.msg_id();
-        let msg_to_resend = match wire_msg.into_msg()? {
-            NetworkMsg::Node(msg) => msg,
-            _ => {
-                warn!("Not a Node NetworkMsg received in AE response. We do not handle any other type in AE msgs yet.");
-                return Ok(cmds);
-            }
-        };
 
         // If the new SAP's section key is the same as the section key set when the
         // bounced message was originally sent, we just drop it.
@@ -269,6 +262,14 @@ impl MyNode {
             error!("Dropping bounced msg ({sender:?}) received in AE-Retry from {msg_id:?} as suggested new dst section key is the same as previously sent: {:?}", sap.section_key());
             return Ok(cmds);
         }
+
+        let msg_to_resend = match wire_msg.into_msg()? {
+            NetworkMsg::Node(msg) => msg,
+            _ => {
+                warn!("Not a Node NetworkMsg received in AE response. We do not handle any other type in AE msgs yet.");
+                return Ok(cmds);
+            }
+        };
 
         trace!("Resending original {msg_id:?} to {recipient:?} with {msg_to_resend:?}");
         trace!("{}", LogMarker::AeResendAfterRedirect);
