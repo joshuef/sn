@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "novedad",
     "sn_node",
     "sn_api",
     "sn_client",

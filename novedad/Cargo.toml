@@ -1,0 +1,57 @@
+[package]
+authors = ["MaidSafe Developers <dev@maidsafe.net>"]
+description = "The Safe Network NNode Implementation."
+documentation = "https://docs.rs/sn_node"
+edition = "2021"
+homepage = "https://maidsafe.net"
+license = "GPL-3.0"
+name = "novedad"
+readme = "README.md"
+repository = "https://github.com/maidsafe/safe_network"
+version = "0.78.5"
+
+
+[features]
+default = ["statemap"]
+chaos = []
+otlp = [
+    "opentelemetry",
+    "opentelemetry-otlp",
+    "opentelemetry-semantic-conventions",
+    "tracing-opentelemetry",
+]
+statemap = []
+
+[dependencies]
+clap = { version = "3.0.0", features = ["derive"] }
+clap_complete = { version = "3.0.0" }
+color-eyre = "~0.6.0"
+dirs-next = "2.0.0"
+eyre = "~0.6.5"
+opentelemetry = { version = "0.17", features = ["rt-tokio"], optional = true }
+opentelemetry-otlp = { version = "0.10", optional = true }
+opentelemetry-semantic-conventions = { version = "0.9.0", optional = true }
+parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
+file-rotate = "~0.7.1"
+
+serde = { version = "1.0.111", features = ["derive", "rc"] }
+serde_bytes = "~0.11.5"
+serde_json = "1.0.53"
+sn_comms = { path = "../sn_comms", version = "^0.6.1" }
+sn_interface = { path = "../sn_interface", version = "^0.20.4" }
+
+sn_updater = { path = "../sn_updater", version = "^0.1.0" }
+tempfile = "3.2.0"
+thiserror = "1.0.23"
+
+tracing = "0.1"
+tracing-core = "0.1"
+tracing-appender = "~0.2.0"
+tracing-opentelemetry = { version = "0.17", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+rand = { version = "~0.8.5", features = ["small_rng"] }
+xor_name = "~5.0.0"
+
+[dependencies.tokio]
+version = "1.17.0"
+features = ["fs", "io-util", "macros", "rt", "sync", "parking_lot"]

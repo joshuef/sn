@@ -2531,6 +2531,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
 
 [[package]]
+name = "novedad"
+version = "0.78.5"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "color-eyre",
+ "dirs-next",
+ "eyre",
+ "file-rotate",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry-semantic-conventions",
+ "parking_lot",
+ "rand 0.8.5",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "sn_comms",
+ "sn_interface",
+ "sn_updater",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-core",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "xor_name",
+]
+
+[[package]]
 name = "ntapi"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
