@@ -530,7 +530,7 @@ impl MyNode {
     }
 
     pub(crate) fn handle_handover_anti_entropy_request(
-        &self,
+        handover_voting: &Option<Handover>,
         node_id: NodeId,
         gen: Generation,
     ) -> Option<Cmd> {
@@ -539,7 +539,7 @@ impl MyNode {
             LogMarker::HandoverAeRequestReceived,
         );
 
-        if let Some(handover) = self.handover_voting.as_ref() {
+        if let Some(handover) = handover_voting {
             match handover.anti_entropy(gen) {
                 Ok(catchup_votes) => Some(Cmd::send_msg(
                     NodeMsg::HandoverVotes(catchup_votes),

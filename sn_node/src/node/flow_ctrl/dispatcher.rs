@@ -13,12 +13,19 @@ use sn_interface::{
     network_knowledge::SectionTreeUpdate,
     types::{NodeId, Participant},
 };
+use tokio::sync::mpsc::Sender;
 
 use std::time::Instant;
 
+use super::FlowCtrlCmd;
+
 impl MyNode {
     /// Handles a single cmd.
-    pub(crate) async fn process_cmd(cmd: Cmd, node: &mut MyNode) -> Result<Vec<Cmd>> {
+    pub(crate) async fn process_cmd(
+        cmd: Cmd,
+        node: &mut MyNode,
+        flow_cmd_sender: Sender<FlowCtrlCmd>,
+    ) -> Result<Vec<Cmd>> {
         let context = node.context();
         let start = Instant::now();
         let cmd_string = format!("{cmd}");
@@ -138,7 +145,18 @@ impl MyNode {
                 msg,
                 node_id,
                 send_stream,
-            } => MyNode::handle_node_msg(node, context, msg_id, msg, node_id, send_stream).await?,
+            } => {
+                MyNode::handle_node_msg(
+                    node,
+                    context,
+                    msg_id,
+                    msg,
+                    node_id,
+                    send_stream,
+                    flow_cmd_sender,
+                )
+                .await?
+            }
             Cmd::ProcessClientMsg {
                 msg_id,
                 msg,

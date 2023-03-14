@@ -66,7 +66,7 @@ impl CmdCtrl {
         #[cfg(feature = "statemap")]
         sn_interface::statemap::log_state(node_identifier.to_string(), cmd.statemap_state());
 
-        match MyNode::process_cmd(cmd, node).await {
+        match MyNode::process_cmd(cmd, node, cmd_process_api.clone()).await {
             Ok(cmds) => {
                 let _handle = tokio::task::spawn(async move {
                     for (child_nr, cmd) in cmds.into_iter().enumerate() {

@@ -8,8 +8,10 @@
 
 use crate::{
     node::{
-        core::NodeContext, flow_ctrl::cmds::Cmd, messaging::Recipients, MyNode, RejoinReason,
-        Result,
+        core::NodeContext,
+        flow_ctrl::{cmds::Cmd, FlowCtrlCmd},
+        messaging::Recipients,
+        Error, MyNode, RejoinReason, Result,
     },
     storage::{Error as StorageError, StorageLevel},
 };
@@ -28,6 +30,7 @@ use sn_interface::{
     },
 };
 use std::collections::BTreeSet;
+use tokio::sync::mpsc::Sender;
 use xor_name::XorName;
 
 impl MyNode {
@@ -156,6 +159,7 @@ impl MyNode {
         msg: NodeMsg,
         node_id: NodeId,
         send_stream: Option<SendStream>,
+        flow_cmd_sender: Sender<FlowCtrlCmd>,
     ) -> Result<Vec<Cmd>> {
         debug!("{:?}: {msg_id:?}", LogMarker::NodeMsgToBeHandled);
 
@@ -225,21 +229,37 @@ impl MyNode {
                 }
             }
             NodeMsg::HandoverVotes(votes) => node.handle_handover_msg(node_id, votes),
-            NodeMsg::HandoverAE(gen) => Ok(node
-                .handle_handover_anti_entropy_request(node_id, gen)
-                .into_iter()
-                .collect()),
+            NodeMsg::HandoverAE(gen) => {
+                let handover = node.handover_voting.clone();
+                let _handle = tokio::spawn(async move {
+                    if let Some(cmd) =
+                        MyNode::handle_handover_anti_entropy_request(&handover, node_id, gen)
+                    {
+                        let _res = flow_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await;
+                    }
+                });
+
+                Ok(vec![])
+            }
             NodeMsg::MembershipVotes(votes) => {
                 let mut cmds = vec![];
                 cmds.extend(node.handle_membership_votes(node_id, votes)?);
                 Ok(cmds)
             }
             NodeMsg::MembershipAE(gen) => {
-                Ok(
-                    MyNode::handle_membership_anti_entropy_request(&node.membership, node_id, gen)
-                        .into_iter()
-                        .collect(),
-                )
+                let membership_context = node.membership.clone();
+
+                let _handle = tokio::spawn(async move {
+                    if let Some(cmd) = MyNode::handle_membership_anti_entropy_request(
+                        &membership_context,
+                        node_id,
+                        gen,
+                    ) {
+                        let _res = flow_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await;
+                    }
+                });
+
+                Ok(vec![])
             }
             NodeMsg::ProposeNodeOff {
                 vote_node_off: proposal,
@@ -293,7 +313,10 @@ impl MyNode {
             }
             NodeMsg::DkgAE(session_id) => {
                 trace!("Handling msg: DkgAE s{} from {}", session_id.sh(), node_id);
-                node.handle_dkg_anti_entropy(session_id, node_id)
+
+                let dkg_voter = &node.dkg_voter;
+                // dkg cannot be cloned, so stay on thread
+                MyNode::handle_dkg_anti_entropy(dkg_voter, session_id, node_id)
             }
             NodeMsg::NodeEvent(NodeEvent::CouldNotStoreData {
                 node_id,
@@ -342,11 +365,34 @@ impl MyNode {
                 // `store_data_and_respond` fn which is used when a forwarded client cmd comes in, we have to cast to ClientId here.. TO BE FIXED.
                 let sender = ClientId::from(Participant::from_node(node_id));
                 // store data and respond w/ack on the response stream
-                MyNode::store_data_and_respond(&context, data, stream, sender, msg_id).await
+
+                let _handle = tokio::spawn(async move {
+                    let cmds =
+                        MyNode::store_data_and_respond(&context, data, stream, sender, msg_id)
+                            .await?;
+                    for cmd in cmds {
+                        let _res = flow_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await;
+                    }
+
+                    Ok::<(), Error>(())
+                });
+
+                Ok(vec![])
             }
             NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateDataBatch(data_collection)) => {
                 info!("ReplicateDataBatch MsgId: {:?}", msg_id);
-                MyNode::replicate_data_batch(&context, node_id, data_collection).await
+
+                let _handle = tokio::spawn(async move {
+                    let cmds =
+                        MyNode::replicate_data_batch(&context, node_id, data_collection).await?;
+                    for cmd in cmds {
+                        let _res = flow_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await;
+                    }
+
+                    Ok::<(), Error>(())
+                });
+
+                Ok(vec![])
             }
             NodeMsg::NodeDataCmd(NodeDataCmd::SendAnyMissingRelevantData(known_data_addresses)) => {
                 info!(
@@ -355,12 +401,16 @@ impl MyNode {
                     msg_id
                 );
 
-                Ok(
-                    MyNode::get_missing_data_for_node(&context, node_id, known_data_addresses)
-                        .await
-                        .into_iter()
-                        .collect(),
-                )
+                let _handle = tokio::spawn(async move {
+                    if let Some(cmd) =
+                        MyNode::get_missing_data_for_node(&context, node_id, known_data_addresses)
+                            .await
+                    {
+                        let _res = flow_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await;
+                    }
+                });
+
+                Ok(vec![])
             }
             NodeMsg::RequestHandover { sap, sig_share } => {
                 info!("RequestHandover with msg_id {msg_id:?}");
