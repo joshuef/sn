@@ -529,7 +529,7 @@ impl MyNode {
         Ok(cmds)
     }
 
-    pub(crate) fn handle_handover_anti_entropy(
+    pub(crate) fn handle_handover_anti_entropy_request(
         &self,
         node_id: NodeId,
         gen: Generation,

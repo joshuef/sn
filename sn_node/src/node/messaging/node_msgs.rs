@@ -226,7 +226,7 @@ impl MyNode {
             }
             NodeMsg::HandoverVotes(votes) => node.handle_handover_msg(node_id, votes),
             NodeMsg::HandoverAE(gen) => Ok(node
-                .handle_handover_anti_entropy(node_id, gen)
+                .handle_handover_anti_entropy_request(node_id, gen)
                 .into_iter()
                 .collect()),
             NodeMsg::MembershipVotes(votes) => {
