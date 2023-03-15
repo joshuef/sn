@@ -147,7 +147,7 @@ impl FlowCtrl {
             flow_ctrl_cmd_sender.clone(),
             flow_ctrl_cmd_reciever,
             cmd_channel_for_msgs.clone(),
-        );
+        )?;
 
         // second do this until join
         let node = flow_ctrl
@@ -350,7 +350,7 @@ impl FlowCtrl {
         flow_ctrl_cmd_sender: Sender<FlowCtrlCmd>,
         mut flow_ctrl_cmd_reciever: Receiver<FlowCtrlCmd>,
         mutating_cmd_channel: CmdChannel,
-    ) {
+    ) -> Result<()> {
         // we'll update this as we go
         let mut context = context;
 
@@ -382,19 +382,22 @@ impl FlowCtrl {
                         let mutating_cmd_channel = mutating_cmd_channel.clone();
                         let flow_ctrl_cmd_sender = flow_ctrl_cmd_sender.clone();
 
-                        // Go off thread for parsing and handling by default
-                        // we only punt certain cmds back into the mutating channel
                         // child cmds are sent back to the main flow ctrl cmd channel for processing.
-                        let _handle = tokio::spawn(async move {
-                            handle_cmd(incoming_cmd, context.clone(), flow_ctrl_cmd_sender.clone(), mutating_cmd_channel.clone())
-                                .await?;
-
-                            Ok::<(), Error>(())
-                        });
+                        handle_cmd(
+                            incoming_cmd,
+                            context.clone(),
+                            flow_ctrl_cmd_sender.clone(),
+                            mutating_cmd_channel.clone(),
+                        )
+                        .await?;
                     }
                 };
             }
+
+            Ok::<(), Error>(())
         });
+
+        Ok(())
     }
 
     /// Simple mapping of of CommEvents -> HandleMsg / HandleCommsError.
@@ -441,14 +444,23 @@ async fn handle_cmd(
     flow_ctrl_cmd_sender: Sender<FlowCtrlCmd>,
     mutating_cmd_channel: CmdChannel,
 ) -> Result<(), Error> {
-    let mut new_cmds = vec![];
-
     match cmd {
         Cmd::HandleMsg {
             sender,
             wire_msg,
             send_stream,
-        } => new_cmds.extend(MyNode::handle_msg(context, sender, wire_msg, send_stream).await?),
+        } => {
+            let _handle = tokio::spawn(async move {
+                let cmds = MyNode::handle_msg(context, sender, wire_msg, send_stream).await?;
+                for cmd in cmds {
+                    if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
+                        error!("flow ctrl send err");
+                    }
+                }
+
+                Ok::<(), Error>(())
+            });
+        }
         Cmd::ProcessClientMsg {
             msg_id,
             msg,
@@ -456,9 +468,9 @@ async fn handle_cmd(
             client_id,
             send_stream,
         } => {
-            if let Some(stream) = send_stream {
-                new_cmds.extend(
-                    MyNode::handle_client_msg_for_us(
+            let _handle = tokio::spawn(async move {
+                if let Some(stream) = send_stream {
+                    let cmds = MyNode::handle_client_msg_for_us(
                         context.clone(),
                         msg_id,
                         msg,
@@ -466,27 +478,42 @@ async fn handle_cmd(
                         client_id,
                         stream,
                     )
-                    .await?,
-                );
-            } else {
-                debug!("dropping client cmd w/ no response stream")
-            }
+                    .await?;
+                    for cmd in cmds {
+                        if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
+                            error!("flow ctrl send err");
+                        }
+                    }
+                } else {
+                    debug!("dropping client cmd w/ no response stream")
+                }
+
+                Ok::<(), Error>(())
+            });
         }
         Cmd::SendMsg {
             msg,
             msg_id,
             recipients,
         } => {
-            let recipients = recipients.into_iter().map(NodeId::from).collect();
-            MyNode::send_msg(msg, msg_id, recipients, context.clone())?;
+            let _handle = tokio::spawn(async move {
+                let recipients = recipients.into_iter().map(NodeId::from).collect();
+                MyNode::send_msg(msg, msg_id, recipients, context.clone())?;
+
+                Ok::<(), Error>(())
+            });
         }
         Cmd::SendMsgEnqueueAnyResponse {
             msg,
             msg_id,
             recipients,
         } => {
-            debug!("send msg enque cmd...?");
-            MyNode::send_and_enqueue_any_response(msg, msg_id, context, recipients)?;
+            let _handle = tokio::spawn(async move {
+                debug!("send msg enque cmd...?");
+                MyNode::send_and_enqueue_any_response(msg, msg_id, context, recipients)?;
+
+                Ok::<(), Error>(())
+            });
         }
         Cmd::SendNodeMsgResponse {
             msg,
@@ -495,8 +522,8 @@ async fn handle_cmd(
             node_id,
             send_stream,
         } => {
-            new_cmds.extend(
-                MyNode::send_node_msg_response(
+            let _handle = tokio::spawn(async move {
+                let cmds = MyNode::send_node_msg_response(
                     msg,
                     msg_id,
                     correlation_id,
@@ -504,8 +531,16 @@ async fn handle_cmd(
                     context,
                     send_stream,
                 )
-                .await?,
-            );
+                .await?;
+
+                for cmd in cmds {
+                    if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
+                        error!("flow ctrl send err");
+                    }
+                }
+
+                Ok::<(), Error>(())
+            });
         }
         Cmd::SendDataResponse {
             msg,
@@ -514,8 +549,8 @@ async fn handle_cmd(
             send_stream,
             client_id,
         } => {
-            new_cmds.extend(
-                MyNode::send_data_response(
+            let _handle = tokio::spawn(async move {
+                let cmds = MyNode::send_data_response(
                     msg,
                     msg_id,
                     correlation_id,
@@ -523,8 +558,16 @@ async fn handle_cmd(
                     context.clone(),
                     client_id,
                 )
-                .await?,
-            );
+                .await?;
+
+                for cmd in cmds {
+                    if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
+                        error!("flow ctrl send err");
+                    }
+                }
+
+                Ok::<(), Error>(())
+            });
         }
         Cmd::TrackNodeIssue { name, issue } => {
             context.track_node_issue(name, issue);
@@ -535,13 +578,17 @@ async fn handle_cmd(
             client_stream,
             client_id,
         } => {
-            MyNode::send_and_forward_response_to_client(
-                wire_msg,
-                context.clone(),
-                targets,
-                client_stream,
-                client_id,
-            )?;
+            let _handle = tokio::spawn(async move {
+                MyNode::send_and_forward_response_to_client(
+                    wire_msg,
+                    context.clone(),
+                    targets,
+                    client_stream,
+                    client_id,
+                )?;
+
+                Ok::<(), Error>(())
+            });
         }
         Cmd::UpdateCaller {
             caller,
@@ -550,13 +597,18 @@ async fn handle_cmd(
             section_tree_update,
         } => {
             info!("Sending ae response msg for {correlation_id:?}");
-            new_cmds.push(Cmd::send_network_msg(
-                NetworkMsg::AntiEntropy(AntiEntropyMsg::AntiEntropy {
-                    section_tree_update,
-                    kind,
-                }),
-                Recipients::Single(Participant::from_node(caller)), // we're doing a mapping again here.. but this is a necessary evil while transitioning to more clarity and type safety, i.e. TO BE FIXED
-            ));
+            let _handle = tokio::spawn(async move {
+                let cmd = Cmd::send_network_msg(
+                    NetworkMsg::AntiEntropy(AntiEntropyMsg::AntiEntropy {
+                        section_tree_update,
+                        kind,
+                    }),
+                    Recipients::Single(Participant::from_node(caller)), // we're doing a mapping again here.. but this is a necessary evil while transitioning to more clarity and type safety, i.e. TO BE FIXED
+                );
+                if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
+                    error!("flow ctrl send err");
+                }
+            });
         }
         Cmd::UpdateCallerOnStream {
             caller,
@@ -566,8 +618,8 @@ async fn handle_cmd(
             correlation_id,
             stream,
         } => {
-            new_cmds.extend(
-                MyNode::send_ae_response(
+            let _handle = tokio::spawn(async move {
+                let cmds = MyNode::send_ae_response(
                     AntiEntropyMsg::AntiEntropy {
                         kind,
                         section_tree_update,
@@ -578,8 +630,16 @@ async fn handle_cmd(
                     stream,
                     context,
                 )
-                .await?,
-            );
+                .await?;
+
+                for cmd in cmds {
+                    if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
+                        error!("flow ctrl send err");
+                    }
+                }
+
+                Ok::<(), Error>(())
+            });
         }
         _ => {
             debug!("child process not handled in thread: {cmd:?}");
@@ -589,8 +649,5 @@ async fn handle_cmd(
         }
     }
 
-    for cmd in new_cmds {
-        flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await.map_err(|_| Error::TokioChannel("Putting fresh cmds in FlowCtrlCmd sender failed".to_string()))?;
-    }
     Ok(())
 }
