@@ -445,22 +445,24 @@ async fn handle_cmd(
     mutating_cmd_channel: CmdChannel,
 ) -> Result<(), Error> {
 
+    let start = Instant::now();
     match cmd {
         Cmd::HandleMsg {
             sender,
             wire_msg,
             send_stream,
         } => {
-            let cmds = MyNode::handle_msg(context, sender, wire_msg, send_stream).await?;
             let _handle = tokio::spawn(async move {
+            let cmds = MyNode::handle_msg(context, sender, wire_msg, send_stream).await?;
+            debug!("HandleMsgCmd took {:?}", start.elapsed());
                 for cmd in cmds {
                     if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
                         error!("flow ctrl send err");
                     }
                 }
+                Ok::<(), Error>(())
             });
 
-                // Ok::<(), Error>(())
         }
         Cmd::ProcessClientMsg {
             msg_id,
@@ -551,7 +553,7 @@ async fn handle_cmd(
             client_id,
         } => {
             let _handle = tokio::spawn(async move {
-                let cmds = MyNode::send_data_response(
+                if let Some(cmd) = MyNode::send_data_response(
                     msg,
                     msg_id,
                     correlation_id,
@@ -559,9 +561,7 @@ async fn handle_cmd(
                     context.clone(),
                     client_id,
                 )
-                .await?;
-
-                for cmd in cmds {
+                .await?{
                     if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
                         error!("flow ctrl send err");
                     }
