@@ -250,7 +250,7 @@ impl MyNode {
         };
 
         let elapsed = start.elapsed();
-        trace!("Cmd took {elapsed:?} {cmd_string:?} ");
+        debug!("Cmd took {elapsed:?} {cmd_string:?} ");
 
         Ok(result)
     }

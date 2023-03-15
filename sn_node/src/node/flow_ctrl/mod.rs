@@ -444,22 +444,23 @@ async fn handle_cmd(
     flow_ctrl_cmd_sender: Sender<FlowCtrlCmd>,
     mutating_cmd_channel: CmdChannel,
 ) -> Result<(), Error> {
+
     match cmd {
         Cmd::HandleMsg {
             sender,
             wire_msg,
             send_stream,
         } => {
+            let cmds = MyNode::handle_msg(context, sender, wire_msg, send_stream).await?;
             let _handle = tokio::spawn(async move {
-                let cmds = MyNode::handle_msg(context, sender, wire_msg, send_stream).await?;
                 for cmd in cmds {
                     if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
                         error!("flow ctrl send err");
                     }
                 }
-
-                Ok::<(), Error>(())
             });
+
+                // Ok::<(), Error>(())
         }
         Cmd::ProcessClientMsg {
             msg_id,
@@ -619,7 +620,7 @@ async fn handle_cmd(
             stream,
         } => {
             let _handle = tokio::spawn(async move {
-                let cmds = MyNode::send_ae_response(
+                if let Some(cmd) = MyNode::send_ae_response(
                     AntiEntropyMsg::AntiEntropy {
                         kind,
                         section_tree_update,
@@ -630,12 +631,11 @@ async fn handle_cmd(
                     stream,
                     context,
                 )
-                .await?;
-
-                for cmd in cmds {
+                .await? {
                     if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
                         error!("flow ctrl send err");
                     }
+
                 }
 
                 Ok::<(), Error>(())
