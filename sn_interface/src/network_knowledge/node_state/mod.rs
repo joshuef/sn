@@ -52,8 +52,8 @@ impl Debug for NodeState {
         let mut f = f.debug_tuple("NodeState");
         let f = f
             .field(&self.name())
-            .field(&self.addr())
-            .field(&self.state());
+            .field(&self.addr());
+            // .field(&self.state());
 
         let f = if let Some(prev_name) = self.previous_name() {
             f.field(&format!("prev_name: {prev_name:?}"))
