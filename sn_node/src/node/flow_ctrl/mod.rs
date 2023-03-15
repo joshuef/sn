@@ -106,7 +106,7 @@ impl FlowCtrl {
 
         // Our channel to process _all_ cmds. If it can, they are processed off thread with latest context,
         // otherwise they are sent to the blocking process channel
-        let (flow_ctrl_cmd_sender, flow_ctrl_cmd_reciever) = mpsc::channel(STANDARD_CHANNEL_SIZE);
+        let (flow_ctrl_cmd_sender, flow_ctrl_cmd_reciever) = mpsc::channel(CMD_CHANNEL_SIZE);
 
         let all_members = node_context
             .network_knowledge
@@ -144,6 +144,7 @@ impl FlowCtrl {
 
         Self::listen_for_flow_ctrl_cmds(
             node_context.clone(),
+            flow_ctrl_cmd_sender.clone(),
             flow_ctrl_cmd_reciever,
             cmd_channel_for_msgs.clone(),
         );
@@ -346,6 +347,7 @@ impl FlowCtrl {
     /// Spawns a task to listen for flow ctrl cmds.
     fn listen_for_flow_ctrl_cmds(
         context: NodeContext,
+        flow_ctrl_cmd_sender: Sender<FlowCtrlCmd>,
         mut flow_ctrl_cmd_reciever: Receiver<FlowCtrlCmd>,
         mutating_cmd_channel: CmdChannel,
     ) {
@@ -356,17 +358,17 @@ impl FlowCtrl {
         // or here...
         let _handle = tokio::task::spawn(async move {
             while let Some(cmd) = flow_ctrl_cmd_reciever.recv().await {
-                let capacity = mutating_cmd_channel.capacity();
+                let capacity = flow_ctrl_cmd_sender.capacity();
 
                 if capacity < 30 {
-                    warn!("CmdChannel capacity severely reduced");
+                    warn!("FlowCtrlCmdChannel capacity severely reduced");
                 }
                 if capacity == 0 {
-                    error!("CmdChannel capacity exceeded. We cannot receive messages right now!");
+                    error!("FlowCtrlCmdChannel capacity exceeded. We cannot receive messages right now!");
                 }
 
                 debug!(
-                    "FlowCtrlCmd received: {cmd:?}. Current capacity on the CmdChannel: {:?}",
+                    "FlowCtrlCmd received: {cmd:?}. Current capacity on the FlowCtrlCmdChannel: {:?}",
                     capacity
                 );
 
@@ -378,19 +380,14 @@ impl FlowCtrl {
                     FlowCtrlCmd::Handle(incoming_cmd) => {
                         let context = context.clone();
                         let mutating_cmd_channel = mutating_cmd_channel.clone();
+                        let flow_ctrl_cmd_sender = flow_ctrl_cmd_sender.clone();
 
                         // Go off thread for parsing and handling by default
                         // we only punt certain cmds back into the mutating channel
+                        // child cmds are sent back to the main flow ctrl cmd channel for processing.
                         let _handle = tokio::spawn(async move {
-                            let mut child_cmds = vec![incoming_cmd];
-
-                            while let Some(cmd) = child_cmds.pop() {
-                                child_cmds.extend(
-                                    handle_cmd(cmd, context.clone(), mutating_cmd_channel.clone())
-                                        .await?,
-                                );
-                                // TODO: extract this out into two cmd handler channels
-                            }
+                            handle_cmd(incoming_cmd, context.clone(), flow_ctrl_cmd_sender.clone(), mutating_cmd_channel.clone())
+                                .await?;
 
                             Ok::<(), Error>(())
                         });
@@ -441,8 +438,9 @@ impl FlowCtrl {
 async fn handle_cmd(
     cmd: Cmd,
     context: NodeContext,
+    flow_ctrl_cmd_sender: Sender<FlowCtrlCmd>,
     mutating_cmd_channel: CmdChannel,
-) -> Result<Vec<Cmd>, Error> {
+) -> Result<(), Error> {
     let mut new_cmds = vec![];
 
     match cmd {
@@ -591,5 +589,8 @@ async fn handle_cmd(
         }
     }
 
-    Ok(new_cmds)
+    for cmd in new_cmds {
+        flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await.map_err(|_| Error::TokioChannel("Putting fresh cmds in FlowCtrlCmd sender failed".to_string()))?;
+    }
+    Ok(())
 }
