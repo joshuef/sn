@@ -526,7 +526,7 @@ async fn handle_cmd(
             send_stream,
         } => {
             let _handle = tokio::spawn(async move {
-                let cmds = MyNode::send_node_msg_response(
+                if let Some(cmd) = MyNode::send_node_msg_response(
                     msg,
                     msg_id,
                     correlation_id,
@@ -534,9 +534,7 @@ async fn handle_cmd(
                     context,
                     send_stream,
                 )
-                .await?;
-
-                for cmd in cmds {
+                .await? {
                     if let Err(e) = flow_ctrl_cmd_sender.send(FlowCtrlCmd::Handle(cmd)).await {
                         error!("flow ctrl send err");
                     }

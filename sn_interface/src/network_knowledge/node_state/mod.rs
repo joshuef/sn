@@ -24,13 +24,15 @@ use std::{
 };
 use xor_name::{Prefix, XorName};
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Debug)]
+#[derive(custom_debug::Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 /// Node's current section membership state
 pub enum MembershipState {
     /// Node is active member of the section.
     Joined,
     /// Node went offline.
     Left,
+    #[debug(skip)]
     /// Node was relocated to a different section.
     Relocated(RelocationTrigger),
 }
