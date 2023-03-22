@@ -272,6 +272,7 @@ impl FlowCtrl {
         cmd_processing: Sender<FlowCtrlCmd>,
         context_updater_for_periodics: Sender<FlowCtrlCmd>,
     ) -> Result<()> {
+        let mut current_context = node.context();
         // first do any pending processing
         while let Some((cmd, cmd_id)) = incoming_cmds_from_apis.recv().await {
             trace!("Taking cmd off stack: {cmd:?}");
@@ -280,15 +281,13 @@ impl FlowCtrl {
                 .process_blocking_cmd_job(&mut node, cmd, cmd_id, cmd_processing.clone())
                 .await;
 
-            let mut context = node.context();
-
             // See if any changes to context mean we have finished a relocation
             // check if we can join the dst section
 
-            if let RelocationState::ReadyToJoinNewSection(proof) = &context.relocation_state {
+            if let RelocationState::ReadyToJoinNewSection(proof) = &node.relocation_state {
                 let prev_name = proof.previous_name();
                 let new_name = proof.new_name();
-                if context.network_knowledge.is_section_member(&new_name) {
+                if node.network_knowledge.is_section_member(&new_name) {
                     node.node_events_sender.broadcast(NodeEvent::RelocateEnd);
                     info!(
                         "{} for previous node: {:?} of age: {:?}: The new name is: {:?}, and new age is: {:?} (and pass in context age: {:?})",
@@ -297,25 +296,32 @@ impl FlowCtrl {
                         proof.previous_age(),
                         new_name,
                         proof.new_age(),
-                        context.info.age()
+                        node.info().age()
                     );
                     info!("We've joined a section, dropping the relocation proof.");
                     node.relocation_state = RelocationState::NoRelocation;
                 }
-                context = node.context();
             }
 
-            // Finally update our context in read only processor with each cmd
-            cmd_processing
-                .send(FlowCtrlCmd::UpdateContext(context.clone()))
-                .await
-                .map_err(|e| Error::TokioChannel(format!("cmd_processing send failed {:?}", e)))?;
+            let context_was_updated = node.update_context(&mut current_context);
 
-            // Finally update our context in periodic loop
-            context_updater_for_periodics
-                .send(FlowCtrlCmd::UpdateContext(context))
-                .await
-                .map_err(|e| Error::TokioChannel(format!("cmd_processing send failed {:?}", e)))?;
+            if context_was_updated {
+                // Finally update our context in read only processor with each cmd
+                cmd_processing
+                    .send(FlowCtrlCmd::UpdateContext(current_context.clone()))
+                    .await
+                    .map_err(|e| {
+                        Error::TokioChannel(format!("cmd_processing send failed {:?}", e))
+                    })?;
+
+                // Finally update our context in periodic loop
+                context_updater_for_periodics
+                    .send(FlowCtrlCmd::UpdateContext(current_context.clone()))
+                    .await
+                    .map_err(|e| {
+                        Error::TokioChannel(format!("cmd_processing send failed {:?}", e))
+                    })?;
+            }
         }
 
         Ok(())
@@ -497,7 +503,7 @@ async fn handle_cmd(
     flow_ctrl_cmd_sender: Sender<FlowCtrlCmd>,
     blocking_cmd_channel: CmdChannel,
 ) -> Result<(), Error> {
-    let (new_cmds, blocking_cmd) = process_cmd_non_blocking(cmd, context).await?;
+    let (new_cmds, blocking_cmd) = process_cmd_non_blocking(cmd, &context).await?;
 
     if let Some(blocking_cmd) = blocking_cmd {
         if let Err(error) = blocking_cmd_channel.send((blocking_cmd, vec![])).await {

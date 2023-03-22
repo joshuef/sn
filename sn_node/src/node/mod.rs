@@ -82,7 +82,7 @@ pub(crate) type CmdChannel = Sender<(Cmd, Vec<usize>)>;
 const SECTION_TREE_FILE_NAME: &str = "section_tree";
 const GOSSIP_SECTION_COUNT: usize = 3;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct DkgSessionInfo {
     pub(crate) session_id: DkgSessionId,
     pub(crate) authority: AuthorityProof<SectionSig>,
@@ -146,6 +146,83 @@ impl MyNode {
             fault_cmds_sender: self.fault_cmds_sender.clone(),
             relocation_state: self.relocation_state.clone(),
         }
+    }
+
+    /// Compares context to current node state, updating the NodeContext if they've diverged.
+    ///
+    /// Returns `true` if there was an update
+    ///
+    /// DataStorage , Comm  and Fault sender are not checked
+    pub(crate) fn update_context(&self, mut provided_context: &mut NodeContext) -> bool {
+        let mut update_was_required = false;
+        if self.is_elder() != provided_context.is_elder {
+            update_was_required = true;
+            provided_context.is_elder = self.is_elder();
+        }
+
+        if self.name() != provided_context.name {
+            update_was_required = true;
+            provided_context.name = self.name();
+        }
+
+        if self.info().addr != provided_context.info.addr {
+            update_was_required = true;
+            provided_context.info = self.info();
+        }
+
+        if self.keypair.to_bytes() != provided_context.keypair.to_bytes() {
+            update_was_required = true;
+            provided_context.keypair = self.keypair.clone();
+        }
+
+        if self.reward_key.to_bytes() != provided_context.reward_key.to_bytes() {
+            update_was_required = true;
+            provided_context.reward_key = self.reward_key.clone();
+        }
+
+        if self.joins_allowed != provided_context.joins_allowed {
+            update_was_required = true;
+            provided_context.joins_allowed = self.joins_allowed;
+        }
+
+        if self.joins_allowed_until_split != provided_context.joins_allowed_until_split {
+            update_was_required = true;
+            provided_context.joins_allowed_until_split = self.joins_allowed_until_split;
+        }
+        if self.relocation_state != provided_context.relocation_state {
+            update_was_required = true;
+            provided_context.relocation_state = self.relocation_state.clone();
+        }
+
+        // nothing to do this is hard coded for now
+        // if self.store_cost != provided_context.store_cost
+
+        // heavier comparisons
+        if self.network_knowledge != provided_context.network_knowledge {
+            update_was_required = true;
+            provided_context.network_knowledge = self.network_knowledge.clone();
+        }
+
+        if self.section_keys_provider != provided_context.section_keys_provider {
+            update_was_required = true;
+            provided_context.section_keys_provider = self.section_keys_provider.clone();
+        }
+
+        if self.membership != provided_context.membership {
+            update_was_required = true;
+            provided_context.membership = self.membership.clone();
+        }
+        if self.dkg_voter != provided_context.dkg_voter {
+            update_was_required = true;
+            provided_context.dkg_voter = self.dkg_voter.clone();
+        }
+
+        if self.dkg_sessions_info != provided_context.dkg_sessions_info {
+            update_was_required = true;
+            provided_context.dkg_sessions_info = self.dkg_sessions_info.clone();
+        }
+
+        update_was_required
     }
 
     #[allow(clippy::too_many_arguments)]

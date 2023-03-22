@@ -134,7 +134,7 @@ pub(crate) fn elder_candidates(
         .collect()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Membership {
     consensus: Consensus<NodeState>,
     bootstrap_members: BTreeSet<NodeState>,

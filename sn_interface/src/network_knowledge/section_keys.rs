@@ -10,6 +10,7 @@ use crate::dbcs::DbcReason;
 use crate::network_knowledge::{Error, Result, SectionAuthorityProvider};
 use crate::types::log_markers::LogMarker;
 
+use itertools::Itertools;
 use sn_dbc::{
     Commitment, DbcTransaction, Hash, IndexedSignatureShare, SpentProofContent, SpentProofShare,
 };
@@ -37,6 +38,19 @@ pub struct SectionKeysProvider {
     cache: Box<LRUCache<SectionKeyShare, KEY_CACHE_SIZE>>,
 }
 
+impl PartialEq for SectionKeyShare {
+    fn eq(&self, other: &Self) -> bool {
+        self.public_key_set == other.public_key_set
+            && self.index == other.index
+            && self.secret_key_share == other.secret_key_share
+    }
+}
+
+impl PartialEq for SectionKeysProvider {
+    fn eq(&self, other: &Self) -> bool {
+        self.cache.iter().cloned().collect_vec() == other.cache.iter().cloned().collect_vec()
+    }
+}
 impl SectionKeysProvider {
     /// Constructor.
     pub fn new(current: Option<SectionKeyShare>) -> Self {

@@ -174,7 +174,7 @@ impl RelocationProof {
 
 /// The current state of a relocating node
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RelocationState {
     /// The node is not peforming a relocation
     NoRelocation,

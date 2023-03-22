@@ -147,7 +147,7 @@ pub fn section_has_room_for_node(
 }
 
 /// Container for storing information about the network, including our own section.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NetworkKnowledge {
     /// Signed Section Authority Provider
     signed_sap: SectionSigned<SectionAuthorityProvider>,
