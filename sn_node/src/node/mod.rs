@@ -177,7 +177,7 @@ impl MyNode {
 
         if self.reward_key.to_bytes() != provided_context.reward_key.to_bytes() {
             update_was_required = true;
-            provided_context.reward_key = self.reward_key.clone();
+            provided_context.reward_key = self.reward_key;
         }
 
         if self.joins_allowed != provided_context.joins_allowed {

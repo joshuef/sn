@@ -10,14 +10,16 @@ use crate::node::{
     flow_ctrl::cmds::Cmd,
     membership::{self, Membership},
     messaging::Recipients,
-    MyNode, NodeContext, Result,
+    MyNode, Result,
 };
 
 use bls::Signature;
 use sn_consensus::{Decision, Generation, SignedVote, VoteResponse};
 use sn_interface::{
     messaging::system::{JoinResponse, NodeMsg, SectionSig, SectionSigned},
-    network_knowledge::{node_state::RelocationTrigger, MembershipState, NodeState},
+    network_knowledge::{
+        node_state::RelocationTrigger, MembershipState, NetworkKnowledge, NodeState,
+    },
     types::{log_markers::LogMarker, NodeId, Participant},
 };
 
@@ -32,7 +34,6 @@ impl MyNode {
             node_state.state()
         );
 
-        let context = &self.context();
         let prefix = self.network_knowledge.prefix();
         if let Some(membership) = self.membership.as_mut() {
             let membership_vote = match membership.propose(node_state, &prefix) {
@@ -43,7 +44,7 @@ impl MyNode {
                 }
             };
             Some(MyNode::send_to_elders(
-                context,
+                &self.network_knowledge,
                 NodeMsg::MembershipVotes(vec![membership_vote]),
             ))
         } else {
@@ -55,11 +56,15 @@ impl MyNode {
     /// Get our latest vote if any at this generation, and get cmds to resend to all elders
     /// (which should in turn trigger them to resend their votes)
     #[instrument(skip_all)]
-    pub(crate) fn membership_gossip_votes(context: &NodeContext) -> Option<Cmd> {
-        if let Some(membership) = &context.membership {
+    pub(crate) fn membership_gossip_votes(
+        membership: &Option<Membership>,
+        network_knowledge: &NetworkKnowledge,
+    ) -> Option<Cmd> {
+        if let Some(membership) = membership {
             trace!("{}", LogMarker::GossippingMembershipVotes);
             if let Ok(ae_votes) = membership.anti_entropy(membership.generation()) {
-                let cmd = MyNode::send_to_elders(context, NodeMsg::MembershipVotes(ae_votes));
+                let cmd =
+                    MyNode::send_to_elders(network_knowledge, NodeMsg::MembershipVotes(ae_votes));
                 return Some(cmd);
             }
         }
@@ -77,8 +82,7 @@ impl MyNode {
             LogMarker::MembershipVotesBeingHandled
         );
 
-        let context = &self.context();
-        let prefix = context.network_knowledge.prefix();
+        let prefix = self.network_knowledge.prefix();
 
         let mut cmds = vec![];
 
@@ -128,7 +132,7 @@ impl MyNode {
             };
 
             if let Some(vote_msg) = vote_broadcast {
-                cmds.push(MyNode::send_to_elders(context, vote_msg));
+                cmds.push(MyNode::send_to_elders(&self.network_knowledge, vote_msg));
             }
         }
 

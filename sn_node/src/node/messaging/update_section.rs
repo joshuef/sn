@@ -6,11 +6,15 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{flow_ctrl::cmds::Cmd, messaging::Recipients, MyNode, NodeContext};
+use crate::{
+    node::{flow_ctrl::cmds::Cmd, messaging::Recipients, MyNode, NodeContext},
+    storage::DataStorage,
+};
 
 use sn_interface::{
     data_copy_count,
     messaging::system::{NodeDataCmd, NodeMsg},
+    network_knowledge::NetworkKnowledge,
     types::{log_markers::LogMarker, DataAddress, NodeId},
 };
 
@@ -25,15 +29,16 @@ static MAX_REPLICATION_BATCH_SIZE: usize = 25;
 impl MyNode {
     /// Given what data the node has, we shall calculate what data the node is missing that
     /// we have, and send such data to the node.
-    #[instrument(skip(context, data_sender_has))]
+    #[instrument(skip(data_sender_has))]
     pub(crate) async fn get_missing_data_for_node(
-        context: &NodeContext,
+        data_storage: DataStorage,
+        network_knowledge: &NetworkKnowledge,
         sender: NodeId,
         data_sender_has: Vec<DataAddress>,
     ) -> Option<Cmd> {
         debug!("Getting missing data for node");
         // TODO: can cache this data stored per churn event?
-        let mut data_i_have = context.data_storage.data_addrs().await;
+        let mut data_i_have = data_storage.data_addrs().await;
         trace!("Our data got");
 
         if data_i_have.is_empty() {
@@ -44,7 +49,7 @@ impl MyNode {
         // overall queries can be reduced, the data names are scrambled.
         data_i_have.shuffle(&mut OsRng);
 
-        let members = context.network_knowledge.members();
+        let members = network_knowledge.members();
         let members_names = members.iter().map(|p2p_node| p2p_node.name());
 
         let mut data_for_sender = vec![];

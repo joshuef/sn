@@ -23,14 +23,16 @@ mod signature;
 mod streams;
 mod update_section;
 
-use crate::node::{flow_ctrl::cmds::Cmd, Error, MyNode, NodeContext, Result};
+use crate::node::{flow_ctrl::cmds::Cmd, Error, MyNode, Result};
 use sn_interface::{
     messaging::{AntiEntropyMsg, MsgKind, NetworkMsg, WireMsg},
+    network_knowledge::NetworkKnowledge,
     types::{log_markers::LogMarker, ClientId, NodeId, Participant},
 };
 
 use qp2p::SendStream;
 use std::collections::BTreeSet;
+use xor_name::XorName;
 
 #[derive(Debug, Clone)]
 pub enum Recipients {
@@ -64,18 +66,19 @@ impl IntoIterator for Recipients {
 impl MyNode {
     #[instrument(skip(wire_msg, send_stream))]
     pub(crate) async fn handle_msg(
-        context: NodeContext,
+        network_knowledge: &NetworkKnowledge,
+        our_name: XorName,
+        is_elder: bool,
         sender: Participant,
         wire_msg: WireMsg,
         send_stream: Option<SendStream>,
     ) -> Result<Vec<Cmd>> {
-        let is_elder = context.is_elder;
         let msg_id = wire_msg.msg_id();
         let msg_kind = wire_msg.kind();
 
         trace!("Handling msg {msg_id:?}. from {sender:?} Checking for AE first...");
 
-        let all_members = context.network_knowledge.members();
+        let all_members = network_knowledge.members();
 
         // we check if any member sent us this. Client messages could eg reach an elder via another elder and this
         // checks if _anyone_ forwarded it to us (including ourselves), and if so, we assume that's legit and process
@@ -88,11 +91,11 @@ impl MyNode {
         debug!("{msg_id:?} was sent from a member: {sent_from_a_member:?}");
 
         let is_for_us =
-            sent_from_a_member || wire_msg.dst().name == context.name || msg_kind.is_client_spend();
+            sent_from_a_member || wire_msg.dst().name == our_name || msg_kind.is_client_spend();
         debug!(
             "{msg_id:?} is for us? {is_for_us}: wiremsg dst name: {:?} vs our name: {:?}",
             wire_msg.dst().name,
-            context.name
+            our_name
         );
 
         // 1. is_from_us happens when we as an Elder forwarded a data msg to ourselves as data holder.
@@ -108,12 +111,8 @@ impl MyNode {
 
         // first check for AE, if this isn't an ae msg itself
         if !msg_kind.is_ae_msg() {
-            let entropy = MyNode::check_for_entropy(
-                is_elder,
-                &wire_msg,
-                &context.network_knowledge,
-                &sender,
-            )?;
+            let entropy =
+                MyNode::check_for_entropy(is_elder, &wire_msg, &network_knowledge, &sender)?;
             if let Some((update, ae_kind)) = entropy {
                 debug!("bailing early, AE found for {msg_id:?}");
                 return MyNode::generate_anti_entropy_cmds(
@@ -135,7 +134,7 @@ impl MyNode {
 
                 trace!("{:?}: {msg_id:?} ", LogMarker::ClientMsgToBeForwarded);
                 let cmd = MyNode::forward_data_and_respond_to_client(
-                    context,
+                    network_knowledge,
                     wire_msg,
                     ClientId::from(sender),
                     stream,
@@ -183,7 +182,7 @@ impl MyNode {
             NetworkMsg::AntiEntropy(AntiEntropyMsg::Probe(section_key)) => {
                 debug!("Aeprobe in");
                 let mut cmds = vec![];
-                if !context.is_elder {
+                if !is_elder {
                     info!("Dropping AEProbe since we are not an elder");
                     // early return here as we do not get health checks as adults,
                     // normal AE rules should have applied
@@ -191,7 +190,7 @@ impl MyNode {
                 }
                 trace!("Received Probe message from {}: {:?}", sender, msg_id);
                 cmds.push(MyNode::send_ae_update_to_nodes(
-                    &context,
+                    network_knowledge,
                     Recipients::Single(sender),
                     section_key,
                 ));

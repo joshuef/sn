@@ -6,8 +6,12 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{flow_ctrl::cmds::Cmd, Error, MyNode, NodeContext, Result};
+use crate::{
+    node::{flow_ctrl::cmds::Cmd, Error, MyNode, Result},
+    storage::DataStorage,
+};
 
+use ed25519_dalek::Keypair as EdKeypair;
 use sn_dbc::{
     get_public_commitments_from_transaction, Commitment, DbcTransaction, PublicKey, SpentProof,
     SpentProofShare,
@@ -20,14 +24,16 @@ use sn_interface::{
         AuthorityProof, ClientAuth, MsgId,
     },
     network_knowledge::{
-        section_keys::build_spent_proof_share, NetworkKnowledge, SectionTreeUpdate,
+        section_keys::build_spent_proof_share, NetworkKnowledge, SectionKeysProvider,
+        SectionTreeUpdate,
     },
     types::{log_markers::LogMarker, register::User, ClientId, ReplicatedData},
 };
 
 use qp2p::SendStream;
 use std::collections::BTreeSet;
-
+use std::sync::Arc;
+use xor_name::XorName;
 impl MyNode {
     /// Forms a `CmdError` msg to send back to the client over the response stream
     pub(crate) fn send_cmd_error_response_over_stream(
@@ -47,16 +53,15 @@ impl MyNode {
         auth: ClientAuth,
         client_id: ClientId,
         send_stream: SendStream,
-        context: NodeContext,
+        reward_key: PublicKey,
+        store_cost: sn_dbc::Token,
+        data_storage: DataStorage,
     ) -> Vec<Cmd> {
         let response = if let DataQuery::Spentbook(SpendQuery::GetFees(_)) = query {
             // We receive this directly from client, as an Elder, since `is_spend` is set to true (that is a very messy/confusing pattern, to be fixed).
-            NodeQueryResponse::GetFees(Ok((context.reward_key, context.store_cost)))
+            NodeQueryResponse::GetFees(Ok((reward_key, store_cost)))
         } else {
-            context
-                .data_storage
-                .query(query, User::Key(auth.public_key))
-                .await
+            data_storage.query(query, User::Key(auth.public_key)).await
         };
 
         trace!("{msg_id:?} data query response at node is: {response:?}");
@@ -74,18 +79,44 @@ impl MyNode {
     /// the `data_copy_count()` nodes, then we will send a wiremsg
     /// to ourselves, among the msgs sent to the other holders.
     pub(crate) async fn handle_client_msg_for_us(
-        context: NodeContext,
         msg_id: MsgId,
         msg: ClientMsg,
         auth: AuthorityProof<ClientAuth>,
         client_id: ClientId,
         send_stream: SendStream,
+        our_name: XorName,
+        network_knowledge: &NetworkKnowledge,
+        ed_keypair: Arc<EdKeypair>,
+        section_keys_provider: &SectionKeysProvider,
+        reward_key: PublicKey,
+        store_cost: sn_dbc::Token,
+        joins_allowed: bool,
+        joins_allowed_until_split: bool,
+        is_elder: bool,
+        data_storage: DataStorage,
     ) -> Result<Vec<Cmd>> {
         trace!("{:?}: {msg_id:?} {msg:?}", LogMarker::ClientMsgToBeHandled);
 
         match msg {
             ClientMsg::Cmd(cmd) => {
-                MyNode::handle_data_cmd(cmd, msg_id, client_id, auth, send_stream, context).await
+                MyNode::handle_data_cmd(
+                    cmd,
+                    msg_id,
+                    client_id,
+                    auth,
+                    send_stream,
+                    our_name,
+                    network_knowledge,
+                    ed_keypair,
+                    section_keys_provider,
+                    reward_key,
+                    store_cost,
+                    joins_allowed,
+                    joins_allowed_until_split,
+                    is_elder,
+                    data_storage,
+                )
+                .await
             }
             ClientMsg::Query(query) => Ok(MyNode::handle_data_query_where_stored(
                 msg_id,
@@ -93,7 +124,9 @@ impl MyNode {
                 auth.into_inner(),
                 client_id,
                 send_stream,
-                context,
+                reward_key,
+                store_cost,
+                data_storage,
             )
             .await),
         }
@@ -106,7 +139,16 @@ impl MyNode {
         client_id: ClientId,
         auth: AuthorityProof<ClientAuth>,
         send_stream: SendStream,
-        mut context: NodeContext,
+        our_name: XorName,
+        network_knowledge: &NetworkKnowledge,
+        ed_keypair: Arc<EdKeypair>,
+        section_keys_provider: &SectionKeysProvider,
+        reward_key: PublicKey,
+        store_cost: sn_dbc::Token,
+        joins_allowed: bool,
+        joins_allowed_until_split: bool,
+        is_elder: bool,
+        data_storage: DataStorage,
     ) -> Result<Vec<Cmd>> {
         // extract the data from the request
         let data_result: Result<ReplicatedData> = match data_cmd.clone() {
@@ -114,23 +156,22 @@ impl MyNode {
             DataCmd::Register(cmd) => Ok(ReplicatedData::RegisterWrite(cmd)),
             DataCmd::Spentbook(cmd) => {
                 let SpentbookCmd::Spend {
-                    network_knowledge,
+                    network_knowledge: proof_chain_sap_dag,
                     public_key,
                     tx,
                     reason,
                     spent_proofs,
                     spent_transactions,
                 } = cmd.clone();
-                if let Some((proof_chain, signed_sap)) = network_knowledge {
+                if let Some((proof_chain, signed_sap)) = proof_chain_sap_dag {
                     info!(
                         "Received updated network knowledge with the request. Will return new command \
                         to update the node network knowledge before processing the spend."
                     );
-                    let name = context.name;
                     let there_was_an_update =
-                        context.network_knowledge.update_sap_knowledge_if_valid(
+                        network_knowledge.clone().update_sap_knowledge_if_valid(
                             SectionTreeUpdate::new(signed_sap.clone(), proof_chain.clone()),
-                            &name,
+                            &our_name,
                         )?;
 
                     if there_was_an_update {
@@ -158,7 +199,13 @@ impl MyNode {
                 }
 
                 // first we validate it here at the Elder
-                let spent_share = match MyNode::validate_spentbook_cmd(cmd, &context) {
+                let spent_share = match MyNode::validate_spentbook_cmd(
+                    cmd,
+                    &network_knowledge,
+                    section_keys_provider,
+                    reward_key,
+                    store_cost,
+                ) {
                     Ok(share) => share,
                     Err(e) => {
                         return MyNode::send_error(msg_id, data_cmd, e, send_stream, client_id)
@@ -172,14 +219,28 @@ impl MyNode {
                     public_key,
                     client_id,
                     send_stream,
-                    context,
+                    our_name,
+                    network_knowledge,
+                    ed_keypair,
                 );
             }
         };
 
         match data_result {
             Ok(data) => {
-                MyNode::store_data_and_respond(&context, data, send_stream, client_id, msg_id).await
+                MyNode::store_data_and_respond(
+                    &network_knowledge,
+                    ed_keypair,
+                    data_storage,
+                    joins_allowed_until_split,
+                    joins_allowed,
+                    is_elder,
+                    data,
+                    send_stream,
+                    client_id,
+                    msg_id,
+                )
+                .await
             }
             Err(error) => MyNode::send_error(msg_id, data_cmd, error, send_stream, client_id),
         }
@@ -205,7 +266,13 @@ impl MyNode {
         Ok(vec![cmd])
     }
 
-    fn validate_spentbook_cmd(cmd: SpentbookCmd, context: &NodeContext) -> Result<SpentProofShare> {
+    fn validate_spentbook_cmd(
+        cmd: SpentbookCmd,
+        network_knowledge: &NetworkKnowledge,
+        section_keys_provider: &SectionKeysProvider,
+        reward_key: PublicKey,
+        store_cost: sn_dbc::Token,
+    ) -> Result<SpentProofShare> {
         let SpentbookCmd::Spend {
             public_key,
             tx,
@@ -223,7 +290,10 @@ impl MyNode {
             reason,
             &spent_proofs,
             &spent_transactions,
-            context,
+            network_knowledge,
+            section_keys_provider,
+            reward_key,
+            store_cost,
         )?;
 
         Ok(spent_proof_share)
@@ -236,13 +306,16 @@ impl MyNode {
         reason: DbcReason,
         spent_proofs: &BTreeSet<SpentProof>,
         spent_transactions: &BTreeSet<DbcTransaction>,
-        context: &NodeContext,
+        network_knowledge: &NetworkKnowledge,
+        section_keys_provider: &SectionKeysProvider,
+        reward_key: PublicKey,
+        store_cost: sn_dbc::Token,
     ) -> Result<SpentProofShare> {
         // verify that fee is paid (we are included as output)
-        MyNode::verify_fee(context.store_cost, context.reward_key, tx)?;
+        MyNode::verify_fee(store_cost, reward_key, tx)?;
 
         // verify the spent proofs
-        MyNode::verify_spent_proofs(spent_proofs, &context.network_knowledge)?;
+        MyNode::verify_spent_proofs(spent_proofs, &network_knowledge)?;
 
         let public_commitments_info =
             get_public_commitments_from_transaction(tx, spent_proofs, spent_transactions)?;
@@ -278,8 +351,8 @@ impl MyNode {
             public_key,
             tx,
             reason,
-            &context.network_knowledge.section_auth(),
-            &context.section_keys_provider,
+            &network_knowledge.section_auth(),
+            section_keys_provider,
             public_commitment,
         )?;
 

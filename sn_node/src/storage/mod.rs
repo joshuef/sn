@@ -14,11 +14,11 @@ mod used_space;
 
 pub use used_space::UsedSpace;
 
-pub(crate) use errors::{Error, Result};
-pub(crate) use used_space::StorageLevel;
-
 use chunks::ChunkStorage;
+
+pub(crate) use errors::{Error, Result};
 use registers::RegisterStorage;
+pub(crate) use used_space::StorageLevel;
 
 use sn_dbc::SpentProofShare;
 use sn_interface::{

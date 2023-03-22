@@ -118,7 +118,7 @@ impl FlowCtrl {
 
                 self.timestamps.request_to_relocate_check = Instant::now();
                 cmds.push(MyNode::send_to_elders(
-                    context,
+                    &context.network_knowledge,
                     NodeMsg::ProceedRelocation(trigger.clone()),
                 ));
             }
@@ -300,14 +300,17 @@ impl FlowCtrl {
                 // we want to resend the prev vote
                 if time.elapsed() >= MISSING_VOTE_INTERVAL {
                     debug!("Vote consensus appears stalled...");
-                    if let Some(cmd) = MyNode::membership_gossip_votes(context) {
+                    if let Some(cmd) = MyNode::membership_gossip_votes(
+                        &context.membership,
+                        &context.network_knowledge,
+                    ) {
                         trace!("Vote resending cmd: {cmd:?}");
 
                         cmds.push(cmd);
                     }
                     // we may also be behind, so lets request AE incase that is the case!
                     let msg = NodeMsg::MembershipAE(membership.generation());
-                    cmds.push(MyNode::send_to_elders(context, msg));
+                    cmds.push(MyNode::send_to_elders(&context.network_knowledge, msg));
                 }
             }
         }

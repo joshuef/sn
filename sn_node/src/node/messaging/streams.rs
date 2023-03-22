@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::node::{Cmd, Error, MyNode, NodeContext, Result};
+use crate::node::{Cmd, Error, MyNode, Result};
 use sn_comms::Comm;
 
 use bls::PublicKey;
@@ -30,19 +30,20 @@ impl MyNode {
         msg_id: MsgId,
         correlation_id: MsgId,
         node_id: NodeId,
-        context: NodeContext,
+        our_name: XorName,
+        current_section_key: PublicKey,
         send_stream: SendStream,
     ) -> Result<Option<Cmd>> {
         let stream_id = send_stream.id();
         info!("Sending response msg {msg_id:?} over {stream_id}");
-        let (kind, payload) = MyNode::serialize_node_msg(context.name, &msg)?;
+        let (kind, payload) = MyNode::serialize_node_msg(our_name, &msg)?;
         send_msg_on_stream(
             msg_id,
             kind,
             payload,
             Participant::from_node(node_id),
             correlation_id,
-            context.network_knowledge.section_key(),
+            current_section_key,
             send_stream,
         )
         .await
@@ -54,16 +55,17 @@ impl MyNode {
         participant: Participant,
         correlation_id: MsgId,
         send_stream: SendStream,
-        context: NodeContext,
+        our_name: XorName,
+        current_section_key: PublicKey,
     ) -> Result<Option<Cmd>> {
         info!("Sending ae response msg for {correlation_id:?}");
         send_msg_on_stream(
             msg_id,
-            MsgKind::AntiEntropy(context.name),
+            MsgKind::AntiEntropy(our_name),
             WireMsg::serialize_msg_payload(&msg)?,
             participant,
             correlation_id,
-            context.network_knowledge.section_key(),
+            current_section_key,
             send_stream,
         )
         .await
@@ -96,18 +98,20 @@ impl MyNode {
     pub(crate) fn send_and_enqueue_any_response(
         msg: NodeMsg,
         msg_id: MsgId,
-        context: NodeContext,
+        our_name: XorName,
+        current_section_key: PublicKey,
+        comm: Comm,
         recipients: BTreeSet<NodeId>,
     ) -> Result<()> {
         let targets_len = recipients.len();
         trace!("Sending out + awaiting response of {msg_id:?} to {targets_len} holder node/s {recipients:?}");
 
-        let (kind, payload) = MyNode::serialize_node_msg(context.name, &msg)?;
+        let (kind, payload) = MyNode::serialize_node_msg(our_name, &msg)?;
 
         // We create a Dst with random dst name, but we'll update it accordingly for each target
         let mut dst = Dst {
             name: XorName::default(),
-            section_key: context.network_knowledge.section_key(),
+            section_key: current_section_key,
         };
         let mut wire_msg = WireMsg::new_msg(msg_id, payload, kind, dst);
         let _bytes = wire_msg.serialize_and_cache_bytes()?;
@@ -115,7 +119,7 @@ impl MyNode {
         for target in recipients {
             dst.name = target.name();
             let bytes_to_node = wire_msg.serialize_with_new_dst(&dst)?;
-            let comm = context.comm.clone();
+            let comm = comm.clone();
             info!("About to send {msg_id:?} to holder node: {target:?}");
             comm.send_and_return_response(target, msg_id, bytes_to_node);
         }

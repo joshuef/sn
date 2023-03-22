@@ -49,7 +49,7 @@ impl MyNode {
             Ok(prev_pk) => {
                 let prev_pk = prev_pk.unwrap_or(*self.section_chain().genesis_key());
                 Ok(Some(MyNode::send_ae_update_to_nodes(
-                    context,
+                    &context.network_knowledge,
                     Recipients::Multiple(recipients),
                     prev_pk,
                 )))
@@ -63,15 +63,18 @@ impl MyNode {
 
     /// Send `AntiEntropy` update message to the specified nodes.
     pub(crate) fn send_ae_update_to_nodes(
-        context: &NodeContext,
+        network_knowledge: &NetworkKnowledge,
         recipients: Recipients,
         section_pk: BlsPublicKey,
     ) -> Cmd {
         // TODO: only send out segment of decisions instead of whole
-        let section_decisions = context.network_knowledge.section_decisions();
+        let section_decisions = network_knowledge.section_decisions();
 
         let ae_msg = NetworkMsg::AntiEntropy(AntiEntropyMsg::AntiEntropy {
-            section_tree_update: MyNode::generate_ae_section_tree_update(context, Some(section_pk)),
+            section_tree_update: MyNode::generate_ae_section_tree_update(
+                network_knowledge,
+                Some(section_pk),
+            ),
             kind: AntiEntropyKind::Update { section_decisions },
         });
 
@@ -108,7 +111,9 @@ impl MyNode {
 
             // Send AE update to sibling section's new Elders
             Ok(vec![MyNode::send_ae_update_to_nodes(
-                prev_context,
+                // TODO: double check this change from prev_context makes sense
+                // why would we update with prev context and not current?
+                &self.network_knowledge,
                 Recipients::Multiple(promoted_sibling_elders),
                 previous_section_key,
             )])
@@ -121,19 +126,18 @@ impl MyNode {
     // Private helper to generate a SectionTreeUpdate to update
     // a participant about our SAP, with proof_chain and members list.
     fn generate_ae_section_tree_update(
-        context: &NodeContext,
+        network_knowledge: &NetworkKnowledge,
         dst_section_key: Option<BlsPublicKey>,
     ) -> SectionTreeUpdate {
-        let signed_sap = context.network_knowledge.signed_sap();
+        let signed_sap = network_knowledge.signed_sap();
 
         let proof_chain = dst_section_key
             .and_then(|key| {
-                context
-                    .network_knowledge
+                network_knowledge
                     .get_proof_chain_to_current_section(&key)
                     .ok()
             })
-            .unwrap_or_else(|| context.network_knowledge.section_chain());
+            .unwrap_or_else(|| network_knowledge.section_chain());
 
         SectionTreeUpdate::new(signed_sap, proof_chain)
     }

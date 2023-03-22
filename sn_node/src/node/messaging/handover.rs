@@ -11,13 +11,15 @@ use crate::node::{
     handover::{Error as HandoverError, Handover},
     membership::{elder_candidates, try_split_dkg},
     messaging::Recipients,
-    Error, MyNode, NodeContext, NodeMsg, Result,
+    Error, MyNode, NodeMsg, Result,
 };
 
 use sn_consensus::{Generation, SignedVote, VoteResponse};
 use sn_interface::{
     messaging::{system::SectionSigned, MsgId, SectionSigShare},
-    network_knowledge::{SapCandidate, SectionAuthUtils, SectionAuthorityProvider},
+    network_knowledge::{
+        NetworkKnowledge, SapCandidate, SectionAuthUtils, SectionAuthorityProvider,
+    },
     types::{log_markers::LogMarker, NodeId, Participant, SectionSig},
 };
 
@@ -134,7 +136,6 @@ impl MyNode {
         &mut self,
         sap_candidates: SapCandidate,
     ) -> Result<Vec<Cmd>> {
-        let context = &self.context();
         let mut cmds = vec![];
         match &self.handover_voting {
             Some(handover_voting_state) => {
@@ -143,7 +144,10 @@ impl MyNode {
                 self.handover_voting = Some(vs.clone());
 
                 info!("{}: {:?}", LogMarker::HandoverConsensusTrigger, &vote);
-                cmds.push(MyNode::broadcast_handover_vote_msg(context, vote));
+                cmds.push(MyNode::broadcast_handover_vote_msg(
+                    &self.network_knowledge,
+                    vote,
+                ));
 
                 // For handover 2 elders sap, only the handover vote from genesis is required.
                 // Which make the vote state reached consensus when initialized.
@@ -168,13 +172,13 @@ impl MyNode {
 
     /// Broadcast handover Vote message to Elders
     pub(crate) fn broadcast_handover_vote_msg(
-        context: &NodeContext,
+        network_knowledge: &NetworkKnowledge,
         signed_vote: SignedVote<SapCandidate>,
     ) -> Cmd {
         // Deliver each SignedVote to all current Elders
         trace!("Broadcasting Vote msg: {:?}", signed_vote);
 
-        MyNode::send_to_elders(context, NodeMsg::HandoverVotes(vec![signed_vote]))
+        MyNode::send_to_elders(network_knowledge, NodeMsg::HandoverVotes(vec![signed_vote]))
     }
 
     /// Broadcast the decision of the terminated handover consensus by proposing the HandoverCompleted SAP(s)
@@ -242,9 +246,9 @@ impl MyNode {
     }
 
     /// helper to handle a handover vote
-    #[instrument(skip(context), level = "trace")]
+    #[instrument(skip(network_knowledge), level = "trace")]
     fn handle_vote(
-        context: &NodeContext,
+        network_knowledge: &NetworkKnowledge,
         handover_state: &mut Handover,
         signed_vote: SignedVote<SapCandidate>,
         node_id: NodeId,
@@ -256,7 +260,7 @@ impl MyNode {
                     signed_vote
                 );
                 Ok(vec![MyNode::broadcast_handover_vote_msg(
-                    context,
+                    network_knowledge,
                     signed_vote,
                 )])
             }
@@ -436,12 +440,13 @@ impl MyNode {
         signed_vote: SignedVote<SapCandidate>,
     ) -> Result<Vec<Cmd>> {
         self.check_signed_vote_saps(&signed_vote)?;
-        let context = &self.context();
+
         match &self.handover_voting {
             Some(handover_state) => {
                 let had_consensus_value = handover_state.consensus_value().is_some();
                 let mut state = handover_state.clone();
-                let mut cmds = MyNode::handle_vote(context, &mut state, signed_vote, node_id)?;
+                let mut cmds =
+                    MyNode::handle_vote(&self.network_knowledge, &mut state, signed_vote, node_id)?;
 
                 // check for unsuccessful termination
                 state.handle_empty_set_decision();

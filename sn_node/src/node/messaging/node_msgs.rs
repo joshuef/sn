@@ -10,11 +10,11 @@ use crate::{
     node::{
         flow_ctrl::cmds::Cmd, messaging::Recipients, MyNode, NodeContext, RejoinReason, Result,
     },
-    storage::{Error as StorageError, StorageLevel},
+    storage::{DataStorage, Error as StorageError, StorageLevel},
 };
-use sn_comms::Comm;
-
+use ed25519_dalek::Keypair as EdKeypair;
 use qp2p::{SendStream, UsrMsgBytes};
+use sn_comms::Comm;
 use sn_fault_detection::IssueType;
 use sn_interface::{
     messaging::{
@@ -27,6 +27,7 @@ use sn_interface::{
     SectionAuthorityProvider,
 };
 use std::collections::BTreeSet;
+use std::sync::Arc;
 use xor_name::XorName;
 
 impl MyNode {
@@ -52,8 +53,8 @@ impl MyNode {
     }
 
     /// Send a (`NodeMsg`) message to all Elders in our section
-    pub(crate) fn send_to_elders(context: &NodeContext, msg: NodeMsg) -> Cmd {
-        let sap = context.network_knowledge.section_auth();
+    pub(crate) fn send_to_elders(network_knowledge: &NetworkKnowledge, msg: NodeMsg) -> Cmd {
+        let sap = network_knowledge.section_auth();
         let recipients = sap.elders_set();
         Cmd::send_msg(msg, Recipients::Multiple(recipients))
     }
@@ -71,24 +72,31 @@ impl MyNode {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn store_data_and_respond(
-        context: &NodeContext,
+        network_knowledge: &NetworkKnowledge,
+        ed_keypair: Arc<EdKeypair>,
+        data_storage: DataStorage,
+        joins_allowed_until_split: bool,
+        joins_allowed: bool,
+        is_elder: bool,
         data: ReplicatedData,
         send_stream: SendStream,
         client_id: ClientId,
         correlation_id: MsgId,
     ) -> Result<Vec<Cmd>> {
         let mut cmds = vec![];
-        let section_pk = PublicKey::Bls(context.network_knowledge.section_key());
-        let node_keypair = Keypair::Ed25519(context.keypair.clone());
+        let section_pk = PublicKey::Bls(network_knowledge.section_key());
+
+        let node_keypair = Keypair::Ed25519(ed_keypair.clone());
+
         let data_addr = data.address();
 
         trace!("About to store data from {correlation_id:?}: {data_addr:?}");
 
         // This may return a DatabaseFull error... but we should have
         // reported StorageError::NotEnoughSpace well before this
-        let response = match context
-            .data_storage
+        let response = match data_storage
             .store(&data, section_pk, node_keypair.clone())
             .await
         {
@@ -97,9 +105,7 @@ impl MyNode {
                 if matches!(storage_level, StorageLevel::Updated(_level)) {
                     // we add a new node for every level increase of used space
                     cmds.push(Cmd::SetJoinsAllowed(true));
-                } else if context.data_storage.has_reached_min_capacity()
-                    && !context.joins_allowed_until_split
-                {
+                } else if data_storage.has_reached_min_capacity() && !joins_allowed_until_split {
                     // we accept new nodes until split, since we have reached the min capacity (i.e. storage limit)
                     cmds.push(Cmd::SetJoinsAllowedUntilSplit(true));
                 }
@@ -109,17 +115,17 @@ impl MyNode {
                 // storage full
                 error!("Not enough space to store data {data_addr:?}");
                 let msg = NodeMsg::NodeEvent(NodeEvent::CouldNotStoreData {
-                    node_id: PublicKey::from(context.keypair.public),
+                    node_id: node_keypair.public_key(),
                     data_address: data.address(),
                     full: true,
                 });
 
-                if context.is_elder && !context.joins_allowed {
+                if is_elder && !joins_allowed {
                     // we accept new nodes until split, since we ran out of space
                     cmds.push(Cmd::SetJoinsAllowedUntilSplit(true));
                 }
 
-                cmds.push(MyNode::send_to_elders(context, msg));
+                cmds.push(MyNode::send_to_elders(network_knowledge, msg));
                 CmdResponse::err(data, StorageError::NotEnoughSpace.into())?
             }
             Err(error) => {

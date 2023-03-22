@@ -89,7 +89,7 @@ impl MyNode {
         );
 
         vec![MyNode::send_to_elders(
-            &self.context(),
+            &self.network_knowledge,
             NodeMsg::ProceedRelocation(trigger),
         )]
     }

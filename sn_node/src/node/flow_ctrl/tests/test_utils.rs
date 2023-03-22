@@ -367,7 +367,7 @@ impl MyNode {
         node: &mut MyNode,
     ) -> crate::node::error::Result<Vec<Cmd>> {
         // process non blocking cmd
-        let (new_cmds, blocking_cmd) = process_cmd_non_blocking(cmd, node.context()).await?;
+        let (new_cmds, blocking_cmd) = process_cmd_non_blocking(cmd, &node.context()).await?;
         if let Some(blocking_cmd) = blocking_cmd {
             // process blocking cmd
             MyNode::process_cmd(blocking_cmd, node).await

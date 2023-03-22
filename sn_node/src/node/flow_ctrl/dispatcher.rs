@@ -63,9 +63,37 @@ impl MyNode {
                 info!("Network knowledge was updated: {updated}");
 
                 let context = if updated { node.context() } else { context };
+
+                let network_knowledge = context.network_knowledge.clone();
+                let our_name = context.name.clone();
+                let data_storage = context.data_storage.clone();
+                let is_elder = context.is_elder;
+                let joins_allowed = context.joins_allowed;
+                let reward_key = context.reward_key;
+                let store_cost = context.store_cost;
+                let ed_keypair = context.keypair;
+                let joins_allowed_until_split = context.joins_allowed_until_split;
+                let section_keys_provider = context.section_keys_provider.clone();
+
                 // TODO: This could be slow and should be moved out of blocking context
-                MyNode::handle_client_msg_for_us(context, msg_id, msg, auth, client_id, send_stream)
-                    .await?
+                MyNode::handle_client_msg_for_us(
+                    msg_id,
+                    msg,
+                    auth,
+                    client_id,
+                    send_stream,
+                    our_name,
+                    &network_knowledge,
+                    ed_keypair,
+                    &section_keys_provider,
+                    reward_key,
+                    store_cost,
+                    joins_allowed,
+                    joins_allowed_until_split,
+                    is_elder,
+                    data_storage,
+                )
+                .await?
             }
             Cmd::HandleNodeOffAgreement { proposal, sig } => {
                 node.handle_section_decision_agreement(proposal, sig)?
