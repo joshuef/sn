@@ -587,8 +587,8 @@ mod tests {
         // terminate if there are no more msgs to process
         let mut done = false;
         while !done {
-            for (key, test_node) in node_instances.iter() {
-                let mut node = test_node.write().await;
+            for (key, rw_test_node) in node_instances.iter() {
+                let mut test_node = rw_test_node.write().await;
                 let name = key.1;
                 info!("\n\n NODE: {}", name);
                 let comm_rx = comm_receivers
@@ -608,33 +608,33 @@ mod tests {
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    for cmd in node.test_handle_msg(msg, Some(name)).await? {
+                    for cmd in test_node.handle_msg(msg, Some(name)).await? {
                         info!("Got cmd {}", cmd);
                         if let Cmd::SendMsg { .. } = &cmd {
-                            assert!(node.process_cmd(cmd).await?.is_empty());
+                            assert!(test_node.process_cmd(cmd).await?.is_empty());
                         } else if let Cmd::SendMsgEnqueueAnyResponse { .. } = &cmd {
                             // The relocating node waits for the elders to allow it to join the
                             // section. It happens through a bidi stream and hence spawn it as a
                             // separate task.
-                            let test_node = test_node.clone();
+                            let rw_test_node = rw_test_node.clone();
                             join_handle_for_relocating_node = Some((
                                 name,
                                 tokio::spawn(async move {
-                                    test_node.write().await.process_cmd(cmd).await
+                                    rw_test_node.write().await.process_cmd(cmd).await
                                 }),
                             ));
                         } else if let Cmd::HandleNodeOffAgreement { .. } = &cmd {
-                            let mut send_cmd = node.process_cmd(cmd).await?;
+                            let mut send_cmd = test_node.process_cmd(cmd).await?;
                             assert_eq!(send_cmd.len(), 1);
                             let send_cmd = send_cmd.remove(0);
                             assert_matches!(&send_cmd, Cmd::SendMsg { msg: NetworkMsg::Node(msg), .. } => {
                                 assert_matches!(msg, NodeMsg::MembershipVotes(_));
                             });
-                            assert!(node.process_cmd(send_cmd).await?.is_empty());
+                            assert!(test_node.process_cmd(send_cmd).await?.is_empty());
                         } else if let Cmd::HandleMembershipDecision(_) = &cmd {
-                            let send_cmds = node.process_cmd(cmd).await?;
+                            let send_cmds = test_node.process_cmd(cmd).await?;
                             for cmd in send_cmds {
-                                assert!(node.process_cmd(cmd).await?.is_empty());
+                                assert!(test_node.process_cmd(cmd).await?.is_empty());
                             }
                         } else if let Cmd::SendNodeMsgResponse {
                             msg: NodeMsg::JoinResponse(JoinResponse::UnderConsideration),
@@ -642,13 +642,13 @@ mod tests {
                         } = &cmd
                         {
                             // Send out the `UnderConsideration` as stream response.
-                            let _ = node.process_cmd(cmd).await?;
+                            let _ = test_node.process_cmd(cmd).await?;
                         } else if let Cmd::UpdateCaller {
                             kind: AntiEntropyKind::Redirect { .. },
                             ..
                         } = &cmd
                         {
-                            let mut send_cmds = node.process_cmd(cmd).await?;
+                            let mut send_cmds = test_node.process_cmd(cmd).await?;
 
                             let send_cmd = send_cmds.remove(0);
                             assert_matches!(
@@ -661,7 +661,7 @@ mod tests {
                                     ..
                                 }
                             );
-                            assert!(node.process_cmd(send_cmd).await?.is_empty());
+                            assert!(test_node.process_cmd(send_cmd).await?.is_empty());
                         } else if let Cmd::TrackNodeIssue { .. } = &cmd {
                             // skip
                         } else {

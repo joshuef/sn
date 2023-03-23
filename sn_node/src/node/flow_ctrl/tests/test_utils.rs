@@ -6,10 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use super::network_builder::TestCommRx;
 use crate::{
     node::{
-        cfg::create_test_capacity_and_root_storage, flow_ctrl::process_cmd_non_blocking,
-        messaging::Recipients, Cmd, MyNode, NodeEventsChannel,
+        cfg::create_test_capacity_and_root_storage,
+        error::Result as NodeResult,
+        flow_ctrl::{process_cmd_non_blocking, FlowCtrlCmd},
+        messaging::Recipients,
+        Cmd, MyNode, NodeEventsChannel,
     },
     UsedSpace,
 };
@@ -30,14 +34,13 @@ use std::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet, VecDeque},
     net::{Ipv4Addr, SocketAddr},
     sync::Arc,
+    time::Duration,
 };
 use tokio::sync::{
-    mpsc::{self, error::TryRecvError, Receiver},
+    mpsc::{self, error::TryRecvError, Receiver, Sender},
     RwLock,
 };
 use xor_name::{Prefix, XorName};
-
-use super::network_builder::TestCommRx;
 
 // Process commands, allowing the user to inspect each and all of the intermediate
 // commands that are being returned by the Cmd node.
@@ -45,6 +48,8 @@ use super::network_builder::TestCommRx;
 pub(crate) struct ProcessAndInspectCmds {
     pending_cmds: VecDeque<Cmd>,
     index_inspected: usize,
+    flow_ctrl_sender: Sender<FlowCtrlCmd>,
+    flow_ctrl_receiver: Receiver<FlowCtrlCmd>,
 }
 
 impl ProcessAndInspectCmds {
@@ -56,10 +61,12 @@ impl ProcessAndInspectCmds {
         // We initialise `index_inspected` with MAX value, it will wraparound to 0 upon the first
         // call to `next()` method, thus making sure the first cmd is inspected in first iteration.
         let index_inspected = usize::MAX;
-
+        let (sender, receiver) = mpsc::channel(1000);
         Self {
             pending_cmds: VecDeque::from(cmds),
             index_inspected,
+            flow_ctrl_sender: sender,
+            flow_ctrl_receiver: receiver,
         }
     }
 
@@ -72,7 +79,7 @@ impl ProcessAndInspectCmds {
         msg: ClientMsg,
         node: &mut MyNode,
         mut comm_rx: Receiver<CommEvent>,
-    ) -> crate::node::error::Result<ProcessAndInspectCmds> {
+    ) -> crate::node::Result<ProcessAndInspectCmds> {
         let context = node.context();
         let (msg_id, serialised_payload, msg_kind, _auth) =
             get_client_msg_parts_for_handling(&msg)?;
@@ -116,7 +123,9 @@ impl ProcessAndInspectCmds {
                 ..
             })) => {
                 let cmds = MyNode::handle_msg(
-                    node.context(),
+                    &node.network_knowledge,
+                    node.name(),
+                    node.is_elder(),
                     sn_interface::types::Participant::from_node(node_id),
                     wire_msg,
                     Some(send_stream),
@@ -124,14 +133,11 @@ impl ProcessAndInspectCmds {
                 .await?;
                 Ok(Self::from(cmds))
             }
-            _ => Err(crate::node::error::Error::NoClientResponseStream),
+            _ => Err(crate::node::Error::NoClientResponseStream),
         }
     }
 
-    pub(crate) async fn next(
-        &mut self,
-        node: &mut MyNode,
-    ) -> crate::node::error::Result<Option<&Cmd>> {
+    pub(crate) async fn next(&mut self, node: &mut MyNode) -> crate::node::Result<Option<&Cmd>> {
         let mut next_index = self.index_inspected.wrapping_add(1);
         if next_index < self.pending_cmds.len() {
             let cmd = self.pending_cmds.get(next_index);
@@ -148,7 +154,13 @@ impl ProcessAndInspectCmds {
                     | Cmd::SendDataResponse { .. }
                     | Cmd::SendAndForwardResponseToClient { .. }
             ) {
-                let new_cmds = MyNode::test_process_cmd(cmd, node).await?;
+                let new_cmds = MyNode::test_process_cmd(
+                    cmd,
+                    node,
+                    &self.flow_ctrl_sender,
+                    &mut self.flow_ctrl_receiver,
+                )
+                .await?;
                 self.pending_cmds.extend(new_cmds);
 
                 if next_index < self.pending_cmds.len() {
@@ -190,30 +202,42 @@ pub(crate) fn get_client_msg_parts_for_handling(
     Ok((MsgId::new(), payload, kind, auth_proof))
 }
 
-/// Bundles the `MyNode` along with the `TestMsgTracker` to easily track the
-/// NodeMsgs during tests
+/// A wrapper around `MyNode` to enable some it to function without having to initialize FlowCtrl
 pub(crate) struct TestNode {
     pub(crate) node: MyNode,
     pub(crate) msg_tracker: Arc<RwLock<TestMsgTracker>>,
+    pub(crate) flow_ctrl_sender: Sender<FlowCtrlCmd>,
+    pub(crate) flow_ctrl_receiver: Receiver<FlowCtrlCmd>,
 }
 
 impl TestNode {
     pub(crate) fn new(node: MyNode, msg_tracker: Arc<RwLock<TestMsgTracker>>) -> Self {
-        Self { node, msg_tracker }
+        let (flow_ctrl_sender, flow_ctrl_receiver) = mpsc::channel(1000);
+        Self {
+            node,
+            msg_tracker,
+            flow_ctrl_sender,
+            flow_ctrl_receiver,
+        }
     }
 
-    /// Tracks the cmds before executing them
+    /// Processes the commands and also tracks any SendMsg* cmds.
     pub(crate) async fn process_cmd(&mut self, cmd: Cmd) -> Result<Vec<Cmd>> {
         self.msg_tracker.write().await.track(&cmd);
         let cmd_string = cmd.to_string();
-        MyNode::test_process_cmd(cmd, &mut self.node)
-            .await
-            .wrap_err(format!("Error processing cmd {cmd_string}"))
+        MyNode::test_process_cmd(
+            cmd,
+            &mut self.node,
+            &self.flow_ctrl_sender,
+            &mut self.flow_ctrl_receiver,
+        )
+        .await
+        .wrap_err(format!("Error while processing cmd {cmd_string:?}"))
     }
 
     /// Handle and keep track of msgs from clients and nodes.
     /// Contains optional relocation_old_name to deal with name change during relocation.
-    pub(crate) async fn test_handle_msg(
+    pub(crate) async fn handle_msg(
         &mut self,
         msg: MsgReceived,
         relocation_old_name: Option<XorName>,
@@ -241,19 +265,22 @@ impl TestNode {
             send_stream: msg.send_stream,
         };
 
-        let msg_cmds = self
+        let process_node_msg = self
             .process_cmd(handle_node_msg_cmd)
             .await
             .wrap_err("Error while handling node_msg, Cmd::HandleMsg")?;
-        let mut cmds = Vec::new();
-        for cmd in msg_cmds {
-            let cmd_string = cmd.to_string();
-            match self.process_cmd(cmd).await {
-                Ok(new_cmds) => cmds.extend(new_cmds),
-                Err(err) => warn!("Error while handling node_msg, {cmd_string:?}: {err:?}"),
-            }
+        // The `handle_msg()` which processes the above command might lead to several other Cmds like `ProcessNodeMsg`,
+        // `ProcessClientMsg` etc. These are handled here instead of handling them in every test case.
+        let mut new_cmds = Vec::new();
+        for cmd in process_node_msg {
+            let new_cmd = self
+                .process_cmd(cmd)
+                .await
+                .wrap_err("Error while handling node_msg, Cmd::HandleMsg")?;
+            new_cmds.extend(new_cmd);
         }
-        Ok(cmds)
+
+        Ok(new_cmds)
     }
 }
 
@@ -361,18 +388,39 @@ impl Cmd {
 /// Since this is in a module marked as #[test], this functionality will only be present in the
 /// testing context.
 impl MyNode {
-    /// Helper to process both non-blocking and blocking cmds and return the new cmds
+    /// Helper to process both non-blocking and blocking cmds and return the new cmds.
     pub(crate) async fn test_process_cmd(
         cmd: Cmd,
         node: &mut MyNode,
-    ) -> crate::node::error::Result<Vec<Cmd>> {
+        flow_ctrl_cmd_sender: &Sender<FlowCtrlCmd>,
+        flow_ctrl_receiver: &mut Receiver<FlowCtrlCmd>,
+    ) -> NodeResult<Vec<Cmd>> {
         // process non blocking cmd
-        let (new_cmds, blocking_cmd) = process_cmd_non_blocking(cmd, &node.context()).await?;
+        let (join_handle, blocking_cmd) =
+            process_cmd_non_blocking(cmd, &node.context(), flow_ctrl_cmd_sender.clone()).await?;
         if let Some(blocking_cmd) = blocking_cmd {
             // process blocking cmd
-            MyNode::process_cmd(blocking_cmd, node).await
+            return MyNode::process_cmd(blocking_cmd, node).await;
+        }
+        // If any tasks were spawned while handling the non_blocking cmds, then we make sure the tasks are completed.
+        // Now any command in the flow_ctrl_chanel should be the new_cmds produced by our original cmd.
+        // Note: This is not a guarantee as the tasks might themselves produce sub-task on their own, and we might not
+        // get their JoinHandles. In that case, any new_cmds produced by the sub-task might be received at a later
+        // point in time, breaking our assumption.
+        if let Some(join_handle) = join_handle {
+            loop {
+                if join_handle.is_finished() {
+                    let mut new_cmds = Vec::new();
+                    while let Some(cmd) = get_next_cmd(flow_ctrl_receiver).await {
+                        new_cmds.push(cmd);
+                    }
+                    return Ok(new_cmds);
+                }
+                debug!("join handle is still in progress");
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
         } else {
-            Ok(new_cmds)
+            Ok(vec![])
         }
     }
 }
@@ -382,6 +430,18 @@ pub(crate) async fn get_next_msg(comm_rx: &mut Receiver<CommEvent>) -> Option<Ms
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     match comm_rx.try_recv() {
         Ok(CommEvent::Msg(msg)) => Some(msg),
+        Ok(_) => None,
+        Err(TryRecvError::Empty) => None,
+        Err(TryRecvError::Disconnected) => panic!("the comm_rx channel is closed"),
+    }
+}
+
+// Receive the next `Cmd` if the buffer is not empty. Returns None if the buffer is currently empty
+// Ignores `FlowCtrlCmd::UpdateContext`
+pub(crate) async fn get_next_cmd(flow_ctrl_receiver: &mut Receiver<FlowCtrlCmd>) -> Option<Cmd> {
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    match flow_ctrl_receiver.try_recv() {
+        Ok(FlowCtrlCmd::Handle(cmd)) => Some(cmd),
         Ok(_) => None,
         Err(TryRecvError::Empty) => None,
         Err(TryRecvError::Disconnected) => panic!("the comm_rx channel is closed"),

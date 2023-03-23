@@ -496,8 +496,8 @@ mod tests {
         // terminate if there are no more msgs to process
         let mut done = false;
         while !done {
-            for (name, test_node) in node_instances.iter() {
-                let mut node = test_node.write().await;
+            for (name, rw_test_node) in node_instances.iter() {
+                let mut test_node = rw_test_node.write().await;
                 info!("\n\n NODE: {}", name);
                 let comm_rx = comm_receivers
                     .get_mut(name)
@@ -515,9 +515,15 @@ mod tests {
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    let mut cmds = node.test_handle_msg(msg, None).await?;
+                    let mut cmds = match test_node.handle_msg(msg, None).await {
+                        Err(err) => {
+                            warn!("Error while processing cmd inside join_loop {err:?}");
+                            continue;
+                        }
+                        Ok(cmds) => cmds,
+                    };
                     while !cmds.is_empty() {
-                        match node.process_cmd(cmds.remove(0)).await {
+                        match test_node.process_cmd(cmds.remove(0)).await {
                             Ok(new_cmds) => cmds.extend(new_cmds),
                             Err(err) => {
                                 warn!("Error while processing cmd inside join_loop {err:?}")

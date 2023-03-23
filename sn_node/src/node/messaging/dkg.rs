@@ -932,7 +932,7 @@ mod tests {
                 info!("\n\n NODE: {name}");
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    let cmds = test_node.test_handle_msg(msg, None).await?;
+                    let cmds = test_node.handle_msg(msg, None).await?;
                     for cmd in cmds {
                         info!("Got cmd {}", cmd);
                         if let Cmd::SendMsg { .. } = &cmd {
@@ -991,7 +991,7 @@ mod tests {
                 info!("\n\n NODE: {name}");
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    for mut cmd in test_node.test_handle_msg(msg, None).await? {
+                    for mut cmd in test_node.handle_msg(msg, None).await? {
                         info!("Got cmd {}", cmd);
                         if let Cmd::SendMsg { .. } = cmd {
                             cmd.filter_recipients(BTreeSet::from([dead_node]))?;
@@ -1042,7 +1042,7 @@ mod tests {
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
                 while let Some(msg) = get_next_msg(comm_rx).await {
-                    for mut cmd in test_node.test_handle_msg(msg, None).await? {
+                    for mut cmd in test_node.handle_msg(msg, None).await? {
                         info!("Got cmd {}", cmd);
                         if let Cmd::SendMsg { ref recipients, .. } = cmd {
                             // (1/node_count) chance to drop a msg

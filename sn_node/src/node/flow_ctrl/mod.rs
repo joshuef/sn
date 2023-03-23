@@ -42,7 +42,10 @@ use std::{
     collections::BTreeSet,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::{
+    sync::mpsc::{self, Receiver, Sender},
+    task::JoinHandle,
+};
 use xor_name::XorName;
 
 /// Sent via the rejoin_network_tx to restart the join process.
@@ -91,7 +94,7 @@ impl FlowCtrl {
 
         // Our channel to process _all_ cmds. If it can, they are processed off thread with latest context,
         // otherwise they are sent to the blocking process channel
-        let (flow_ctrl_cmd_sender, flow_ctrl_cmd_reciever) = mpsc::channel(STANDARD_CHANNEL_SIZE);
+        let (flow_ctrl_cmd_sender, flow_ctrl_cmd_receiver) = mpsc::channel(STANDARD_CHANNEL_SIZE);
         // separate channel to update the periodics loop
         let (context_updater_for_periodic, context_receiver_for_periodics) =
             mpsc::channel(STANDARD_CHANNEL_SIZE);
@@ -132,7 +135,7 @@ impl FlowCtrl {
         Self::listen_for_flow_ctrl_cmds(
             node_context.clone(),
             flow_ctrl_cmd_sender.clone(),
-            flow_ctrl_cmd_reciever,
+            flow_ctrl_cmd_receiver,
             blocking_cmd_sender_channel.clone(),
             node.node_events_sender.clone(),
         );
@@ -498,7 +501,7 @@ async fn handle_cmd_off_thread(
     flow_ctrl_cmd_sender: Sender<FlowCtrlCmd>,
     blocking_cmd_channel: CmdChannel,
 ) -> Result<(), Error> {
-    let blocking_cmd = process_cmd_non_blocking(cmd, context, flow_ctrl_cmd_sender).await?;
+    let (_, blocking_cmd) = process_cmd_non_blocking(cmd, context, flow_ctrl_cmd_sender).await?;
 
     if let Some(blocking_cmd) = blocking_cmd {
         if let Err(error) = blocking_cmd_channel.send((blocking_cmd, vec![])).await {
@@ -510,19 +513,19 @@ async fn handle_cmd_off_thread(
     Ok(())
 }
 
-// Returns the new_cmds produced after processing the provided Cmd which should be sent to FlowCtrlCmdChannel
-// Optionally returns the unprocessed command if it should be processed in a blocking fashion, this should be sent
+// If a command is handled via a new task, then we return the JoinHandle for it. This is primarily used in tests.
+// Also optionally return the unprocessed command if it should be processed in a blocking fashion, this should be sent
 // to the blocking CmdChannel
 async fn process_cmd_non_blocking(
     cmd: Cmd,
     context: &NodeContext,
     flow_ctrl_cmd_sender: Sender<FlowCtrlCmd>,
-) -> Result<Option<Cmd>, Error> {
+) -> Result<(Option<JoinHandle<Result<(), Error>>>, Option<Cmd>), Error> {
     let start = Instant::now();
 
     let cmd_string = format!("{:?}", cmd);
 
-    match cmd {
+    let handle = match cmd {
         Cmd::HandleMsg {
             sender,
             wire_msg,
@@ -531,7 +534,7 @@ async fn process_cmd_non_blocking(
             let network_knowledge = context.network_knowledge.clone();
             let our_name = context.name.clone();
             let is_elder = context.is_elder;
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 let mut new_cmds = vec![];
                 new_cmds.extend(
                     MyNode::handle_msg(
@@ -558,6 +561,8 @@ async fn process_cmd_non_blocking(
 
                 Ok::<(), Error>(())
             });
+
+            Some(handle)
         }
         Cmd::ProcessClientMsg {
             msg_id,
@@ -577,7 +582,7 @@ async fn process_cmd_non_blocking(
             let joins_allowed_until_split = context.joins_allowed_until_split;
             let section_keys_provider = context.section_keys_provider.clone();
 
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 let mut new_cmds = vec![];
                 // new_cmds.extend(MyNode::handle_msg(&context.network_knowledge, context.name, sender, wire_msg, send_stream).await?);
                 if let Some(stream) = send_stream {
@@ -618,6 +623,7 @@ async fn process_cmd_non_blocking(
 
                 Ok::<(), Error>(())
             });
+            Some(handle)
         }
         Cmd::SendMsg {
             msg,
@@ -628,12 +634,13 @@ async fn process_cmd_non_blocking(
             let network_knowledge = context.network_knowledge.clone();
             let our_name = context.name.clone();
 
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 let recipients = recipients.into_iter().map(NodeId::from).collect();
                 MyNode::send_msg(msg, msg_id, recipients, our_name, network_knowledge, comm)?;
 
                 Ok::<(), Error>(())
             });
+            Some(handle)
         }
         Cmd::SendMsgEnqueueAnyResponse {
             msg,
@@ -643,7 +650,7 @@ async fn process_cmd_non_blocking(
             let comm = context.comm.clone();
             let current_section_key = context.network_knowledge.section_key();
             let our_name = context.name.clone();
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 MyNode::send_and_enqueue_any_response(
                     msg,
                     msg_id,
@@ -654,6 +661,7 @@ async fn process_cmd_non_blocking(
                 )?;
                 Ok::<(), Error>(())
             });
+            Some(handle)
         }
         Cmd::SendNodeMsgResponse {
             msg,
@@ -665,7 +673,7 @@ async fn process_cmd_non_blocking(
             let current_section_key = context.network_knowledge.section_key();
             let our_name = context.name.clone();
 
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 let mut new_cmds = vec![];
 
                 new_cmds.extend(
@@ -694,6 +702,7 @@ async fn process_cmd_non_blocking(
 
                 Ok::<(), Error>(())
             });
+            Some(handle)
         }
         Cmd::SendDataResponse {
             msg,
@@ -705,7 +714,7 @@ async fn process_cmd_non_blocking(
             let current_section_key = context.network_knowledge.section_key();
             let our_name = context.name.clone();
 
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 let mut new_cmds = vec![];
                 new_cmds.extend(
                     MyNode::send_data_response(
@@ -733,9 +742,12 @@ async fn process_cmd_non_blocking(
 
                 Ok::<(), Error>(())
             });
+            Some(handle)
         }
         Cmd::TrackNodeIssue { name, issue } => {
             context.track_node_issue(name, issue);
+
+            None
         }
         Cmd::SendAndForwardResponseToClient {
             wire_msg,
@@ -746,7 +758,7 @@ async fn process_cmd_non_blocking(
             let comm = context.comm.clone();
             let current_section_key = context.network_knowledge.section_key();
 
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 MyNode::send_and_forward_response_to_client(
                     wire_msg,
                     comm,
@@ -758,6 +770,7 @@ async fn process_cmd_non_blocking(
 
                 Ok::<(), Error>(())
             });
+            Some(handle)
         }
         Cmd::UpdateCaller {
             caller,
@@ -765,7 +778,7 @@ async fn process_cmd_non_blocking(
             kind,
             section_tree_update,
         } => {
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 let mut new_cmds = vec![];
                 info!("Sending ae response msg for {correlation_id:?}");
                 new_cmds.push(Cmd::send_network_msg(
@@ -789,6 +802,7 @@ async fn process_cmd_non_blocking(
 
                 Ok::<(), Error>(())
             });
+            Some(handle)
         }
         Cmd::UpdateCallerOnStream {
             caller,
@@ -801,7 +815,7 @@ async fn process_cmd_non_blocking(
             let current_section_key = context.network_knowledge.section_key();
             let our_name = context.name.clone();
 
-            let _handle = tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 let mut new_cmds = vec![];
 
                 new_cmds.extend(
@@ -833,6 +847,7 @@ async fn process_cmd_non_blocking(
 
                 Ok::<(), Error>(())
             });
+            Some(handle)
         }
         Cmd::ProcessNodeMsg {
             msg_id,
@@ -860,7 +875,7 @@ async fn process_cmd_non_blocking(
                     let is_elder = context.is_elder;
                     let joins_allowed = context.joins_allowed;
                     let joins_allowed_until_split = context.joins_allowed_until_split;
-                    let _handle = tokio::spawn(async move {
+                    let handle = tokio::spawn(async move {
                         // store data and respond w/ack on the response stream
                         let new_cmds = MyNode::store_data_and_respond(
                             &network_knowledge,
@@ -890,6 +905,7 @@ async fn process_cmd_non_blocking(
 
                         Ok::<(), Error>(())
                     });
+                    Some(handle)
                 }
                 NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateDataBatch(data_collection)) => {
                     info!("ReplicateDataBatch MsgId: {:?}", msg_id);
@@ -898,7 +914,7 @@ async fn process_cmd_non_blocking(
                     let data_storage = context.data_storage.clone();
                     let joins_allowed = context.joins_allowed;
 
-                    let _handle = tokio::spawn(async move {
+                    let handle = tokio::spawn(async move {
                         let cmds = MyNode::replicate_data_batch(
                             node_keypair,
                             data_storage,
@@ -923,6 +939,7 @@ async fn process_cmd_non_blocking(
 
                         Ok::<(), Error>(())
                     });
+                    Some(handle)
                 }
                 NodeMsg::NodeDataCmd(NodeDataCmd::SendAnyMissingRelevantData(
                     known_data_addresses,
@@ -930,7 +947,7 @@ async fn process_cmd_non_blocking(
                     let network_knowledge = context.network_knowledge.clone();
                     let data_storage = context.data_storage.clone();
 
-                    let _handle = tokio::spawn(async move {
+                    let handle = tokio::spawn(async move {
                         info!(
                             "{:?} MsgId: {:?}",
                             LogMarker::RequestForAnyMissingData,
@@ -958,10 +975,11 @@ async fn process_cmd_non_blocking(
 
                         Ok::<(), Error>(())
                     });
+                    Some(handle)
                 }
                 NodeMsg::DkgAE(session_id) => {
                     let dkg_voter = context.dkg_voter.clone();
-                    let _handle = tokio::spawn(async move {
+                    let handle = tokio::spawn(async move {
                         trace!("Handling msg: DkgAE s{} from {}", session_id.sh(), node_id);
                         let cmds = MyNode::handle_dkg_anti_entropy_request(
                             dkg_voter, session_id, node_id,
@@ -981,10 +999,11 @@ async fn process_cmd_non_blocking(
 
                         Ok::<(), Error>(())
                     });
+                    Some(handle)
                 }
                 NodeMsg::MembershipAE(gen) => {
                     let membership = context.membership.clone();
-                    let _handle = tokio::spawn(async move {
+                    let handle = tokio::spawn(async move {
                         if let Some(cmd) = MyNode::handle_membership_anti_entropy_request(
                             &membership,
                             node_id,
@@ -1002,6 +1021,7 @@ async fn process_cmd_non_blocking(
                         }
                         Ok::<(), Error>(())
                     });
+                    Some(handle)
                 }
                 msg => {
                     trace!("Node msg not handled off thread, sending to blocking channel: {msg:?}");
@@ -1013,20 +1033,20 @@ async fn process_cmd_non_blocking(
                         send_stream,
                     };
 
-                    return Ok(Some(cmd));
+                    return Ok((None, Some(cmd)));
                 }
             }
         }
         _ => {
             debug!("process cannot be handled off thread: {cmd:?}");
-            return Ok(Some(cmd));
+            return Ok((None, Some(cmd)));
         }
-    }
+    };
 
     debug!(
         "Off-thread handling of Cmd took {:?}: {cmd_string:?}",
         start.elapsed()
     );
 
-    Ok(None)
+    Ok((handle, None))
 }

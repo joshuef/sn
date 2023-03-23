@@ -49,6 +49,7 @@ use std::{
     iter,
 };
 use test_utils::ProcessAndInspectCmds;
+use tokio::sync::mpsc;
 use xor_name::{Prefix, XorName};
 
 #[tokio::test]
@@ -466,12 +467,15 @@ async fn msg_to_self() -> Result<()> {
     let node_msg = NodeMsg::NodeDataCmd(NodeDataCmd::ReplicateDataBatch(vec![]));
 
     // don't use the cmd collection fn, as it skips Cmd::SendMsg
+    let (sender, mut receiver) = mpsc::channel(100);
     let cmds = MyNode::test_process_cmd(
         Cmd::send_msg(
             node_msg.clone(),
             Recipients::Single(Participant::from_node(info.id())),
         ),
         &mut node,
+        &sender,
+        &mut receiver,
     )
     .await?;
 
